@@ -1,0 +1,32 @@
+services:
+  # Web Service
+  - type: web
+    name: iaalearn
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && cd client && npm install && npm run build && cd ..
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DEMO_MODE
+        value: true
+      - key: CLIENT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
+
+# Optional: Add PostgreSQL database
+# databases:
+#   - name: iaalearn-db
+#     plan: free
+#     databaseName: interview_assistant
+#     user: iaalearn
