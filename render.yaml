@@ -5,18 +5,19 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm install && cd client && npm install && npm run build && cd ..
-    startCommand: npm start
+    rootDir: .
+    buildCommand: npm install --production=false && cd client && npm install --production=false && npm run build && cd ..
+    startCommand: node server/index.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 3001
+        value: 10000
       - key: DEMO_MODE
         value: true
       - key: CLIENT_URL
-        sync: false
+        value: https://iaalearn.onrender.com
       - key: JWT_SECRET
         generateValue: true
       - key: OPENAI_API_KEY
