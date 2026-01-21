@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { QrReader } from 'react-qr-reader';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, X, Smartphone, CheckCircle, AlertCircle } from 'lucide-react';
 import { sessionAPI } from '../services/api';
 
@@ -11,27 +11,45 @@ const MobileScanner = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const html5QrCodeRef = useRef(null);
+  const qrReaderRef = useRef(null);
 
-  const handleScan = async (result, error) => {
-    if (result) {
-      const scannedData = result.text;
+  useEffect(() => {
+    if (scanning && qrReaderRef.current) {
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      html5QrCodeRef.current = html5QrCode;
+
+      const qrCodeSuccessCallback = async (decodedText) => {
+        // Extract transfer code from URL or direct code
+        let code = decodedText;
+        if (decodedText.includes('transfer=')) {
+          const urlParams = new URLSearchParams(decodedText.split('?')[1]);
+          code = urlParams.get('transfer');
+        }
+
+        if (code) {
+          await connectWithCode(code);
+        }
+      };
+
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
       
-      // Extract transfer code from URL or direct code
-      let code = scannedData;
-      if (scannedData.includes('transfer=')) {
-        const urlParams = new URLSearchParams(scannedData.split('?')[1]);
-        code = urlParams.get('transfer');
-      }
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        qrCodeSuccessCallback
+      ).catch((err) => {
+        console.error('QR Scanner error:', err);
+        setError('Camera access denied or not available');
+      });
 
-      if (code) {
-        await connectWithCode(code);
-      }
+      return () => {
+        if (html5QrCodeRef.current?.isScanning) {
+          html5QrCodeRef.current.stop().catch(console.error);
+        }
+      };
     }
-
-    if (error) {
-      console.error('QR Scan error:', error);
-    }
-  };
+  }, [scanning]);
 
   const connectWithCode = async (code) => {
     setLoading(true);
@@ -100,20 +118,7 @@ const MobileScanner = () => {
           <>
             {scanning && (
               <div className="bg-gray-800 rounded-lg overflow-hidden mb-6">
-                <div className="relative">
-                  <QrReader
-                    onResult={handleScan}
-                    constraints={{ facingMode: 'environment' }}
-                    className="w-full"
-                    videoStyle={{ width: '100%' }}
-                  />
-                  <div className="absolute inset-0 border-4 border-blue-500 pointer-events-none">
-                    <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-blue-500"></div>
-                    <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-blue-500"></div>
-                    <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-blue-500"></div>
-                    <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-blue-500"></div>
-                  </div>
-                </div>
+                <div ref={qrReaderRef} id="qr-reader" className="w-full"></div>
                 <div className="p-4 text-center">
                   <Camera className="inline-block mb-2 text-blue-400" size={24} />
                   <p className="text-sm text-gray-400">Position QR code within frame</p>
