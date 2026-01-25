@@ -6,6 +6,12 @@ const { Pool } = require('pg');
  */
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 
+const raw = process.env.DATABASE_URL?.trim();
+
+if (!raw) {
+  throw new Error("DATABASE_URL is missing on Render");
+}
+
 const pool = new Pool(
   hasDatabaseUrl
     ? {
