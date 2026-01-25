@@ -1,0 +1,11 @@
+IMPORTANT: Update your .env file on the server!
+
+Since your app is at https://mightskytech.com/iialearn, update this line:
+
+OLD:
+CLIENT_URL=https://mightskytech.com
+
+NEW:
+CLIENT_URL=https://mightskytech.com/iialearn
+
+This is critical for OAuth redirects to work correctly!

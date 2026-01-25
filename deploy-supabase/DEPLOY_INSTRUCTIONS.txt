@@ -1,0 +1,119 @@
+╔══════════════════════════════════════════════════════════════╗
+║  🚀 IAALearn Deployment Instructions for Hoganhost          ║
+╚══════════════════════════════════════════════════════════════╝
+
+📋 PRE-DEPLOYMENT CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Supabase project created
+✅ Database schema imported (run schema.sql in Supabase SQL Editor)
+✅ Hoganhost cPanel access ready
+✅ Domain mightskytech.com configured
+✅ Node.js support enabled in cPanel
+
+📤 UPLOAD FILES TO HOGANHOST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Connect to Hoganhost via FTP/SFTP or use cPanel File Manager
+2. Navigate to: public_html/ (or your domain's root)
+3. Upload ALL files from this deploy-supabase folder:
+   - server/ folder
+   - client-dist/ folder
+   - .env file
+   - .htaccess file
+   - package.json
+   - package-lock.json
+
+🔧 CONFIGURE NODE.JS APP IN CPANEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Login to cPanel
+2. Find "Setup Node.js App" or "Node.js Selector"
+3. Click "Create Application"
+4. Configure:
+   - Node.js version: 18.x or 20.x
+   - Application mode: Production
+   - Application root: public_html
+   - Application URL: mightskytech.com
+   - Application startup file: server/index.js
+5. Click "Create"
+6. Click "Run NPM Install"
+7. Wait for dependencies to install
+8. Click "Start" or "Restart"
+
+🔐 SETUP OAUTH APPLICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Google OAuth:
+1. Go to: console.cloud.google.com
+2. Create project "IAALearn"
+3. Enable Google+ API
+4. Create OAuth Client ID (Web application)
+5. Authorized redirect URIs:
+   https://mightskytech.com/api/auth/google/callback
+6. Update .env with Client ID and Secret
+
+GitHub OAuth:
+1. Go to: github.com/settings/developers
+2. Create OAuth App
+3. Homepage: https://mightskytech.com
+4. Callback URL: https://mightskytech.com/api/auth/github/callback
+5. Update .env with Client ID and Secret
+
+🔒 ENABLE SSL CERTIFICATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. In cPanel → SSL/TLS Status
+2. Select mightskytech.com
+3. Click "Run AutoSSL"
+4. Wait for Let's Encrypt certificate
+5. Verify: https://mightskytech.com
+
+✅ TESTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Visit: https://mightskytech.com
+
+Test:
+□ Page loads without errors
+□ Register with email/password
+□ Login with email/password
+□ Google OAuth login
+□ GitHub OAuth login
+□ Create interview session
+□ QR transfer feature
+□ Check Supabase Table Editor (users should appear)
+
+🔍 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+App won't start:
+- Check Node.js App logs in cPanel
+- Verify .env file is present
+- Check npm install completed successfully
+
+Database errors:
+- Verify Supabase connection string
+- Check schema.sql was imported
+- Test connection from cPanel terminal
+
+OAuth errors:
+- Verify redirect URIs match exactly
+- Check CLIENT_URL in .env
+- Ensure credentials are updated in .env
+
+Static files not loading:
+- Verify .htaccess is in root
+- Check client-dist/ folder exists
+- Clear browser cache
+
+📧 SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hoganhost: Contact via support portal
+Supabase: supabase.com/docs
+GitHub: github.com/jossy450/IAALearn/issues
+
+╔══════════════════════════════════════════════════════════════╗
+║  Good luck with your deployment! 🚀                         ║
+╚══════════════════════════════════════════════════════════════╝

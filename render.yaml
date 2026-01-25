@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: iaalearn
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Set DATABASE_URL in Render if you attach a Postgres database,
+      # or set DEMO_MODE=true to run without a database.

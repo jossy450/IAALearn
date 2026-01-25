@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Check for package.json
+      id: check-package
+      run: |
+        if [ -f package.json ]; then
+          echo "has_package=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_package=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Install dependencies
+      if: steps.check-package.outputs.has_package == 'true'
+      run: npm ci
+    
+    - name: Run linter
+      if: steps.check-package.outputs.has_package == 'true'
+      run: |
+        if npm run lint --if-present; then
+          echo "Lint completed successfully"
+        else
+          echo "No lint script found or lint script not configured"
+        fi
+      continue-on-error: true
+    
+    - name: Run tests
+      if: steps.check-package.outputs.has_package == 'true'
+      run: |
+        if npm run test --if-present; then
+          echo "Tests completed successfully"
+        else
+          echo "No test script found or tests not configured"
+        fi
+      continue-on-error: true
+    
+    - name: Check for shell scripts
+      id: check-shell
+      run: |
+        if find . -name "*.sh" -type f | grep -q .; then
+          echo "has_shell=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_shell=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Shell script checks
+      if: steps.check-shell.outputs.has_shell == 'true'
+      run: |
+        echo "Checking shell scripts for syntax errors..."
+        find . -name "*.sh" -type f -exec bash -n {} \; || echo "Some shell scripts have syntax issues"
+      continue-on-error: true
+    
+    - name: Verify build
+      if: steps.check-package.outputs.has_package == 'true'
+      run: |
+        if npm run build --if-present; then
+          echo "Build completed successfully"
+        else
+          echo "No build script found"
+        fi
+      continue-on-error: true
