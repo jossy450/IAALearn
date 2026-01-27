@@ -4,13 +4,9 @@ const { Pool } = require('pg');
  * Render Postgres (and many hosted Postgres providers) expose DATABASE_URL.
  * Local development can still use DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD.
  */
-const hasDatabaseUrl = !!process.env.DATABASE_URL;
-
+// Use trimmed DATABASE_URL when present. Do not throw here — allow DEMO_MODE.
 const raw = process.env.DATABASE_URL?.trim();
-
-if (!raw) {
-  throw new Error("DATABASE_URL is missing on Render");
-}
+const hasDatabaseUrl = !!raw;
 
 const pool = new Pool(
   hasDatabaseUrl
