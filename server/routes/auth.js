@@ -208,73 +208,208 @@ router.get('/me', async (req, res, next) => {
   }
 });
 
-// Google OAuth
-router.get('/google', async (req, res, next) => {
-  try {
-    if (isDemoMode) {
-      // Demo Mode: Simulate OAuth
-      const demoUser = {
-        id: `google-${Date.now()}`,
-        email: 'demo@google.com',
-        full_name: 'Google Demo User',
-        provider: 'google'
-      };
+// Google OAuth - Initiate authentication
+router.get('/google', (req, res, next) => {
+  if (isDemoMode) {
+    // Demo Mode: Simulate OAuth
+    const demoUser = {
+      id: `google-${Date.now()}`,
+      email: 'demo@google.com',
+      full_name: 'Google Demo User',
+      provider: 'google'
+    };
+
+    const token = jwt.sign(
+      { id: demoUser.id, email: demoUser.email },
+      process.env.JWT_SECRET || 'demo-secret',
+      { expiresIn: '7d' }
+    );
+
+    demoUsers.set(demoUser.email, demoUser);
+
+    const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
+    return res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+  }
+
+  // Check if OAuth is configured
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ 
+      error: 'OAuth not configured', 
+      message: 'Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables' 
+    });
+  }
+
+  const passport = require('passport');
+  passport.authenticate('google', { 
+    scope: ['profile', 'email'],
+    session: false 
+  })(req, res, next);
+});
+
+// Google OAuth callback
+router.get('/google/callback', 
+  require('passport').authenticate('google', { 
+    session: false,
+    failureRedirect: process.env.CLIENT_URL || 'http://localhost:5173' 
+  }),
+  async (req, res, next) => {
+    try {
+      const { id, emails, displayName } = req.user;
+      const email = emails[0].value;
+
+      let user;
+      if (isDemoMode) {
+        user = {
+          id: `google-${id}`,
+          email,
+          full_name: displayName,
+          provider: 'google'
+        };
+        demoUsers.set(email, user);
+      } else {
+        // Check if user exists
+        const existingUser = await query(
+          'SELECT * FROM users WHERE email = $1',
+          [email]
+        );
+
+        if (existingUser.rows.length > 0) {
+          user = existingUser.rows[0];
+          await query(
+            'UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2',
+            ['google', user.id]
+          );
+        } else {
+          // Create new user
+          const result = await query(
+            `INSERT INTO users (email, full_name, oauth_provider, oauth_id)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, email, full_name, created_at`,
+            [email, displayName, 'google', id]
+          );
+          user = result.rows[0];
+
+          await query(
+            'INSERT INTO privacy_settings (user_id) VALUES ($1)',
+            [user.id]
+          );
+        }
+      }
 
       const token = jwt.sign(
-        { id: demoUser.id, email: demoUser.email },
+        { id: user.id, email: user.email },
         process.env.JWT_SECRET || 'demo-secret',
         { expiresIn: '7d' }
       );
 
-      demoUsers.set(demoUser.email, demoUser);
-
       const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
-      return res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+      res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
+    } catch (error) {
+      next(error);
     }
-
-    // Production Mode: Real OAuth (implement with passport.js or oauth library)
-    // For now, return error to prompt proper OAuth setup
-    res.status(501).json({ 
-      error: 'OAuth not fully configured', 
-      message: 'Please set up Google OAuth with passport.js or use DEMO_MODE=true' 
-    });
-  } catch (error) {
-    next(error);
   }
+);
+
+// GitHub OAuth - Initiate authentication
+router.get('/github', (req, res, next) => {
+  if (isDemoMode) {
+    // Demo Mode: Simulate OAuth
+    const demoUser = {
+      id: `github-${Date.now()}`,
+      email: 'demo@github.com',
+      full_name: 'GitHub Demo User',
+      provider: 'github'
+    };
+
+    const token = jwt.sign(
+      { id: demoUser.id, email: demoUser.email },
+      process.env.JWT_SECRET || 'demo-secret',
+      { expiresIn: '7d' }
+    );
+
+    demoUsers.set(demoUser.email, demoUser);
+
+    const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
+    return res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+  }
+
+  // Check if OAuth is configured
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    return res.status(500).json({ 
+      error: 'OAuth not configured', 
+      message: 'Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables' 
+    });
+  }
+
+  const passport = require('passport');
+  passport.authenticate('github', { 
+    scope: ['user:email'],
+    session: false 
+  })(req, res, next);
 });
 
-// GitHub OAuth
-router.get('/github', async (req, res, next) => {
-  try {
-    if (isDemoMode) {
-      // Demo Mode: Simulate OAuth
-      const demoUser = {
-        id: `github-${Date.now()}`,
-        email: 'demo@github.com',
-        full_name: 'GitHub Demo User',
-        provider: 'github'
-      };
+// GitHub OAuth callback
+router.get('/github/callback', 
+  require('passport').authenticate('github', { 
+    session: false,
+    failureRedirect: process.env.CLIENT_URL || 'http://localhost:5173' 
+  }),
+  async (req, res, next) => {
+    try {
+      const { id, username, emails, displayName } = req.user;
+      const email = emails && emails[0] ? emails[0].value : `${username}@github.com`;
+
+      let user;
+      if (isDemoMode) {
+        user = {
+          id: `github-${id}`,
+          email,
+          full_name: displayName || username,
+          provider: 'github'
+        };
+        demoUsers.set(email, user);
+      } else {
+        // Check if user exists
+        const existingUser = await query(
+          'SELECT * FROM users WHERE email = $1 OR oauth_id = $2',
+          [email, id]
+        );
+
+        if (existingUser.rows.length > 0) {
+          user = existingUser.rows[0];
+          await query(
+            'UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2',
+            ['github', user.id]
+          );
+        } else {
+          // Create new user
+          const result = await query(
+            `INSERT INTO users (email, full_name, oauth_provider, oauth_id)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, email, full_name, created_at`,
+            [email, displayName || username, 'github', id]
+          );
+          user = result.rows[0];
+
+          await query(
+            'INSERT INTO privacy_settings (user_id) VALUES ($1)',
+            [user.id]
+          );
+        }
+      }
 
       const token = jwt.sign(
-        { id: demoUser.id, email: demoUser.email },
+        { id: user.id, email: user.email },
         process.env.JWT_SECRET || 'demo-secret',
         { expiresIn: '7d' }
       );
 
-      demoUsers.set(demoUser.email, demoUser);
-
       const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
-      return res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+      res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
+    } catch (error) {
+      next(error);
     }
-
-    // Production Mode: Real OAuth
-    res.status(501).json({ 
-      error: 'OAuth not fully configured', 
-      message: 'Please set up GitHub OAuth with passport.js or use DEMO_MODE=true' 
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 module.exports = router;

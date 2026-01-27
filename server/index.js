@@ -7,8 +7,10 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+const passport = require('passport');
 
 const { initializeDatabase } = require('./database/connection');
+const { configurePassport } = require('./config/passport');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler');
 
@@ -39,6 +41,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(compression());
 
 app.set("trust proxy", 1);
+
+// Initialize Passport for OAuth
+app.use(passport.initialize());
+configurePassport();
 
 // Logging
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));

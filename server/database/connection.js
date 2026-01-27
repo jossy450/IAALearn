@@ -24,7 +24,10 @@ const pool = new Pool(
             : false,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000,
+        // Force IPv4 to avoid ENETUNREACH errors with IPv6 addresses
+        host: process.env.DB_HOST || undefined,
+        options: '-c search_path=public',
       }
     : {
         host: process.env.DB_HOST || 'localhost',
