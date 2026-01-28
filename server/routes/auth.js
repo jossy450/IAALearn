@@ -9,44 +9,62 @@ const router = express.Router();
 const demoUsers = new Map();
 const isDemoMode = process.env.DEMO_MODE === 'true';
 
+// Helper function for input validation
+const validateEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+};
+
+const validatePassword = (password) => {
+  // At least 8 chars, 1 uppercase, 1 lowercase, 1 number
+  return password && password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password);
+};
+
 // Register new user
 router.post('/register', async (req, res, next) => {
   try {
-    console.log('📝 Register request received:', { email: req.body.email, isDemoMode });
     const { email, password, fullName } = req.body;
 
     // Validate input
     if (!email || !password) {
-      console.log('❌ Validation failed - missing email or password');
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (!validatePassword(password)) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters with uppercase, lowercase, and numbers' });
+    }
+
+    if (fullName && (typeof fullName !== 'string' || fullName.length > 255)) {
+      return res.status(400).json({ error: 'Invalid name format' });
+    }
+
     if (isDemoMode) {
-      console.log('✅ Demo mode active - using in-memory storage');
       // Demo mode - in-memory storage
-      if (demoUsers.has(email)) {
-        console.log('❌ User already exists:', email);
+      if (demoUsers.has(email.toLowerCase())) {
         return res.status(409).json({ error: 'User already exists' });
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
       const user = {
         id: `demo-${Date.now()}`,
-        email,
-        full_name: fullName,
+        email: email.toLowerCase(),
+        full_name: fullName || 'Demo User',
         created_at: new Date().toISOString()
       };
 
-      demoUsers.set(email, { ...user, password_hash: passwordHash });
-      console.log('✅ User created in demo mode:', user.id);
+      demoUsers.set(email.toLowerCase(), { ...user, password_hash: passwordHash });
 
+      // Only include safe fields in token
       const token = jwt.sign(
         { id: user.id, email: user.email },
-        process.env.JWT_SECRET || 'demo-secret',
+        process.env.JWT_SECRET,
         { expiresIn: '7d' }
       );
 
-      console.log('✅ Sending success response');
       return res.status(201).json({
         success: true,
         user,

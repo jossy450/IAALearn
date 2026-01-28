@@ -1,14 +1,22 @@
 const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  // Log error securely (don't expose sensitive info in logs)
+  const errorLog = {
+    timestamp: new Date().toISOString(),
+    status: err.status || 500,
+    name: err.name,
+    code: err.code,
+    message: process.env.NODE_ENV === 'production' ? '[Redacted]' : err.message
+  };
+  console.error('Error:', JSON.stringify(errorLog));
 
   // Default error
   let status = err.status || 500;
-  let message = err.message || 'Internal server error';
+  let message = 'Internal server error';
 
-  // Specific error types
+  // Specific error types with safe messages
   if (err.name === 'ValidationError') {
     status = 400;
-    message = err.message;
+    message = 'Invalid input provided';
   }
 
   if (err.code === '23505') { // PostgreSQL unique violation
@@ -21,11 +29,23 @@ const errorHandler = (err, req, res, next) => {
     message = 'Invalid reference';
   }
 
-  // Send response
-  res.status(status).json({
-    error: message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
-  });
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    status = 413;
+    message = 'File size exceeds maximum allowed';
+  }
+
+  // Don't expose file paths or stack traces in production
+  const response = {
+    error: message
+  };
+
+  // Only include stack traces in development
+  if (process.env.NODE_ENV !== 'production' && err.stack) {
+    response.stack = err.stack;
+  }
+
+  res.status(status).json(response);
 };
 
 module.exports = { errorHandler };
+

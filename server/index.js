@@ -20,19 +20,57 @@ const PORT = process.env.PORT || 3001;
 // Security middleware
 app.use(
   helmet({
-    contentSecurityPolicy:
-      process.env.NODE_ENV === 'production' ? undefined : false,
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    } : false,
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    noSniff: true,
+    xssFilter: true,
+    dnsPrefetchControl: { allow: false },
+    frameguard: { action: 'deny' },
   })
 );
 
-// If you serve the client from this same server (recommended on Render),
-// you do NOT need CORS in production. Keep it permissive for local dev.
+// CORS configuration
+const corsOptions = {
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+};
+
 if (process.env.NODE_ENV !== 'production') {
-  app.use(
-    cors({
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    })
-  );
+  app.use(cors(corsOptions));
+} else {
+  // In production, CORS from trusted origin only
+  app.use(cors(corsOptions));
+}
+
+// Force HTTPS in production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      res.redirect(308, `https://${req.header('host')}${req.url}`);
+    } else {
+      next();
+    }
+  });
 }
 
 // Request parsing

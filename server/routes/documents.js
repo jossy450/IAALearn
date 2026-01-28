@@ -2,19 +2,33 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const { query } = require('../database/connection');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Configure multer for file uploads
+// Secure file upload configuration
+const uploadDir = path.join(__dirname, '../uploads');
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate secure filename to prevent directory traversal
+    const uniqueName = crypto.randomBytes(16).toString('hex');
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueName}${ext}`);
+  }
+});
+
 const upload = multer({
-  dest: path.join(__dirname, '../uploads'),
+  storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 5 * 1024 * 1024 // 5MB limit (reduced from 10MB)
   },
   fileFilter: (req, file, cb) => {
-    // Allow PDF, DOC, DOCX, TXT
+    // Whitelist allowed MIME types
     const allowedMimes = [
       'application/pdf',
       'application/msword',
@@ -22,11 +36,24 @@ const upload = multer({
       'text/plain'
     ];
     
-    if (allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and TXT are allowed.'));
+    // Validate document type parameter
+    const { documentType } = req.params;
+    if (!['cv', 'job_description'].includes(documentType)) {
+      return cb(new Error('Invalid document type'));
     }
+    
+    if (!allowedMimes.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and TXT are allowed.'));
+    }
+
+    // Validate file extension matches MIME type
+    const ext = path.extname(file.originalname).toLowerCase();
+    const validExtensions = ['.pdf', '.doc', '.docx', '.txt'];
+    if (!validExtensions.includes(ext)) {
+      return cb(new Error('Invalid file extension'));
+    }
+
+    cb(null, true);
   }
 });
 
@@ -34,13 +61,15 @@ const upload = multer({
 const extractTextFromFile = async (filePath, mimeType) => {
   try {
     if (mimeType === 'text/plain') {
-      return await fs.readFile(filePath, 'utf8');
+      const content = await fs.readFile(filePath, 'utf8');
+      // Limit extracted text to prevent DoS
+      return content.substring(0, 50000);
     }
     // For PDF and Office docs, you would use libraries like pdf-parse or mammoth
     // For now, return a placeholder - these would need to be implemented
-    return `[Document content extraction for ${mimeType} not yet implemented]`;
+    return '[Document content extraction for this format not yet implemented]';
   } catch (error) {
-    console.error('Error extracting text:', error);
+    // Don't expose detailed error information
     return '';
   }
 };

@@ -55,7 +55,7 @@ To enable Google login:
 ```bash
 GOOGLE_CLIENT_ID=1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com
 
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
 ```
 
 ### GitHub OAuth (Optional)
