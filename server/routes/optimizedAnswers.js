@@ -1,5 +1,6 @@
 const express = require('express');
 const optimizedAnswerService = require('../services/optimizedAnswers');
+const { getAIProvider } = require('../services/aiProvider');
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../database/connection');
 
@@ -285,6 +286,23 @@ router.get('/pregenerated', authenticate, async (req, res, next) => {
     res.json({
       answers: result.rows,
       count: result.rows.length
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get AI provider status
+router.get('/providers', authenticate, async (req, res, next) => {
+  try {
+    const aiProvider = getAIProvider();
+    const status = aiProvider.getStatus();
+
+    res.json({
+      ...status,
+      message: status.total === 0 
+        ? 'No AI providers configured. Please set API keys.' 
+        : `${status.total} provider(s) available (${status.free} free, ${status.paid} paid)`
     });
   } catch (error) {
     next(error);

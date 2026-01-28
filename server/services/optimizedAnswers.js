@@ -3,6 +3,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const { query } = require('../database/connection');
 const { getCache } = require('./memoryCache');
+const { getAIProvider } = require('./aiProvider');
 
 let openai = null;
 
@@ -125,13 +126,9 @@ class OptimizedAnswerService {
     }
   }
 
-  // Fast answer generation with streaming support
+  // Fast answer generation using multi-provider AI with fallback
   async generateFastAnswer(question, context = {}, streamCallback = null) {
-    const client = getOpenAI();
-    if (!client) {
-      throw new Error('OPENAI_API_KEY is not configured');
-    }
-    
+    const aiProvider = getAIProvider();
     const startTime = Date.now();
     
     try {
@@ -145,57 +142,43 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
 
       // Use streaming if callback provided
       if (streamCallback && typeof streamCallback === 'function') {
-        const stream = await client.chat.completions.create({
-          model: 'gpt-4o-mini', // Faster model for streaming
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: question }
-          ],
-          temperature: 0.7,
-          max_tokens: 500,
-          stream: true
-        });
-
-        let fullAnswer = '';
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          if (content) {
-            fullAnswer += content;
-            streamCallback(content, false); // Stream chunk
-          }
-        }
+        const result = await aiProvider.streamGenerate(
+          question,
+          systemPrompt,
+          streamCallback,
+          { preferFree: true }
+        );
         
-        streamCallback('', true); // Signal completion
+        const duration = Date.now() - startTime;
+        console.log(`✅ Streamed answer: ${duration}ms (${result.provider}, ${result.free ? 'FREE' : 'PAID'})`);
         
-        console.log(`✓ Streamed answer generated: ${Date.now() - startTime}ms`);
-        return fullAnswer;
+        return result.text;
       }
 
-      // Non-streaming fallback
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
-        ],
-        temperature: 0.7,
-        max_tokens: 500
-      });
+      // Non-streaming
+      const result = await aiProvider.generate(
+        question,
+        systemPrompt,
+        { preferFree: true }
+      );
 
-      console.log(`✓ Fast answer generated: ${Date.now() - startTime}ms`);
-      return response.choices[0].message.content;
+      const duration = Date.now() - startTime;
+      console.log(`✅ Fast answer: ${duration}ms (${result.provider}, ${result.free ? 'FREE' : 'PAID'})`);
+      
+      return result.text;
     } catch (error) {
       console.error('Fast answer generation error:', error);
       throw error;
     }
   }
 
-  // Research-backed answer using Perplexity
+  // Research-backed answer using multi-provider AI
   async generateResearchAnswer(question, context = {}) {
     const startTime = Date.now();
+    const aiProvider = getAIProvider();
     
     try {
-      // First, try Perplexity for research
+      // First, try Perplexity for research (if available)
       let researchContext = '';
       
       if (process.env.PERPLEXITY_API_KEY) {
@@ -225,11 +208,11 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
 
           researchContext = perplexityResponse.data.choices[0].message.content;
         } catch (perplexityError) {
-          console.warn('Perplexity research failed, falling back to GPT-4 only');
+          console.warn('Perplexity research failed, using AI without research context');
         }
       }
 
-      // Generate answer with research context
+      // Generate answer with research context using multi-provider
       const systemPrompt = `You are an expert interview coach with access to current information. 
 Provide professional, well-researched answers to interview questions.
 
@@ -242,23 +225,16 @@ ${researchContext ? `Research Context:\n${researchContext}` : ''}
 
 Provide a comprehensive, confident answer that demonstrates expertise.`;
 
-      const client = getOpenAI();
-      if (!client) {
-        throw new Error('OPENAI_API_KEY is not configured');
-      }
+      const result = await aiProvider.generate(
+        question,
+        systemPrompt,
+        { smart: true, preferFree: true }
+      );
 
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
-        ],
-        temperature: 0.7,
-        max_tokens: 800
-      });
-
-      console.log(`✓ Research answer generated: ${Date.now() - startTime}ms`);
-      return response.choices[0].message.content;
+      const duration = Date.now() - startTime;
+      console.log(`✅ Research answer: ${duration}ms (${result.provider}, ${result.free ? 'FREE' : 'PAID'})`);
+      
+      return result.text;
     } catch (error) {
       console.error('Research answer generation error:', error);
       throw error;

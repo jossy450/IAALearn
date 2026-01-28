@@ -89,6 +89,8 @@ git push origin main
 
 Click **"Advanced"** and add these environment variables:
 
+**Required Variables:**
+
 | Key | Value | Notes |
 |-----|-------|-------|
 | `NODE_ENV` | `production` | Required |
@@ -96,8 +98,32 @@ Click **"Advanced"** and add these environment variables:
 | `DEMO_MODE` | `true` | **IMPORTANT: Enables demo mode without database** |
 | `CLIENT_URL` | `https://iaalearn.onrender.com` | Replace with your actual Render URL |
 | `JWT_SECRET` | (Auto-generate or use strong random string) | Min 32 characters |
-| `OPENAI_API_KEY` | `sk-your-key-here` | **REQUIRED - Get from OpenAI** |
-| `PERPLEXITY_API_KEY` | `pplx-your-key-here` | Optional |
+
+**AI Provider Keys (Add at least ONE):**
+
+> 💡 **NEW:** Support for FREE AI providers! See [FREE_AI_PROVIDERS_SETUP.md](FREE_AI_PROVIDERS_SETUP.md) for detailed setup.
+
+| Key | Provider | Cost | Speed | Priority | Setup Guide |
+|-----|----------|------|-------|----------|-------------|
+| `GROQ_API_KEY` | Groq | 🆓 FREE | ⚡⚡⚡ Fastest | 1 (Recommended) | https://console.groq.com |
+| `TOGETHER_API_KEY` | Together AI | 🆓 $25 credits | ⚡⚡⚡ Very Fast | 2 | https://api.together.xyz |
+| `HUGGINGFACE_API_KEY` | Hugging Face | 🆓 FREE unlimited | ⚡⚡ Fast | 3 | https://huggingface.co |
+| `COHERE_API_KEY` | Cohere | 🆓 1000/month | ⚡⚡ Fast | 4 | https://dashboard.cohere.com |
+| `OPENAI_API_KEY` | OpenAI | 💰 Paid | ⚡⚡ Fast | 5 (Fallback) | https://platform.openai.com |
+| `PERPLEXITY_API_KEY` | Perplexity | 💰 Paid | ⚡⚡ Fast | Research only | https://perplexity.ai |
+
+**Recommended FREE Setup (Zero Cost):**
+```bash
+GROQ_API_KEY=gsk_your_key_here          # PRIMARY (14,400 requests/day)
+TOGETHER_API_KEY=your_key_here          # BACKUP ($25 free credits)
+```
+
+**For Maximum Reliability:**
+```bash
+GROQ_API_KEY=gsk_your_key_here          # Fast & Free
+TOGETHER_API_KEY=your_key_here          # Free backup
+OPENAI_API_KEY=sk_your_key_here         # Premium fallback
+```
 
 **To auto-generate JWT_SECRET:**
 - Click "Generate" button next to the field
