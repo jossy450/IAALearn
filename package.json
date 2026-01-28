@@ -1,6 +1,6 @@
 {
   "name": "interview-answer-assistant",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "AI-powered interview assistance tool with real-time transcription and answer generation",
   "main": "server/index.js",
   "scripts": {

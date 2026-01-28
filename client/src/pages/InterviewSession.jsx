@@ -112,7 +112,9 @@ function InterviewSession() {
       
       // Show detailed error message
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to transcribe audio: ${errorMessage}\n\nPlease check:\n- Microphone permissions\n- Audio was recorded\n- OpenAI API key is configured`);
+      const providers = error.response?.data?.providers?.join(', ') || 'OpenAI Whisper';
+      
+      alert(`Failed to transcribe audio: ${errorMessage}\n\nAvailable providers: ${providers}\n\nPlease check:\n- Microphone permissions\n- Audio quality (1+ seconds)\n- API keys configured`);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const transcriptionService = require('../services/transcription');
+const neuralTranscriptionService = require('../services/neuralTranscription');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
@@ -10,19 +10,19 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 25 * 1024 * 1024 // 25MB limit (AssemblyAI/Deepgram support larger files)
   },
   fileFilter: (req, file, cb) => {
-    const allowedMimes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg'];
+    const allowedMimes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/opus'];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid audio format'));
+      cb(new Error(`Invalid audio format: ${file.mimetype}. Allowed: webm, wav, mp3, ogg`));
     }
   }
 });
 
-// Transcribe audio file
+// Transcribe audio file with neural net AI models
 router.post('/transcribe', authenticate, upload.single('audio'), async (req, res, next) => {
   try {
     if (!req.file) {
@@ -32,12 +32,14 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
       });
     }
 
-    console.log(`📝 Transcribing audio: ${req.file.size} bytes, format: ${req.body.format || 'webm'}`);
-
     const format = req.body.format || 'webm';
-    const result = await transcriptionService.transcribeAudio(req.file.buffer, format);
+    const language = req.body.language || 'en';
+    
+    console.log(`🎤 Transcribing audio: ${req.file.size} bytes, format: ${format}, language: ${language}`);
 
-    console.log(`✅ Transcription successful: "${result.text.substring(0, 50)}..." (${result.duration}ms)`);
+    const result = await neuralTranscriptionService.transcribeAudio(req.file.buffer, format, language);
+
+    console.log(`✅ Transcription successful with ${result.provider}: "${result.text.substring(0, 50)}..." (${result.duration}ms)`);
 
     res.json(result);
   } catch (error) {
@@ -47,16 +49,25 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     res.status(500).json({
       error: 'Transcription failed',
       message: error.message,
-      details: 'Please check your audio recording and try again'
+      details: 'Please check:\n- Audio recording quality\n- Microphone permissions\n- API keys configured (AssemblyAI, Deepgram, Google Cloud, Azure, or OpenAI)',
+      providers: neuralTranscriptionService.getAvailableProviders().map(p => p.name)
     });
   }
 });
 
-// Health check for transcription service
+// Get available transcription providers and health status
 router.get('/status', authenticate, async (req, res) => {
+  const providers = neuralTranscriptionService.getAvailableProviders();
+  
   res.json({
     status: 'operational',
-    service: 'OpenAI Whisper',
+    service: 'Neural Net Multi-Provider Transcription',
+    availableProviders: providers.map(p => ({
+      name: p.name,
+      priority: p.priority
+    })),
+    primaryProvider: providers[0]?.name || 'None configured',
+    totalProviders: providers.length,
     timestamp: new Date().toISOString()
   });
 });
