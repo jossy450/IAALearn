@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const neuralTranscriptionService = require('../services/neuralTranscription');
+const freeNeuralTranscriptionService = require('../services/freeNeuralTranscription');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
@@ -37,7 +37,7 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     
     console.log(`🎤 Transcribing audio: ${req.file.size} bytes, format: ${format}, language: ${language}`);
 
-    const result = await neuralTranscriptionService.transcribeAudio(req.file.buffer, format, language);
+    const result = await freeNeuralTranscriptionService.transcribeAudio(req.file.buffer, format, language);
 
     console.log(`✅ Transcription successful with ${result.provider}: "${result.text.substring(0, 50)}..." (${result.duration}ms)`);
 
