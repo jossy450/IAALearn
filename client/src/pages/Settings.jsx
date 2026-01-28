@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Eye, EyeOff, Trash2, Lock, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Shield, Eye, EyeOff, Trash2, Lock, Calendar, Upload, FileText, Briefcase } from 'lucide-react';
 import { privacyAPI } from '../services/api';
 import './Settings.css';
 
@@ -8,6 +8,9 @@ function Settings() {
   const [themes, setThemes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState({});
+  const cvFileRef = useRef(null);
+  const jobDescFileRef = useRef(null);
 
   useEffect(() => {
     loadSettings();
@@ -52,6 +55,37 @@ function Settings() {
     } catch (error) {
       console.error('Failed to clear history:', error);
       alert('Failed to clear history. Please try again.');
+    }
+  };
+
+  const handleFileUpload = async (file, documentType) => {
+    if (!file) return;
+
+    const formDataFile = new FormData();
+    formDataFile.append('file', file);
+
+    try {
+      setUploadStatus(prev => ({ ...prev, [documentType]: 'uploading' }));
+      
+      const response = await fetch(`/api/documents/upload/${documentType}`, {
+        method: 'POST',
+        body: formDataFile,
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')).state.token : ''}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      setUploadStatus(prev => ({ ...prev, [documentType]: 'success' }));
+      setTimeout(() => {
+        setUploadStatus(prev => ({ ...prev, [documentType]: null }));
+      }, 3000);
+    } catch (err) {
+      setUploadStatus(prev => ({ ...prev, [documentType]: 'error' }));
+      console.error('Upload error:', err);
     }
   };
 
@@ -247,6 +281,84 @@ function Settings() {
                 Clear All History
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Document Upload Section */}
+      <div className="card">
+        <div className="card-header">
+          <Upload size={24} />
+          <h2>Personalization Documents</h2>
+        </div>
+
+        <div className="settings-section">
+          <p className="section-description">
+            Upload your CV and job description to get personalized interview answers tailored to your background and the specific role.
+          </p>
+
+          {/* CV Upload */}
+          <div className="document-upload-box">
+            <div className="upload-icon">
+              <FileText size={32} />
+            </div>
+            <div className="upload-content">
+              <h3>Your CV/Resume</h3>
+              <p className="upload-text">
+                Upload your resume for personalized answer suggestions
+              </p>
+              <input
+                type="file"
+                ref={cvFileRef}
+                onChange={(e) => handleFileUpload(e.target.files?.[0], 'cv')}
+                accept=".pdf,.doc,.docx,.txt"
+                style={{ display: 'none' }}
+              />
+              <button
+                className={`btn btn-secondary ${uploadStatus.cv === 'uploading' ? 'loading' : ''}`}
+                onClick={() => cvFileRef.current?.click()}
+                disabled={uploadStatus.cv === 'uploading'}
+              >
+                {uploadStatus.cv === 'uploading' && 'Uploading...'}
+                {uploadStatus.cv === 'success' && '✓ Uploaded'}
+                {uploadStatus.cv === 'error' && 'Upload Failed'}
+                {!uploadStatus.cv && 'Choose File'}
+              </button>
+            </div>
+          </div>
+
+          {/* Job Description Upload */}
+          <div className="document-upload-box">
+            <div className="upload-icon">
+              <Briefcase size={32} />
+            </div>
+            <div className="upload-content">
+              <h3>Job Description</h3>
+              <p className="upload-text">
+                Upload the job posting to tailor answers to the specific requirements
+              </p>
+              <input
+                type="file"
+                ref={jobDescFileRef}
+                onChange={(e) => handleFileUpload(e.target.files?.[0], 'job_description')}
+                accept=".pdf,.doc,.docx,.txt"
+                style={{ display: 'none' }}
+              />
+              <button
+                className={`btn btn-secondary ${uploadStatus.job_description === 'uploading' ? 'loading' : ''}`}
+                onClick={() => jobDescFileRef.current?.click()}
+                disabled={uploadStatus.job_description === 'uploading'}
+              >
+                {uploadStatus.job_description === 'uploading' && 'Uploading...'}
+                {uploadStatus.job_description === 'success' && '✓ Uploaded'}
+                {uploadStatus.job_description === 'error' && 'Upload Failed'}
+                {!uploadStatus.job_description && 'Choose File'}
+              </button>
+            </div>
+          </div>
+
+          <div className="help-text">
+            <p>💡 <strong>Pro tip:</strong> Upload both your CV and job description for the most personalized and relevant interview answers.</p>
           </div>
         </div>
       </div>
