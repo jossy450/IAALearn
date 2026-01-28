@@ -55,6 +55,22 @@ function InterviewSession() {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Validate audio blob
+        if (audioBlob.size === 0) {
+          alert('No audio recorded. Please try recording again.');
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
+        if (audioBlob.size < 100) {
+          alert('Recording too short. Please speak for at least 1 second.');
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
+        console.log('Audio recorded successfully:', audioBlob.size, 'bytes');
+        
         await transcribeAudio(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -77,19 +93,26 @@ function InterviewSession() {
   const transcribeAudio = async (audioBlob) => {
     setLoading(true);
     try {
+      console.log('Transcribing audio blob:', audioBlob.size, 'bytes');
+      
       const formData = new FormData();
-      formData.append('audio', audioBlob);
+      formData.append('audio', audioBlob, 'recording.webm');
       formData.append('format', 'webm');
 
       const response = await transcriptionAPI.transcribe(formData);
       const transcribedText = response.data.text;
+      
+      console.log('Transcription successful:', transcribedText);
       setCurrentQuestion(transcribedText);
       
       // Automatically generate answer
       await generateAnswer(transcribedText);
     } catch (error) {
       console.error('Transcription failed:', error);
-      alert('Failed to transcribe audio. Please try again.');
+      
+      // Show detailed error message
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      alert(`Failed to transcribe audio: ${errorMessage}\n\nPlease check:\n- Microphone permissions\n- Audio was recorded\n- OpenAI API key is configured`);
     } finally {
       setLoading(false);
     }

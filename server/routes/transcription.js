@@ -26,15 +26,29 @@ const upload = multer({
 router.post('/transcribe', authenticate, upload.single('audio'), async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No audio file provided' });
+      return res.status(400).json({ 
+        error: 'No audio file provided',
+        details: 'Please record audio before submitting'
+      });
     }
+
+    console.log(`📝 Transcribing audio: ${req.file.size} bytes, format: ${req.body.format || 'webm'}`);
 
     const format = req.body.format || 'webm';
     const result = await transcriptionService.transcribeAudio(req.file.buffer, format);
 
+    console.log(`✅ Transcription successful: "${result.text.substring(0, 50)}..." (${result.duration}ms)`);
+
     res.json(result);
   } catch (error) {
-    next(error);
+    console.error('❌ Transcription error:', error.message);
+    
+    // Send detailed error to client
+    res.status(500).json({
+      error: 'Transcription failed',
+      message: error.message,
+      details: 'Please check your audio recording and try again'
+    });
   }
 });
 
