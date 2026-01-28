@@ -18,8 +18,8 @@ class AIProviderService {
         enabled: !!process.env.GROQ_API_KEY,
         priority: 1,
         free: true,
-        fastModel: 'mixtral-8x7b-32768',
-        smartModel: 'llama-3.1-70b-versatile'
+        fastModel: 'mixtral-8x7b-32768',  // Fallback to fast model
+        smartModel: 'mixtral-8x7b-32768'   // Will try alternatives if this fails
       },
       {
         name: 'huggingface',
@@ -70,30 +70,51 @@ class AIProviderService {
   async generateWithGroq(prompt, systemPrompt, useSmartModel = false) {
     const apiKey = process.env.GROQ_API_KEY;
     const provider = this.providers.find(p => p.name === 'groq');
-    const model = useSmartModel ? provider.smartModel : provider.fastModel;
+    
+    // Try models in priority order (in case one is deprecated)
+    const models = [
+      'mixtral-8x7b-32768',
+      'mixtral-8x7b-instruct-v0.1',
+      'llama-3.1-70b-versatile',
+      'llama-3.1-8b-instant',
+      'llama2-70b-4096',
+      'gemma-7b-it'
+    ];
 
     const groq = new OpenAI({
       apiKey,
       baseURL: 'https://api.groq.com/openai/v1'
     });
 
-    const response = await groq.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: useSmartModel ? 800 : 500,
-      stream: false
-    });
+    let lastError;
+    for (const model of models) {
+      try {
+        const response = await groq.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: useSmartModel ? 800 : 500,
+          stream: false
+        });
 
-    return {
-      text: response.choices[0].message.content,
-      provider: 'groq',
-      model,
-      free: true
-    };
+        return {
+          text: response.choices[0].message.content,
+          provider: 'groq',
+          model,
+          free: true
+        };
+      } catch (error) {
+        lastError = error;
+        // Continue to next model if this one fails
+        continue;
+      }
+    }
+
+    // If all models failed, throw the last error
+    throw lastError || new Error('Groq API unavailable');
   }
 
   async generateWithHuggingFace(prompt, systemPrompt, useSmartModel = false) {
