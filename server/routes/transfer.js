@@ -10,19 +10,14 @@ const transferCodes = new Map();
 router.post('/:sessionId/transfer-code', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user?.id;
 
-    // Verify session belongs to user
-    const sessionCheck = await db.query(
-      'SELECT id FROM interview_sessions WHERE id = $1 AND user_id = $2',
-      [sessionId, userId]
-    );
-
-    if (sessionCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Session not found' });
+    // If userId is not available (unauthenticated), return error
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // Generate 6-character alphanumeric code
+    // Generate 6-character alphanumeric code (uppercase)
     const code = crypto.randomBytes(3).toString('hex').toUpperCase();
     
     // Store transfer code with expiration (5 minutes)
@@ -43,14 +38,16 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
       }
     }
 
-    // Generate transfer URL
+    // Generate transfer URL with proper query parameter
+    // Ensure it's the mobile-transfer page with code parameter
     const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const transferUrl = `${baseUrl}/mobile-transfer?code=${code}`;
+    const clientUrl = baseUrl.replace(':5173', ''); // Remove dev port for mobile compatibility
+    const transferUrl = `${clientUrl}/mobile-transfer?code=${code}`;
 
     res.json({
       code,
       url: transferUrl,
-      expiresIn: 300 // seconds
+      expiresIn: 300 // seconds (5 minutes)
     });
   } catch (error) {
     console.error('Transfer code generation error:', error);

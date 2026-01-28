@@ -9,6 +9,8 @@ const privacyRoutes = require('./privacy');
 const mobileRoutes = require('./mobile');
 const smartAIRoutes = require('./smartAI');
 const transferRoutes = require('./transfer');
+const documentsRoutes = require('./documents');
+const adminRoutes = require('./admin');
 
 const router = express.Router();
 
@@ -23,6 +25,8 @@ router.use('/analytics', analyticsRoutes);
 router.use('/privacy', privacyRoutes);
 router.use('/mobile', mobileRoutes);
 router.use('/smart-ai', smartAIRoutes);
+router.use('/documents', documentsRoutes); // Document upload/management routes
+router.use('/admin', adminRoutes); // Admin dashboard routes
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -39,7 +43,9 @@ router.get('/', (req, res) => {
       analytics: '/api/analytics',
       privacy: '/api/privacy',
       mobile: '/api/mobile',
-      smartAI: '/api/smart-ai'
+      smartAI: '/api/smart-ai',
+      documents: '/api/documents',
+      admin: '/api/admin'
     }
   });
 });

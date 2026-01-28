@@ -25,7 +25,7 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
       setCountdown(prev => {
         if (prev <= 1) {
           generateTransferCode(); // Regenerate when expired
-          return 60;
+          return 300; // 5 minutes
         }
         return prev - 1;
       });
@@ -57,8 +57,15 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
       const response = await sessionAPI.generateTransferCode(sessionId);
       const { code, url } = response.data;
       setTransferCode(code);
-      setTransferUrl(url);
-      setCountdown(60);
+      // Ensure URL is properly formatted for QR encoding
+      // Add protocol if missing and ensure it's the mobile-transfer page
+      let qrUrl = url;
+      if (!qrUrl.startsWith('http')) {
+        const baseUrl = window.location.origin;
+        qrUrl = `${baseUrl}${url.startsWith('/') ? url : '/' + url}`;
+      }
+      setTransferUrl(qrUrl);
+      setCountdown(300); // 5 minutes
       setIsTransferred(false);
     } catch (error) {
       console.error('Failed to generate transfer code:', error);
@@ -119,7 +126,7 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
                     <div className="flex items-center gap-2 text-sm text-yellow-800">
                       <AlertCircle size={16} />
                       <div>
-                        <strong>Expires in {countdown} seconds</strong>
+                        <strong>Expires in {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}</strong>
                         <div className="text-xs">Scan quickly or refresh</div>
                       </div>
                     </div>

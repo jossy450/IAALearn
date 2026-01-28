@@ -20,15 +20,30 @@ const MobileScanner = () => {
       html5QrCodeRef.current = html5QrCode;
 
       const qrCodeSuccessCallback = async (decodedText) => {
-        // Extract transfer code from URL or direct code
-        let code = decodedText;
-        if (decodedText.includes('transfer=')) {
-          const urlParams = new URLSearchParams(decodedText.split('?')[1]);
-          code = urlParams.get('transfer');
-        }
+        try {
+          // Extract transfer code from URL or direct code
+          let code = decodedText.trim();
+          
+          // Handle URLs like https://app.com/mobile-transfer?code=ABC123
+          if (code.includes('transfer') || code.includes('code=')) {
+            const urlParams = code.includes('?') 
+              ? new URLSearchParams(code.split('?')[1])
+              : new URLSearchParams(code.split('code=')[1]);
+            const paramCode = urlParams.get('code') || urlParams.get('transfer');
+            if (paramCode) {
+              code = paramCode.toUpperCase();
+            }
+          }
 
-        if (code) {
-          await connectWithCode(code);
+          // Validate code format (6 alphanumeric characters)
+          if (code && /^[A-Z0-9]{6}$/.test(code)) {
+            await connectWithCode(code);
+          } else {
+            setError('Invalid QR code format. Expected 6-character code.');
+          }
+        } catch (err) {
+          console.error('QR code parsing error:', err);
+          setError('Failed to process QR code. Please try again.');
         }
       };
 
