@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import OAuthCallback from './pages/OAuthCallback';
 import Dashboard from './pages/Dashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import InterviewSession from './pages/InterviewSession';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
@@ -17,7 +18,7 @@ import MobileSession from './pages/MobileSession';
 import StealthManager from './components/StealthManager';
 
 function App() {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
 
   return (
     <Router>
@@ -29,6 +30,7 @@ function App() {
         <Route path="/decoy/:type" element={<DecoyScreen />} />
         <Route path="/mobile-transfer" element={<MobileScanner />} />
         <Route path="/mobile-session/:sessionId" element={<MobileSession />} />
+        <Route path="/admin" element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />
         
         <Route path="/" element={token ? <Layout /> : <Navigate to="/login" />}>
           <Route index element={<Dashboard />} />
