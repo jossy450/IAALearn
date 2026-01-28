@@ -8,8 +8,17 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Secure file upload configuration
+// Ensure upload directory exists
 const uploadDir = path.join(__dirname, '../uploads');
+(async () => {
+  try {
+    await fs.mkdir(uploadDir, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create upload directory:', err);
+  }
+})();
+
+// Secure file upload configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
@@ -25,7 +34,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit (reduced from 10MB)
+    fileSize: 5 * 1024 * 1024 // 5MB limit
   },
   fileFilter: (req, file, cb) => {
     // Whitelist allowed MIME types
@@ -36,21 +45,16 @@ const upload = multer({
       'text/plain'
     ];
     
-    // Validate document type parameter
-    const { documentType } = req.params;
-    if (!['cv', 'job_description'].includes(documentType)) {
-      return cb(new Error('Invalid document type'));
-    }
+    // Validate file extension
+    const ext = path.extname(file.originalname).toLowerCase();
+    const validExtensions = ['.pdf', '.doc', '.docx'];
     
-    if (!allowedMimes.includes(file.mimetype)) {
-      return cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and TXT are allowed.'));
+    if (!validExtensions.includes(ext)) {
+      return cb(new Error('INVALID_FORMAT'));
     }
 
-    // Validate file extension matches MIME type
-    const ext = path.extname(file.originalname).toLowerCase();
-    const validExtensions = ['.pdf', '.doc', '.docx', '.txt'];
-    if (!validExtensions.includes(ext)) {
-      return cb(new Error('Invalid file extension'));
+    if (!allowedMimes.includes(file.mimetype)) {
+      return cb(new Error('INVALID_FORMAT'));
     }
 
     cb(null, true);
@@ -83,63 +87,115 @@ router.post('/upload/:documentType', authenticate, upload.single('file'), async 
 
     // Validate document type
     if (!['cv', 'job_description'].includes(documentType)) {
-      await fs.unlink(file.path);
-      return res.status(400).json({ error: 'Invalid document type' });
+      if (file?.path) await fs.unlink(file.path).catch(() => {});
+      return res.status(400).json({ 
+        error: 'Invalid document type',
+        allowedFormats: ['pdf', 'doc', 'docx']
+      });
     }
 
     if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ 
+        error: 'No file uploaded',
+        allowedFormats: ['pdf', 'doc', 'docx']
+      });
+    }
+
+    // Get or create active session for user
+    let sessionResult = await query(
+      `SELECT id FROM interview_sessions 
+       WHERE user_id = $1 AND status = 'active' 
+       ORDER BY started_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    let sessionId = null;
+    if (sessionResult.rows.length > 0) {
+      sessionId = sessionResult.rows[0].id;
+    } else {
+      // Create a new session for document uploads
+      const newSession = await query(
+        `INSERT INTO interview_sessions (user_id, title, session_type, status)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [userId, 'Document Upload Session', 'document_upload', 'active']
+      );
+      sessionId = newSession.rows[0].id;
     }
 
     // Extract text content from file
     const content = await extractTextFromFile(file.path, file.mimetype);
 
-    // Deactivate previous document of same type
+    // Deactivate previous documents of same type in this session
     await query(
-      'UPDATE user_documents SET is_active = false WHERE user_id = $1 AND document_type = $2',
-      [userId, documentType]
+      `UPDATE user_documents 
+       SET is_active = false, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $1 AND session_id = $2 AND document_type = $3`,
+      [userId, sessionId, documentType]
     );
 
     // Insert new document
     const result = await query(
-      `INSERT INTO user_documents (user_id, document_type, file_name, file_size, mime_type, content)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO user_documents (user_id, session_id, document_type, file_name, file_path, file_size, mime_type, content)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, file_name, file_size, created_at`,
-      [userId, documentType, file.originalname, file.size, file.mimetype, content]
+      [userId, sessionId, documentType, file.originalname, file.path, file.size, file.mimetype, content]
     );
 
     const document = result.rows[0];
 
-    // Update user document references
-    const columnName = documentType === 'cv' ? 'cv_document_id' : 'job_description_document_id';
-    await query(
-      `UPDATE users SET ${columnName} = $1 WHERE id = $2`,
-      [document.id, userId]
-    );
-
-    // Log the upload action
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, document_id, document_type, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [userId, 'upload', document.id, documentType, JSON.stringify({ fileName: file.originalname, size: file.size })]
-    );
-
     res.json({
       success: true,
+      message: `${documentType === 'cv' ? 'CV' : 'Job Description'} uploaded successfully`,
       document: {
         id: document.id,
         type: documentType,
         fileName: document.file_name,
         fileSize: document.file_size,
-        uploadedAt: document.created_at
+        uploadedAt: document.created_at,
+        sessionId: sessionId
       }
     });
   } catch (error) {
     if (req.file?.path) {
-      await fs.unlink(req.file.path).catch(console.error);
+      await fs.unlink(req.file.path).catch(() => {});
     }
+    
+    // Handle specific errors
+    if (error.message === 'INVALID_FORMAT') {
+      return res.status(400).json({ 
+        error: 'Invalid file format. Please upload PDF, DOC, or DOCX files only.',
+        allowedFormats: ['pdf', 'doc', 'docx']
+      });
+    }
+    
     next(error);
   }
+});
+
+// Multer error handler
+router.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        error: 'File size too large. Maximum size is 5MB.',
+        allowedFormats: ['pdf', 'doc', 'docx']
+      });
+    }
+    return res.status(400).json({ 
+      error: error.message,
+      allowedFormats: ['pdf', 'doc', 'docx']
+    });
+  }
+  
+  if (error.message === 'INVALID_FORMAT') {
+    return res.status(400).json({ 
+      error: 'Invalid file format. Please upload PDF, DOC, or DOCX files only.',
+      allowedFormats: ['pdf', 'doc', 'docx']
+    });
+  }
+  
+  next(error);
 });
 
 // Get user's documents

@@ -61,31 +61,59 @@ function Settings() {
   const handleFileUpload = async (file, documentType) => {
     if (!file) return;
 
+    // Validate file extension on client side
+    const allowedExtensions = ['.pdf', '.doc', '.docx'];
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExt)) {
+      alert('Invalid file format. Please upload PDF, DOC, or DOCX files only.');
+      return;
+    }
+
+    // Check file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert('File size too large. Maximum size is 5MB.');
+      return;
+    }
+
     const formDataFile = new FormData();
     formDataFile.append('file', file);
 
     try {
       setUploadStatus(prev => ({ ...prev, [documentType]: 'uploading' }));
       
+      const authData = localStorage.getItem('auth-storage');
+      const token = authData ? JSON.parse(authData).state.token : '';
+      
       const response = await fetch(`/api/documents/upload/${documentType}`, {
         method: 'POST',
         body: formDataFile,
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')).state.token : ''}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Upload failed');
+        throw new Error(data.error || 'Upload failed');
       }
 
       setUploadStatus(prev => ({ ...prev, [documentType]: 'success' }));
+      alert(data.message || `${documentType === 'cv' ? 'CV' : 'Job Description'} uploaded successfully!`);
+      
       setTimeout(() => {
         setUploadStatus(prev => ({ ...prev, [documentType]: null }));
       }, 3000);
     } catch (err) {
       setUploadStatus(prev => ({ ...prev, [documentType]: 'error' }));
+      alert(err.message || 'Upload failed. Please try again.');
       console.error('Upload error:', err);
+      
+      setTimeout(() => {
+        setUploadStatus(prev => ({ ...prev, [documentType]: null }));
+      }, 3000);
     }
   };
 
@@ -307,11 +335,14 @@ function Settings() {
               <p className="upload-text">
                 Upload your resume for personalized answer suggestions
               </p>
+              <p className="upload-format">
+                Accepted formats: <strong>PDF, DOC, DOCX</strong> (max 5MB)
+              </p>
               <input
                 type="file"
                 ref={cvFileRef}
                 onChange={(e) => handleFileUpload(e.target.files?.[0], 'cv')}
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.doc,.docx"
                 style={{ display: 'none' }}
               />
               <button
@@ -321,7 +352,7 @@ function Settings() {
               >
                 {uploadStatus.cv === 'uploading' && 'Uploading...'}
                 {uploadStatus.cv === 'success' && '✓ Uploaded'}
-                {uploadStatus.cv === 'error' && 'Upload Failed'}
+                {uploadStatus.cv === 'error' && '✗ Failed - Try Again'}
                 {!uploadStatus.cv && 'Choose File'}
               </button>
             </div>
@@ -337,11 +368,14 @@ function Settings() {
               <p className="upload-text">
                 Upload the job posting to tailor answers to the specific requirements
               </p>
+              <p className="upload-format">
+                Accepted formats: <strong>PDF, DOC, DOCX</strong> (max 5MB)
+              </p>
               <input
                 type="file"
                 ref={jobDescFileRef}
                 onChange={(e) => handleFileUpload(e.target.files?.[0], 'job_description')}
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.doc,.docx"
                 style={{ display: 'none' }}
               />
               <button
@@ -351,7 +385,7 @@ function Settings() {
               >
                 {uploadStatus.job_description === 'uploading' && 'Uploading...'}
                 {uploadStatus.job_description === 'success' && '✓ Uploaded'}
-                {uploadStatus.job_description === 'error' && 'Upload Failed'}
+                {uploadStatus.job_description === 'error' && '✗ Failed - Try Again'}
                 {!uploadStatus.job_description && 'Choose File'}
               </button>
             </div>
@@ -359,6 +393,7 @@ function Settings() {
 
           <div className="help-text">
             <p>💡 <strong>Pro tip:</strong> Upload both your CV and job description for the most personalized and relevant interview answers.</p>
+            <p>📝 <strong>Note:</strong> Documents are linked to your current session and will be automatically deleted when the session ends to save storage.</p>
           </div>
         </div>
       </div>

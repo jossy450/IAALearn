@@ -190,7 +190,18 @@
 .upload-text {
   font-size: 0.875rem;
   color: var(--gray-600);
+  margin-bottom: 0.5rem;
+}
+
+.upload-format {
+  font-size: 0.8rem;
+  color: var(--gray-500);
   margin-bottom: 1rem;
+}
+
+.upload-format strong {
+  color: var(--blue-600);
+  font-weight: 600;
 }
 
 .section-description {
@@ -213,7 +224,15 @@
 }
 
 .help-text p {
-  margin: 0;
+  margin: 0.5rem 0;
+}
+
+.help-text p:first-child {
+  margin-top: 0;
+}
+
+.help-text p:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 768px) {
