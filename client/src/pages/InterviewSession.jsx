@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Zap, Brain, Copy, Save, QrCode, MonitorUp } from 'lucide-react';
+import { Mic, MicOff, Zap, Brain, Copy, Save, QrCode, MonitorUp, Clock } from 'lucide-react';
 import { sessionAPI, transcriptionAPI, answerAPI } from '../services/api';
 import QRTransferModal from '../components/QRTransferModal';
 import useStealthStore from '../store/stealthStore';
@@ -14,12 +14,16 @@ function InterviewSession() {
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [currentAnswer, setCurrentAnswer] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [answerSource, setAnswerSource] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [showQRTransfer, setShowQRTransfer] = useState(false);
   const [screenShareActive, setScreenShareActive] = useState(false);
+  const [responseTime, setResponseTime] = useState(null);
+  const [performanceWarning, setPerformanceWarning] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const debounceTimerRef = useRef(null);
   const { setScreenRecording } = useStealthStore();
 
   useEffect(() => {
@@ -91,16 +95,98 @@ function InterviewSession() {
     }
   };
 
-  const generateAnswer = async (question, useResearch = false) => {
+  const generateAnswer = useCallback(async (question, useResearch = false) => {
+    // Clear any pending debounce
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const startTime = Date.now();
     setLoading(true);
+    setIsStreaming(true);
     setCurrentAnswer('');
     setAnswerSource(null);
+    setResponseTime(null);
+    setPerformanceWarning(false);
 
+    try {
+      // Try streaming first for faster perceived response
+      const streamingSupported = !useResearch; // Only fast answers support streaming
+      
+      if (streamingSupported) {
+        // Server-sent events for streaming
+        const eventSource = new EventSource(
+          `/api/answers-optimized/generate?stream=true&question=${encodeURIComponent(question)}&sessionId=${id}`,
+          { withCredentials: true }
+        );
+
+        let fullAnswer = '';
+
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'chunk') {
+            fullAnswer += data.content;
+            setCurrentAnswer(fullAnswer);
+          } else if (data.type === 'complete') {
+            eventSource.close();
+            setIsStreaming(false);
+            
+            const totalTime = Date.now() - startTime;
+            setResponseTime(totalTime);
+            
+            // Warn if response was slow (> 3 seconds)
+            if (totalTime > 3000) {
+              setPerformanceWarning(true);
+            }
+            
+            setAnswerSource({
+              cached: data.cached || false,
+              source: 'streaming',
+              responseTime: totalTime
+            });
+
+            // Add to questions list
+            setQuestions(prev => [...prev, {
+              question_text: question,
+              answer: fullAnswer,
+              asked_at: new Date().toISOString(),
+              response_time_ms: totalTime
+            }]);
+
+            // Clear current question for next one
+            setTimeout(() => setCurrentQuestion(''), 100);
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+          setIsStreaming(false);
+          // Fallback to regular API call
+          generateAnswerFallback(question, useResearch, startTime);
+        };
+
+        return;
+      }
+
+      // Non-streaming for research mode
+      await generateAnswerFallback(question, useResearch, startTime);
+      
+    } catch (error) {
+      console.error('Failed to generate answer:', error);
+      alert('Failed to generate answer. Please try again.');
+      setLoading(false);
+      setIsStreaming(false);
+    }
+  }, [id, session]);
+
+  const generateAnswerFallback = async (question, useResearch, startTime) => {
     try {
       const response = await answerAPI.generate({
         question,
         sessionId: id,
         research: useResearch,
+        stream: false,
         context: {
           position: session?.position,
           company: session?.company_name,
@@ -108,27 +194,35 @@ function InterviewSession() {
         }
       });
 
+      const totalTime = Date.now() - startTime;
+      
       setCurrentAnswer(response.data.answer);
+      setResponseTime(totalTime);
+      
+      // Warn if response was slow
+      if (totalTime > 3000) {
+        setPerformanceWarning(true);
+      }
+      
       setAnswerSource({
         cached: response.data.cached,
         source: response.data.source,
-        responseTime: response.data.responseTime
+        responseTime: totalTime
       });
 
       // Add to questions list
-      setQuestions([...questions, {
+      setQuestions(prev => [...prev, {
         question_text: question,
         answer: response.data.answer,
-        asked_at: new Date().toISOString()
+        asked_at: new Date().toISOString(),
+        response_time_ms: totalTime
       }]);
 
       // Clear current question for next one
       setTimeout(() => setCurrentQuestion(''), 100);
-    } catch (error) {
-      console.error('Failed to generate answer:', error);
-      alert('Failed to generate answer. Please try again.');
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -282,17 +376,28 @@ function InterviewSession() {
             <div className="answer-header">
               <h3>Suggested Answer</h3>
               <div className="answer-meta">
+                {isStreaming && (
+                  <span className="badge badge-streaming">⚡ Streaming...</span>
+                )}
                 {answerSource?.cached && (
-                  <span className="badge badge-success">Cached</span>
+                  <span className="badge badge-success">✓ Cached</span>
                 )}
                 {answerSource?.source && (
                   <span className="badge badge-info">{answerSource.source}</span>
                 )}
-                {answerSource?.responseTime && (
-                  <span className="badge badge-gray">{answerSource.responseTime}ms</span>
+                {responseTime && (
+                  <span className={`badge ${responseTime < 1000 ? 'badge-success' : responseTime < 2000 ? 'badge-warning' : 'badge-danger'}`}>
+                    <Clock size={14} />
+                    {responseTime}ms
+                  </span>
                 )}
               </div>
             </div>
+            {performanceWarning && responseTime > 3000 && (
+              <div className="performance-warning">
+                ⚠️ Slow response detected ({responseTime}ms). Consider using mobile transfer for stealth mode.
+              </div>
+            )}
             <div className="answer-text">{currentAnswer}</div>
             <button className="btn btn-secondary" onClick={copyAnswer}>
               <Copy size={18} />

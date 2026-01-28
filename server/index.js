@@ -108,6 +108,20 @@ const startServer = async () => {
     const dbConnected = await initializeDatabase();
     if (dbConnected) {
       console.log('✅ Database connected successfully');
+      
+      // Warm up cache with common questions on startup
+      if (process.env.ENABLE_CACHE_WARMUP !== 'false') {
+        const optimizedAnswers = require('./services/optimizedAnswers');
+        setTimeout(async () => {
+          try {
+            console.log('🔥 Warming up answer cache...');
+            await optimizedAnswers.warmUpCache();
+            console.log('✅ Cache warmed successfully');
+          } catch (error) {
+            console.warn('⚠️  Cache warmup failed:', error.message);
+          }
+        }, 5000); // Wait 5 seconds after startup
+      }
     } else if (process.env.DEMO_MODE === 'true') {
       console.log('✅ Running in demo mode');
     } else {
@@ -117,6 +131,8 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`⚡ Performance optimization: ENABLED`);
+      console.log(`💾 Memory cache size: ${process.env.MEMORY_CACHE_SIZE || 500} entries`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

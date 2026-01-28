@@ -3,6 +3,7 @@ const authRoutes = require('./auth');
 const sessionRoutes = require('./sessions');
 const transcriptionRoutes = require('./transcription');
 const answersRoutes = require('./answers');
+const optimizedAnswersRoutes = require('./optimizedAnswers');
 const cacheRoutes = require('./cache');
 const analyticsRoutes = require('./analytics');
 const privacyRoutes = require('./privacy');
@@ -19,7 +20,8 @@ router.use('/auth', authRoutes);
 router.use('/sessions', sessionRoutes);
 router.use('/sessions', transferRoutes); // QR transfer routes under /sessions
 router.use('/transcription', transcriptionRoutes);
-router.use('/answers', answersRoutes);
+router.use('/answers', answersRoutes); // Legacy answer routes
+router.use('/answers-optimized', optimizedAnswersRoutes); // Optimized answer routes with streaming
 router.use('/cache', cacheRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/privacy', privacyRoutes);
@@ -32,13 +34,22 @@ router.use('/admin', adminRoutes); // Admin dashboard routes
 router.get('/', (req, res) => {
   res.json({
     name: 'Interview Answer Assistant API',
-    version: '2.0.0',
-    features: ['Smart AI', 'Context Learning', 'Question Prediction', 'Answer Analysis'],
+    version: '2.0.1',
+    features: [
+      'Smart AI',
+      'Context Learning',
+      'Question Prediction',
+      'Answer Analysis',
+      'Streaming Responses',
+      'Multi-Layer Caching',
+      'Performance Optimization'
+    ],
     endpoints: {
       auth: '/api/auth',
       sessions: '/api/sessions',
       transcription: '/api/transcription',
       answers: '/api/answers',
+      answersOptimized: '/api/answers-optimized',
       cache: '/api/cache',
       analytics: '/api/analytics',
       privacy: '/api/privacy',
@@ -46,6 +57,11 @@ router.get('/', (req, res) => {
       smartAI: '/api/smart-ai',
       documents: '/api/documents',
       admin: '/api/admin'
+    },
+    performance: {
+      caching: 'Enabled',
+      streaming: 'Supported',
+      targetResponseTime: '< 2 seconds'
     }
   });
 });
