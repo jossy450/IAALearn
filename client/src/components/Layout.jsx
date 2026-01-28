@@ -27,9 +27,34 @@ function Layout() {
     { path: '/settings', icon: Settings, label: 'Settings' },
   ];
 
-  const handleLogout = () => {
-    logout();
-    window.location.href = '/login';
+  const handleLogout = async () => {
+    try {
+      // Call server logout endpoint
+      const authData = localStorage.getItem('auth-storage');
+      const token = authData ? JSON.parse(authData).state?.token : null;
+      
+      if (token) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }).catch(() => {
+          // Logout might fail but we still want to clear client-side
+        });
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      // Clear client-side auth state
+      logout();
+      
+      // Force redirect to login with small delay to ensure state is cleared
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 50);
+    }
   };
 
   return (

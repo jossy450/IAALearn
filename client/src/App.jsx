@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -16,6 +16,21 @@ import DecoyScreen from './pages/DecoyScreen';
 import MobileScanner from './pages/MobileScanner';
 import MobileSession from './pages/MobileSession';
 import StealthManager from './components/StealthManager';
+
+// Wrapper component to check auth status
+function ProtectedRoute({ children }) {
+  const { token } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // If user loses token (logged out), redirect to login
+    if (!token) {
+      navigate('/login', { replace: true });
+    }
+  }, [token, navigate]);
+
+  return token ? children : null;
+}
 
 function App() {
   const { token, user } = useAuthStore();

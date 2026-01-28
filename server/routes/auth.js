@@ -430,4 +430,20 @@ router.get('/github/callback',
   }
 );
 
+// Logout endpoint (optional auth - logout works regardless)
+router.post('/logout', (req, res) => {
+  try {
+    // JWT tokens are stateless, so logout is handled client-side
+    // This endpoint is for any server-side cleanup if needed
+    // Auth is optional here since user might be logging out with expired token
+    
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
 module.exports = router;

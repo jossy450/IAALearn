@@ -8,16 +8,44 @@ export const useAuthStore = create(
       user: null,
       setAuth: (token, user) => set({ token, user }),
       logout: () => {
-        // Clear all auth data
+        // Clear Zustand state
         set({ token: null, user: null });
-        // Clear localStorage directly to ensure complete cleanup
-        localStorage.removeItem('auth-storage');
-        // Clear any session data
-        sessionStorage.clear();
+        
+        // Clear all localStorage keys
+        try {
+          localStorage.removeItem('auth-storage');
+          localStorage.clear();
+        } catch (e) {
+          console.error('Error clearing localStorage:', e);
+        }
+        
+        // Clear sessionStorage
+        try {
+          sessionStorage.clear();
+        } catch (e) {
+          console.error('Error clearing sessionStorage:', e);
+        }
+        
+        // Clear all cookies
+        document.cookie.split(';').forEach(cookie => {
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          if (name && name !== 'SESSION_ID') { // Keep session for server cleanup
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+          }
+        });
       },
     }),
     {
       name: 'auth-storage',
+      version: 1,
+      // Ensure clean hydration
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error('Hydration error:', error);
+          localStorage.removeItem('auth-storage');
+        }
+      }
     }
   )
 );
