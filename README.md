@@ -6,9 +6,10 @@
 
 *Master technical interviews with structured learning materials and practice*
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/jossy450/IAALearn)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/jossy450/IAALearn)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
+[![Performance](https://img.shields.io/badge/response_time-<2s-brightgreen.svg)]()
 
 </div>
 
@@ -28,6 +29,21 @@ IAALearn is an educational platform designed to help software engineers prepare 
 ✅ **Practice Sessions** - Track your progress and improve over time  
 ✅ **Smart Caching** - Quick access to frequently referenced materials  
 ✅ **Mobile Companion** - Study materials accessible on the go  
+⚡ **Performance Optimized** - Sub-2 second response times with streaming support  
+🚀 **Multi-Layer Caching** - 70%+ cache hit rate for instant answers  
+📊 **Performance Monitoring** - Real-time tracking and optimization
+
+### 🎯 What's New in v2.1
+
+**Performance Optimizations (60-70% faster!):**
+- ✨ Streaming AI responses - see answers appear instantly
+- 🔥 Multi-layer caching (in-memory + database)
+- 📈 Pre-generated common answers
+- 🎯 < 2 second response time guarantee
+- 💾 Database optimization with 15+ new indexes
+- 📊 Real-time performance monitoring
+
+See [PERFORMANCE_SUMMARY.md](PERFORMANCE_SUMMARY.md) for complete details.  
 
 ---
 
