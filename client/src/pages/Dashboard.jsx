@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Calendar, Clock, TrendingUp } from 'lucide-react';
-import { sessionAPI, analyticsAPI } from '../services/api';
+import { Plus, Calendar, Clock, TrendingUp, FileText, Briefcase, X } from 'lucide-react';
+import { sessionAPI, analyticsAPI, documentsAPI } from '../services/api';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -16,6 +16,14 @@ function Dashboard() {
     position: '',
     sessionType: 'general'
   });
+  
+  // Document upload state
+  const [cvFile, setCvFile] = useState(null);
+  const [jobDescFile, setJobDescFile] = useState(null);
+  const [uploadError, setUploadError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const cvFileRef = useRef(null);
+  const jobDescFileRef = useRef(null);
 
   useEffect(() => {
     loadData();
@@ -41,10 +49,58 @@ function Dashboard() {
     try {
       const response = await sessionAPI.create(newSession);
       const sessionId = response.data.session.id;
+      
+      // Upload documents if provided
+      setUploading(true);
+      setUploadError('');
+      
+      try {
+        if (cvFile) {
+          await documentsAPI.uploadCV(cvFile);
+        }
+        if (jobDescFile) {
+          await documentsAPI.uploadJobDescription(jobDescFile);
+        }
+      } catch (uploadErr) {
+        console.warn('Document upload failed, but session created:', uploadErr);
+        // Don't fail the session creation if upload fails
+      }
+      
+      setUploading(false);
+      // Reset form
+      setCvFile(null);
+      setJobDescFile(null);
+      setNewSession({ title: '', companyName: '', position: '', sessionType: 'general' });
+      setShowNewSession(false);
+      
       navigate(`/session/${sessionId}`);
     } catch (error) {
       console.error('Failed to create session:', error);
-      alert('Failed to create session. Please try again.');
+      setUploadError('Failed to create session. Please try again.');
+    }
+  };
+
+  const handleCvChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadError('CV file must be less than 10MB');
+        return;
+      }
+      setCvFile(file);
+      setUploadError('');
+    }
+  };
+
+  const handleJobDescChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setUploadError('Job description file must be less than 5MB');
+        return;
+      }
+      setJobDescFile(file);
+      setUploadError('');
     }
   };
 
@@ -167,7 +223,21 @@ function Dashboard() {
       {showNewSession && (
         <div className="modal-overlay" onClick={() => setShowNewSession(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>New Interview Session</h2>
+            <div className="modal-header">
+              <h2>New Interview Session</h2>
+              <button 
+                className="modal-close" 
+                onClick={() => {
+                  setShowNewSession(false);
+                  setCvFile(null);
+                  setJobDescFile(null);
+                  setUploadError('');
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
             <form onSubmit={handleCreateSession}>
               <div className="form-group">
                 <label className="label">Session Title *</label>
@@ -178,6 +248,7 @@ function Dashboard() {
                   onChange={(e) => setNewSession({ ...newSession, title: e.target.value })}
                   required
                   placeholder="e.g., Frontend Developer Interview"
+                  disabled={uploading}
                 />
               </div>
 
@@ -189,6 +260,7 @@ function Dashboard() {
                   value={newSession.companyName}
                   onChange={(e) => setNewSession({ ...newSession, companyName: e.target.value })}
                   placeholder="e.g., Tech Corp"
+                  disabled={uploading}
                 />
               </div>
 
@@ -200,6 +272,7 @@ function Dashboard() {
                   value={newSession.position}
                   onChange={(e) => setNewSession({ ...newSession, position: e.target.value })}
                   placeholder="e.g., Senior Developer"
+                  disabled={uploading}
                 />
               </div>
 
@@ -209,6 +282,7 @@ function Dashboard() {
                   className="input"
                   value={newSession.sessionType}
                   onChange={(e) => setNewSession({ ...newSession, sessionType: e.target.value })}
+                  disabled={uploading}
                 >
                   <option value="general">General</option>
                   <option value="technical">Technical</option>
@@ -217,16 +291,88 @@ function Dashboard() {
                 </select>
               </div>
 
+              {/* Document Upload Section */}
+              <div className="documents-section">
+                <label className="label">Upload Documents (Optional)</label>
+                <p className="section-hint">Add your CV and job description to get personalized answers</p>
+                
+                {uploadError && <div className="alert alert-error">{uploadError}</div>}
+
+                {/* CV Upload Box */}
+                <div className="upload-box">
+                  <div className="upload-icon">
+                    <FileText size={40} />
+                  </div>
+                  <div className="upload-content">
+                    <h4>Your CV/Resume</h4>
+                    <p className="upload-text">
+                      {cvFile ? cvFile.name : 'Upload your resume for personalized answers'}
+                    </p>
+                    <input
+                      type="file"
+                      ref={cvFileRef}
+                      onChange={handleCvChange}
+                      accept=".pdf,.doc,.docx,.txt"
+                      className="hidden-input"
+                      disabled={uploading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => cvFileRef.current?.click()}
+                      className="btn btn-secondary btn-small"
+                      disabled={uploading}
+                    >
+                      {cvFile ? '✓ Selected' : 'Choose File'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Job Description Upload Box */}
+                <div className="upload-box">
+                  <div className="upload-icon">
+                    <Briefcase size={40} />
+                  </div>
+                  <div className="upload-content">
+                    <h4>Job Description</h4>
+                    <p className="upload-text">
+                      {jobDescFile ? jobDescFile.name : 'Upload the job posting to tailor answers'}
+                    </p>
+                    <input
+                      type="file"
+                      ref={jobDescFileRef}
+                      onChange={handleJobDescChange}
+                      accept=".pdf,.doc,.docx,.txt"
+                      className="hidden-input"
+                      disabled={uploading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => jobDescFileRef.current?.click()}
+                      className="btn btn-secondary btn-small"
+                      disabled={uploading}
+                    >
+                      {jobDescFile ? '✓ Selected' : 'Choose File'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="modal-actions">
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setShowNewSession(false)}
+                  onClick={() => {
+                    setShowNewSession(false);
+                    setCvFile(null);
+                    setJobDescFile(null);
+                    setUploadError('');
+                  }}
+                  disabled={uploading}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Start Session
+                <button type="submit" className="btn btn-primary" disabled={uploading}>
+                  {uploading ? 'Uploading...' : 'Start Session'}
                 </button>
               </div>
             </form>
