@@ -1,4 +1,4 @@
-s// Multi-Provider AI Service with Free API Support
+// Multi-Provider AI Service with Free API Support
 // Supports OpenAI, Groq, Hugging Face, Cohere, and Together AI
 // PRIMARY PROVIDER: Grok/Groq
 
