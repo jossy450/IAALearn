@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { authAPI } from '../services/api';
+import { authAPI, documentsAPI } from '../services/api';
 import { Upload, FileText, Briefcase, X, CheckCircle, AlertCircle } from 'lucide-react';
 import './Auth.css';
 
@@ -77,15 +77,41 @@ function Login() {
     setUploadError('');
 
     try {
-      const formData = new FormData();
-      if (cvFile) formData.append('cv', cvFile);
-      if (jobDescFile) formData.append('job_description', jobDescFile);
-
-      // TODO: Replace with actual API endpoint when available
-      // const response = await documentsAPI.upload(formData);
+      const uploadPromises = [];
       
-      // Simulate upload
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Upload CV if selected
+      if (cvFile) {
+        uploadPromises.push(
+          documentsAPI.uploadCV(cvFile)
+            .then(response => ({ type: 'cv', success: true, data: response.data }))
+            .catch(error => ({ type: 'cv', success: false, error }))
+        );
+      }
+      
+      // Upload Job Description if selected
+      if (jobDescFile) {
+        uploadPromises.push(
+          documentsAPI.uploadJobDescription(jobDescFile)
+            .then(response => ({ type: 'job_description', success: true, data: response.data }))
+            .catch(error => ({ type: 'job_description', success: false, error }))
+        );
+      }
+
+      // Wait for all uploads to complete
+      const results = await Promise.all(uploadPromises);
+      
+      // Check if any upload failed
+      const failed = results.filter(r => !r.success);
+      if (failed.length > 0) {
+        const errorMsg = failed.map(f => 
+          `${f.type === 'cv' ? 'CV' : 'Job Description'}: ${f.error.response?.data?.error || 'Upload failed'}`
+        ).join(', ');
+        setUploadError(errorMsg);
+        setUploadStatus({ error: true });
+        return;
+      }
+      
+      console.log('Upload successful:', results);
       
       setUploadStatus({ success: true });
       
@@ -135,11 +161,46 @@ function Login() {
                 <CheckCircle size={20} style={{ color: '#22c55e' }} />
                 <span className="text-sm text-green-800" style={{ fontSize: '0.875rem', color: '#166534' }}>Documents uploaded successfully! Redirecting...</span>
               </div>
-            )}        <Upload size={24} style={{ margin: '0 auto 0.5rem', color: '#9ca3af' }} />
-                      <div className="text-sm text-gray-600" style={{ fontSize: '0.875rem', color: '#4b5563' }}>Click to upload job description</div>
-                      <div className="text-xs text-gray-500" style={{ fontSize: '0.75rem', color: '#6b7280' }}>PDF, DOC, DOCX, TXT (Max 5MB)</div>
-                    </div>
-                  )}
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 cursor-pointer" style={{ border: '2px dashed #d1d5db', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
+                <input
+                  type="file"
+                  ref={cvFileRef}
+                  onChange={handleCvChange}
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => cvFileRef.current?.click()}
+                  className="w-full"
+                  style={{ width: '100%', background: 'none', border: 'none' }}
+                >
+                  <FileText size={24} style={{ margin: '0 auto 0.5rem', color: '#9ca3af' }} />
+                  <div className="text-sm text-gray-600" style={{ fontSize: '0.875rem', color: '#4b5563' }}>{cvFile ? cvFile.name : 'Click to upload CV'}</div>
+                  <div className="text-xs text-gray-500" style={{ fontSize: '0.75rem', color: '#6b7280' }}>PDF, DOC, DOCX, TXT (Max 10MB)</div>
+                </button>
+              </div>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 cursor-pointer" style={{ border: '2px dashed #d1d5db', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
+                <input
+                  type="file"
+                  ref={jobDescFileRef}
+                  onChange={handleJobDescChange}
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => jobDescFileRef.current?.click()}
+                  className="w-full"
+                  style={{ width: '100%', background: 'none', border: 'none' }}
+                >
+                  <Upload size={24} style={{ margin: '0 auto 0.5rem', color: '#9ca3af' }} />
+                  <div className="text-sm text-gray-600" style={{ fontSize: '0.875rem', color: '#4b5563' }}>{jobDescFile ? jobDescFile.name : 'Click to upload job description'}</div>
+                  <div className="text-xs text-gray-500" style={{ fontSize: '0.75rem', color: '#6b7280' }}>PDF, DOC, DOCX, TXT (Max 5MB)</div>
                 </button>
               </div>
             </div>
@@ -336,9 +397,8 @@ function Login() {
         </p>
       </div>
     </div>
+    </>
   );
 }
 
 export default Login;
-  </>
-  

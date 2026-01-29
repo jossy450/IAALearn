@@ -87,4 +87,27 @@ export const privacyAPI = {
   getThemes: () => api.get("/privacy/themes"),
 };
 
+export const documentsAPI = {
+  uploadCV: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post("/documents/upload/cv", formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  uploadJobDescription: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post("/documents/upload/job_description", formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  getUserDocuments: () => api.get("/documents"),
+  deleteDocument: (id) => api.delete(`/documents/${id}`),
+};
+
 export default api;
