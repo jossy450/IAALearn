@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/authStore';
 function OAuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setAuth } = useAuthStore();
+  const { setAuth, token: currentToken } = useAuthStore();
   const [error, setError] = useState(null);
   const [processing, setProcessing] = useState(true);
 
@@ -28,21 +28,43 @@ function OAuthCallback() {
         // Store auth in state and localStorage
         setAuth(token, user);
         
-        // Wait longer to ensure Zustand persist middleware has updated localStorage
-        setTimeout(() => {
-          // Verify the token is actually stored
+        // Wait for multiple conditions to ensure everything is ready:
+        // 1. Zustand persist middleware writes to localStorage
+        // 2. Store subscription updates
+        // 3. App.jsx detects the token
+        const maxAttempts = 50; // 5 seconds max
+        let attempts = 0;
+        
+        const checkAndNavigate = () => {
+          attempts++;
+          
+          // Check if token is in localStorage
           const stored = localStorage.getItem('auth-storage');
           if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed?.state?.token) {
-              navigate('/', { replace: true });
-            } else {
-              throw new Error('Auth state not properly persisted');
+            try {
+              const parsed = JSON.parse(stored);
+              if (parsed?.state?.token === token) {
+                // Token is properly stored, navigate immediately
+                navigate('/', { replace: true });
+                return;
+              }
+            } catch (e) {
+              console.warn('Failed to parse stored auth:', e);
             }
-          } else {
-            throw new Error('Auth storage not found');
           }
-        }, 300);
+          
+          if (attempts < maxAttempts) {
+            // Keep checking every 100ms
+            setTimeout(checkAndNavigate, 100);
+          } else {
+            // Timeout - just navigate anyway, App.jsx will handle it
+            console.warn('Timeout waiting for localStorage sync, navigating anyway');
+            navigate('/', { replace: true });
+          }
+        };
+        
+        // Start checking
+        checkAndNavigate();
       } catch (err) {
         console.error('OAuth callback error:', err);
         setError(`Authentication failed: ${err.message}`);
