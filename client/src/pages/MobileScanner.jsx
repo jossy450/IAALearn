@@ -71,7 +71,7 @@ const MobileScanner = () => {
     setError(null);
 
     try {
-      const response = await sessionAPI.connectViaTransfer(code);
+      const response = await sessionAPI.connectViaTransfer({ code });
       
       if (response.data.success) {
         setSuccess(true);

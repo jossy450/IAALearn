@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { X, Smartphone, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { useSessionStore } from '../store/sessionStore';
 import { sessionAPI } from '../services/api';
@@ -107,11 +107,13 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
               {!isTransferred ? (
                 <>
                   <div className="bg-white border-4 border-gray-200 rounded-lg p-4 mb-4 inline-block">
-                    <QRCodeSVG
+                    <QRCodeCanvas
                       value={transferUrl || ''}
-                      size={200}
-                      level="H"
+                      size={240}
+                      level="M"
                       includeMargin={true}
+                      bgColor="#ffffff"
+                      fgColor="#111827"
                     />
                   </div>
 

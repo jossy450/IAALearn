@@ -6,6 +6,88 @@ const { query } = require('../database/connection');
 
 const router = express.Router();
 
+// Generate answer for a question with streaming support (GET for EventSource)
+router.get('/generate', authenticate, async (req, res, next) => {
+  try {
+    const { question, sessionId, research, stream } = req.query;
+
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+
+    const startTime = Date.now();
+    const useStream = stream === undefined || stream === 'true' || stream === '1' || stream === true;
+    const useResearch = research === 'true' || research === '1' || research === true;
+
+    if (useStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      let fullAnswer = '';
+
+      const streamCallback = (chunk, isComplete) => {
+        if (isComplete) {
+          res.write(`data: ${JSON.stringify({
+            type: 'complete',
+            totalTime: Date.now() - startTime,
+            cached: false
+          })}\n\n`);
+          res.end();
+        } else {
+          fullAnswer += chunk;
+          res.write(`data: ${JSON.stringify({
+            type: 'chunk',
+            content: chunk
+          })}\n\n`);
+        }
+      };
+
+      await optimizedAnswerService.generateAnswer(question, {
+        research: useResearch,
+        context: undefined,
+        userId: req.user.id,
+        streamCallback
+      });
+
+      if (sessionId) {
+        await query(
+          `INSERT INTO questions (session_id, question_text, answer, response_time_ms)
+           VALUES ($1, $2, $3, $4)`
+          , [sessionId, question, fullAnswer, Date.now() - startTime]
+        );
+      }
+
+      return;
+    }
+
+    const result = await optimizedAnswerService.generateAnswer(question, {
+      research: useResearch,
+      context: undefined,
+      userId: req.user.id
+    });
+
+    if (sessionId) {
+      await query(
+        `INSERT INTO questions (session_id, question_text, answer, response_time_ms)
+         VALUES ($1, $2, $3, $4)`
+        , [sessionId, question, result.answer, result.responseTime]
+      );
+
+      await query(
+        `UPDATE interview_sessions 
+         SET total_questions = total_questions + 1 
+         WHERE id = $1`,
+        [sessionId]
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Generate answer for a question with streaming support
 router.post('/generate', authenticate, async (req, res, next) => {
   try {

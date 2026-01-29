@@ -120,6 +120,17 @@ function InterviewSession() {
     }
   };
 
+  const getAuthToken = () => {
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (!authStorage) return null;
+      const { state } = JSON.parse(authStorage);
+      return state?.token || null;
+    } catch {
+      return null;
+    }
+  };
+
   const generateAnswer = useCallback(async (question, useResearch = false) => {
     // Clear any pending debounce
     if (debounceTimerRef.current) {
@@ -140,8 +151,10 @@ function InterviewSession() {
       
       if (streamingSupported) {
         // Server-sent events for streaming
+        const token = getAuthToken();
+        const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
         const eventSource = new EventSource(
-          `/api/answers-optimized/generate?stream=true&question=${encodeURIComponent(question)}&sessionId=${id}`,
+          `/api/answers-optimized/generate?stream=true&question=${encodeURIComponent(question)}&sessionId=${id}${tokenQuery}`,
           { withCredentials: true }
         );
 
@@ -156,6 +169,7 @@ function InterviewSession() {
           } else if (data.type === 'complete') {
             eventSource.close();
             setIsStreaming(false);
+            setLoading(false);
             
             const totalTime = Date.now() - startTime;
             setResponseTime(totalTime);
