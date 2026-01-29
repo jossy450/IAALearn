@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import Layout from './components/Layout';
@@ -34,6 +34,35 @@ function ProtectedRoute({ children }) {
 
 function App() {
   const { token, user } = useAuthStore();
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    // Wait for Zustand persist middleware to hydrate from localStorage
+    const unsubscribe = useAuthStore.subscribe(
+      (state) => state,
+      () => setIsHydrated(true),
+      { equalityFn: (a, b) => a === b }
+    );
+
+    // Also set hydrated immediately if already hydrated
+    setIsHydrated(true);
+
+    return unsubscribe;
+  }, []);
+
+  // Show loading spinner while hydrating
+  if (!isHydrated) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '100vh'
+      }}>
+        <div className="spinner"></div>
+      </div>
+    );
+  }
 
   return (
     <Router>

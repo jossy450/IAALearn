@@ -28,11 +28,21 @@ function OAuthCallback() {
         // Store auth in state and localStorage
         setAuth(token, user);
         
-        // Wait a brief moment for state to update, then redirect
-        // Use setTimeout to ensure React state updates are flushed
+        // Wait longer to ensure Zustand persist middleware has updated localStorage
         setTimeout(() => {
-          navigate('/', { replace: true });
-        }, 100);
+          // Verify the token is actually stored
+          const stored = localStorage.getItem('auth-storage');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed?.state?.token) {
+              navigate('/', { replace: true });
+            } else {
+              throw new Error('Auth state not properly persisted');
+            }
+          } else {
+            throw new Error('Auth storage not found');
+          }
+        }, 300);
       } catch (err) {
         console.error('OAuth callback error:', err);
         setError(`Authentication failed: ${err.message}`);
