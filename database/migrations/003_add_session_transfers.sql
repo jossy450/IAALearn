@@ -16,10 +16,10 @@ CREATE TABLE IF NOT EXISTS session_transfers (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_session_transfers_session_id ON session_transfers(session_id);
-CREATE INDEX idx_session_transfers_code ON session_transfers(transfer_code);
-CREATE INDEX idx_session_transfers_expires ON session_transfers(expires_at);
-CREATE INDEX idx_session_transfers_active ON session_transfers(is_active);
+CREATE INDEX IF NOT EXISTS idx_session_transfers_session_id ON session_transfers(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_transfers_code ON session_transfers(transfer_code);
+CREATE INDEX IF NOT EXISTS idx_session_transfers_expires ON session_transfers(expires_at);
+CREATE INDEX IF NOT EXISTS idx_session_transfers_active ON session_transfers(is_active);
 
 -- Comments for documentation
 COMMENT ON TABLE session_transfers IS 'Tracks QR code-based session transfers to mobile devices for emergency screen sharing';
