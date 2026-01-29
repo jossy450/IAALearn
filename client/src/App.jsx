@@ -37,29 +37,18 @@ function App() {
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    // Check if Zustand has already hydrated from persist middleware
-    // The persist middleware marks the store as hydrated
-    const checkHydration = () => {
-      // If there's a token, we're hydrated
-      if (useAuthStore.getState().token) {
-        setIsHydrated(true);
-        return;
-      }
-      
-      // Check localStorage directly for auth data
-      const stored = localStorage.getItem('auth-storage');
-      if (stored) {
-        setIsHydrated(true);
-        return;
-      }
-      
-      // Not hydrated yet, try again soon
-      const timer = setTimeout(checkHydration, 50);
-      return () => clearTimeout(timer);
-    };
+    let cancelled = false;
 
-    const cleanup = checkHydration();
-    return cleanup || undefined;
+    // Give persist middleware a moment to hydrate, then allow render even if no token
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      setIsHydrated(true);
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   // Show loading spinner while hydrating
