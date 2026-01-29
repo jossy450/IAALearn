@@ -118,24 +118,33 @@ class FreeNeuralTranscriptionService {
   async transcribeHuggingFace(audioBuffer, format, language) {
     try {
       console.log('🤗 Hugging Face processing...');
+      console.log(`   Audio size: ${audioBuffer.length} bytes, format: ${format}`);
       
-      // Convert audio buffer to proper format if needed
-      const audioData = await this.prepareAudioData(audioBuffer, format);
+      // Hugging Face requires WAV, MP3, or FLAC
+      // WebM is not supported - need to convert or skip this provider
+      if (format === 'webm' || format === 'ogg' || format === 'opus') {
+        throw new Error(`Hugging Face doesn't support ${format}. Try OpenAI Whisper or use WAV/MP3 format.`);
+      }
 
       // Use Hugging Face's free Whisper endpoint
       const response = await fetch('https://api-inference.huggingface.co/models/openai/whisper-small', {
         method: 'POST',
-        body: audioData,
+        body: audioBuffer,
         headers: {
-          'Content-Type': 'application/octet-stream'
+          'Content-Type': 'audio/wav'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`Hugging Face error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Hugging Face HTTP ${response.status}: ${errorText || response.statusText}`);
       }
 
       const result = await response.json();
+
+      if (!result.text) {
+        throw new Error('Hugging Face returned no transcription text');
+      }
 
       return {
         text: result.text || '',
@@ -147,7 +156,7 @@ class FreeNeuralTranscriptionService {
   }
 
   /**
-   * OpenAI Whisper - FREE if you have credits/key
+   * OpenAI Whisper - Works with WebM, WAV, MP3, etc.
    */
   async transcribeOpenAI(audioBuffer, format, language) {
     try {
@@ -157,11 +166,14 @@ class FreeNeuralTranscriptionService {
       });
 
       console.log('🤖 OpenAI Whisper processing...');
+      console.log(`   Audio size: ${audioBuffer.length} bytes, format: ${format}`);
 
       let tempFilePath = null;
       try {
         const tempDir = os.tmpdir();
-        tempFilePath = path.join(tempDir, `audio-${Date.now()}.${format}`);
+        // Use proper file extension for the format
+        const ext = format === 'webm' ? 'webm' : format;
+        tempFilePath = path.join(tempDir, `audio-${Date.now()}.${ext}`);
         fs.writeFileSync(tempFilePath, audioBuffer);
 
         const audioStream = fs.createReadStream(tempFilePath);
@@ -169,11 +181,19 @@ class FreeNeuralTranscriptionService {
         const transcription = await client.audio.transcriptions.create({
           file: audioStream,
           model: 'whisper-1',
-          language: language === 'en' ? 'en' : language
+          language: language === 'en' ? 'en' : language,
+          response_format: 'text'
         });
 
+        // OpenAI Whisper returns plain text when response_format='text'
+        const text = typeof transcription === 'string' ? transcription : transcription.text;
+
+        if (!text || text.trim().length === 0) {
+          throw new Error('OpenAI Whisper returned empty transcription');
+        }
+
         return {
-          text: transcription.text || '',
+          text: text.trim(),
           confidence: null
         };
       } finally {
@@ -186,6 +206,13 @@ class FreeNeuralTranscriptionService {
         }
       }
     } catch (error) {
+      // Provide clearer error messages
+      if (error.message.includes('API key')) {
+        throw new Error('OpenAI API key not configured or invalid');
+      }
+      if (error.message.includes('quota')) {
+        throw new Error('OpenAI API quota exceeded');
+      }
       throw new Error(`OpenAI Whisper error: ${error.message}`);
     }
   }

@@ -46,18 +46,18 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     console.error('❌ Transcription error:', error.message);
     
     // Send detailed error to client
-    res.status(500).json({
+    res.status(400).json({
       error: 'Transcription failed',
       message: error.message,
-      details: 'Please check:\n- Audio recording quality\n- Microphone permissions\n- API keys configured (AssemblyAI, Deepgram, Google Cloud, Azure, or OpenAI)',
-      providers: neuralTranscriptionService.getAvailableProviders().map(p => p.name)
+      details: 'Please check:\n- Audio recording quality (at least 1 second)\n- Microphone permissions\n- Speak clearly and try again\n- If issue persists, check API keys',
+      providers: freeNeuralTranscriptionService.getAvailableProviders().map(p => p.name)
     });
   }
 });
 
 // Get available transcription providers and health status
 router.get('/status', authenticate, async (req, res) => {
-  const providers = neuralTranscriptionService.getAvailableProviders();
+  const providers = freeNeuralTranscriptionService.getAvailableProviders();
   
   res.json({
     status: 'operational',
