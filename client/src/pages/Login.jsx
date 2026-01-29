@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, documentsAPI } from '../services/api';
-import { Upload, FileText, Briefcase, X } from 'lucide-react';
+import { Upload, FileText, Briefcase, X, Eye, EyeOff } from 'lucide-react';
 import './Auth.css';
 
 function Login() {
