@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, documentsAPI } from '../services/api';
-import { Upload, FileText, Briefcase, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Briefcase, X } from 'lucide-react';
 import './Auth.css';
 
 function Login() {
@@ -11,11 +11,15 @@ function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState({});
   const [cvFile, setCvFile] = useState(null);
   const [jobDescFile, setJobDescFile] = useState(null);
   const [uploadError, setUploadError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const cvFileRef = useRef(null);
   const jobDescFileRef = useRef(null);
 
@@ -29,227 +33,29 @@ function Login() {
       const { token, user } = response.data;
       setAuth(token, user);
       
-      // Show upload modal immediately after successful login
+      // Show upload modal after successful login
       setShowUploadModal(true);
-      setLoading(false);
+      setUploadError('');
+      setUploadSuccess(false);
+      setCvFile(null);
+      setJobDescFile(null);
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleCvChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setUploadError('CV file size must be less than 10MB');
-        return;
-      }
-      setCvFile(file);
-      setUploadError('');
-    }
-  };
-
-  const handleJobDescChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setUploadError('Job description file size must be less than 5MB');
-        return;
-      }
-      setJobDescFile(file);
-      setUploadError('');
-    }
-  };
-
-  const handleSkipUpload = () => {
-    setShowUploadModal(false);
-    navigate('/');
-  };
-
-  const handleUploadDocuments = async () => {
-    if (!cvFile && !jobDescFile) {
-      setUploadError('Please select at least one document to upload');
-      return;
-    }
-
-    setUploadStatus({ uploading: true });
-    setUploadError('');
-
-    try {
-      const uploadPromises = [];
-      
-      // Upload CV if selected
-      if (cvFile) {
-        uploadPromises.push(
-          documentsAPI.uploadCV(cvFile)
-            .then(response => ({ type: 'cv', success: true, data: response.data }))
-            .catch(error => ({ type: 'cv', success: false, error }))
-        );
-      }
-      
-      // Upload Job Description if selected
-      if (jobDescFile) {
-        uploadPromises.push(
-          documentsAPI.uploadJobDescription(jobDescFile)
-            .then(response => ({ type: 'job_description', success: true, data: response.data }))
-            .catch(error => ({ type: 'job_description', success: false, error }))
-        );
-      }
-
-      // Wait for all uploads to complete
-      const results = await Promise.all(uploadPromises);
-      
-      // Check if any upload failed
-      const failed = results.filter(r => !r.success);
-      if (failed.length > 0) {
-        const errorMsg = failed.map(f => 
-          `${f.type === 'cv' ? 'CV' : 'Job Description'}: ${f.error.response?.data?.error || 'Upload failed'}`
-        ).join(', ');
-        setUploadError(errorMsg);
-        setUploadStatus({ error: true });
-        return;
-      }
-      
-      console.log('Upload successful:', results);
-      
-      setUploadStatus({ success: true });
-      
-      setTimeout(() => {
-        setShowUploadModal(false);
-        navigate('/');
-      }, 1000);
-    } catch (err) {
-      console.error('Upload error:', err);
-      setUploadError('Failed to upload documents. Please try again.');
-      setUploadStatus({ error: true });
-    }
-  };
 
   return (
-    <>
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-8 relative" style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '42rem', width: '100%', padding: '2rem', position: 'relative' }}>
-            <button
-              onClick={handleSkipUpload}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-              style={{ position: 'absolute', top: '1rem', right: '1rem', color: '#9ca3af', cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.5rem' }}
-            >
-              <X size={24} />
-            </button>
+    <div className="auth-container">
+      <div className="auth-card">
+        <h1 className="auth-title">Interview Answer Assistant</h1>
+        <h2 className="auth-subtitle">Sign In</h2>
 
-            <div className="text-center mb-6">
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-lg mb-4" style={{ background: 'linear-gradient(to right, #2563eb, #4f46e5)', color: 'white', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1rem' }}>
-                <h2 className="text-2xl font-bold mb-2" style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Welcome! 🎉</h2>
-                <p className="text-blue-100" style={{ color: '#dbeafe' }}>
-                  Upload your CV and job description for AI-powered personalized answers
-                </p>
-              </div>
-            </div>
+        {error && <div className="alert alert-error">{error}</div>}
 
-            {uploadError && (
-              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2" style={{ marginBottom: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <AlertCircle size={20} style={{ color: '#ef4444' }} />
-                <span className="text-sm text-red-800" style={{ fontSize: '0.875rem', color: '#991b1b' }}>{uploadError}</span>
-              </div>
-            )}
-
-            {uploadStatus.success && (
-              <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2" style={{ marginBottom: '1rem', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.5rem', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <CheckCircle size={20} style={{ color: '#22c55e' }} />
-                <span className="text-sm text-green-800" style={{ fontSize: '0.875rem', color: '#166534' }}>Documents uploaded successfully! Redirecting...</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 cursor-pointer" style={{ border: '2px dashed #d1d5db', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
-                <input
-                  type="file"
-                  ref={cvFileRef}
-                  onChange={handleCvChange}
-                  accept=".pdf,.doc,.docx,.txt"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => cvFileRef.current?.click()}
-                  className="w-full"
-                  style={{ width: '100%', background: 'none', border: 'none' }}
-                >
-                  <FileText size={24} style={{ margin: '0 auto 0.5rem', color: '#9ca3af' }} />
-                  <div className="text-sm text-gray-600" style={{ fontSize: '0.875rem', color: '#4b5563' }}>{cvFile ? cvFile.name : 'Click to upload CV'}</div>
-                  <div className="text-xs text-gray-500" style={{ fontSize: '0.75rem', color: '#6b7280' }}>PDF, DOC, DOCX, TXT (Max 10MB)</div>
-                </button>
-              </div>
-
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 cursor-pointer" style={{ border: '2px dashed #d1d5db', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center', cursor: 'pointer' }}>
-                <input
-                  type="file"
-                  ref={jobDescFileRef}
-                  onChange={handleJobDescChange}
-                  accept=".pdf,.doc,.docx,.txt"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => jobDescFileRef.current?.click()}
-                  className="w-full"
-                  style={{ width: '100%', background: 'none', border: 'none' }}
-                >
-                  <Upload size={24} style={{ margin: '0 auto 0.5rem', color: '#9ca3af' }} />
-                  <div className="text-sm text-gray-600" style={{ fontSize: '0.875rem', color: '#4b5563' }}>{jobDescFile ? jobDescFile.name : 'Click to upload job description'}</div>
-                  <div className="text-xs text-gray-500" style={{ fontSize: '0.75rem', color: '#6b7280' }}>PDF, DOC, DOCX, TXT (Max 5MB)</div>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-4" style={{ display: 'flex', gap: '1rem' }}>
-              <button
-                type="button"
-                onClick={handleSkipUpload}
-                disabled={uploadStatus.uploading}
-                className="flex-1 px-6 py-3 border-2 rounded-lg font-semibold"
-                style={{ flex: 1, padding: '0.75rem 1.5rem', border: '2px solid #d1d5db', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', backgroundColor: 'white' }}
-              >
-                Skip for Now
-              </button>
-              <button
-                type="button"
-                onClick={handleUploadDocuments}
-                disabled={uploadStatus.uploading || (!cvFile && !jobDescFile)}
-                className="flex-1 px-6 py-3 rounded-lg font-semibold text-white"
-                style={{ flex: 1, padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontWeight: '600', color: 'white', cursor: uploadStatus.uploading || (!cvFile && !jobDescFile) ? 'not-allowed' : 'pointer', opacity: uploadStatus.uploading || (!cvFile && !jobDescFile) ? 0.5 : 1, background: 'linear-gradient(to right, #2563eb, #4f46e5)', border: 'none' }}
-              >
-                {uploadStatus.uploading ? (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                    <span className="animate-spin" style={{ display: 'inline-block', width: '1rem', height: '1rem', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }}></span>
-                    Uploading...
-                  </span>
-                ) : (
-                  <>Upload & Continue</>
-                )}
-              </button>
-            </div>
-
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg" style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.5rem' }}>
-              <p className="text-sm text-blue-800" style={{ fontSize: '0.875rem', color: '#1e40af', margin: 0 }}>
-                <strong>💡 Pro Tip:</strong> Uploading documents helps provide personalized, context-aware answers!
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="auth-container">
-        <div className="auth-card">
-          <h1 className="auth-title">Interview Answer Assistant</h1>
-          <h2 className="auth-subtitle">Sign In</h2>
-
-          {error && <div className="alert alert-error">{error}</div>}
-
-          <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label className="label">Email</label>
             <input
@@ -264,13 +70,22 @@ function Login() {
 
           <div className="form-group">
             <label className="label">Password</label>
-            <input
-              type="password"
-              className="input"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-            />
+            <div className="password-input-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="input"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="password-toggle"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
@@ -313,8 +128,111 @@ function Login() {
           Don't have an account? <Link to="/register">Register</Link>
         </p>
       </div>
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="modal-overlay" onClick={handleSkipUpload}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Upload Your Documents</h2>
+              <button className="modal-close" onClick={handleSkipUpload}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <p className="modal-subtitle">
+                Help us tailor your interview answers by uploading your CV and job description
+              </p>
+
+              {uploadError && <div className="alert alert-error">{uploadError}</div>}
+              {uploadSuccess && <div className="alert alert-success">Documents uploaded successfully!</div>}
+
+              {/* CV Upload Box */}
+              <div className="upload-box">
+                <div className="upload-icon">
+                  <FileText size={40} />
+                </div>
+                <div className="upload-content">
+                  <h4>Your CV/Resume</h4>
+                  <p className="upload-text">
+                    {cvFile ? cvFile.name : 'Upload your resume for personalized answers'}
+                  </p>
+                  <input
+                    type="file"
+                    ref={cvFileRef}
+                    onChange={handleCvChange}
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden-input"
+                    disabled={uploading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => cvFileRef.current?.click()}
+                    className="btn btn-secondary btn-small"
+                    disabled={uploading}
+                  >
+                    {cvFile ? '✓ Selected' : 'Choose File'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Job Description Upload Box */}
+              <div className="upload-box">
+                <div className="upload-icon">
+                  <Briefcase size={40} />
+                </div>
+                <div className="upload-content">
+                  <h4>Job Description</h4>
+                  <p className="upload-text">
+                    {jobDescFile ? jobDescFile.name : 'Upload the job posting to tailor answers'}
+                  </p>
+                  <input
+                    type="file"
+                    ref={jobDescFileRef}
+                    onChange={handleJobDescChange}
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden-input"
+                    disabled={uploading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => jobDescFileRef.current?.click()}
+                    className="btn btn-secondary btn-small"
+                    disabled={uploading}
+                  >
+                    {jobDescFile ? '✓ Selected' : 'Choose File'}
+                  </button>
+                </div>
+              </div>
+
+              <p className="modal-note">
+                Both files are optional. You can upload them now or add them later in your dashboard.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                onClick={handleSkipUpload}
+                className="btn btn-outline"
+                disabled={uploading}
+              >
+                Skip for Now
+              </button>
+              <button
+                type="button"
+                onClick={handleUploadDocuments}
+                className="btn btn-primary"
+                disabled={uploading || (!cvFile && !jobDescFile)}
+              >
+                {uploading ? 'Uploading...' : 'Upload Documents'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-    </>
   );
 }
 
