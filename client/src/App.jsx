@@ -5,7 +5,6 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import OAuthCallback from './pages/OAuthCallback';
-import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import InterviewSession from './pages/InterviewSession';
@@ -40,10 +39,9 @@ function App() {
     <Router>
       <StealthManager />
       <Routes>
-        <Route path="/login" element={token ? <Navigate to="/landing" /> : <Login />} />
-        <Route path="/register" element={token ? <Navigate to="/landing" /> : <Register />} />
+        <Route path="/login" element={token ? <Navigate to="/" /> : <Login />} />
+        <Route path="/register" element={token ? <Navigate to="/" /> : <Register />} />
         <Route path="/auth/callback" element={<OAuthCallback />} />
-        <Route path="/landing" element={token ? <LandingPage /> : <Navigate to="/login" />} />
         <Route path="/decoy/:type" element={<DecoyScreen />} />
         <Route path="/mobile-transfer" element={<MobileScanner />} />
         <Route path="/mobile-session/:sessionId" element={<MobileSession />} />
