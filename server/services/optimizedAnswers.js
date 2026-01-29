@@ -127,7 +127,7 @@ class OptimizedAnswerService {
   }
 
   // Fast answer generation using multi-provider AI with fallback
-  async generateFastAnswer(question, context = {}, streamCallback = null) {
+  async generateFastAnswer(question, context = {}, streamCallback = null, options = {}) {
     const aiProvider = getAIProvider();
     const startTime = Date.now();
     
@@ -146,7 +146,10 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
           question,
           systemPrompt,
           streamCallback,
-          { preferFree: true }
+          { 
+            preferFree: true,
+            forcePrimary: options.forcePrimary || true  // ✅ Default to Grok
+          }
         );
         
         const duration = Date.now() - startTime;
@@ -159,7 +162,10 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
       const result = await aiProvider.generate(
         question,
         systemPrompt,
-        { preferFree: true }
+        { 
+          preferFree: true,
+          forcePrimary: options.forcePrimary || true  // ✅ Default to Grok
+        }
       );
 
       const duration = Date.now() - startTime;
@@ -173,7 +179,7 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
   }
 
   // Research-backed answer using multi-provider AI
-  async generateResearchAnswer(question, context = {}) {
+  async generateResearchAnswer(question, context = {}, options = {}) {
     const startTime = Date.now();
     const aiProvider = getAIProvider();
     
@@ -228,7 +234,11 @@ Provide a comprehensive, confident answer that demonstrates expertise.`;
       const result = await aiProvider.generate(
         question,
         systemPrompt,
-        { smart: true, preferFree: true }
+        { 
+          smart: true, 
+          preferFree: true,
+          forcePrimary: options.forcePrimary || true  // ✅ Default to Grok
+        }
       );
 
       const duration = Date.now() - startTime;
@@ -273,10 +283,11 @@ Provide a comprehensive, confident answer that demonstrates expertise.`;
       const aiStart = Date.now();
       const useResearch = options.research || options.deep;
       const streamCallback = options.streamCallback;
+      const forcePrimary = options.forcePrimary;
       
       const answer = useResearch
-        ? await this.generateResearchAnswer(question, options.context)
-        : await this.generateFastAnswer(question, options.context, streamCallback);
+        ? await this.generateResearchAnswer(question, options.context, { forcePrimary })
+        : await this.generateFastAnswer(question, options.context, streamCallback, { forcePrimary });
       
       aiTime = Date.now() - aiStart;
 

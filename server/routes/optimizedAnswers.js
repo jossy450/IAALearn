@@ -47,7 +47,8 @@ router.get('/generate', authenticate, async (req, res, next) => {
         research: useResearch,
         context: undefined,
         userId: req.user.id,
-        streamCallback
+        streamCallback,
+        forcePrimary: true  // ✅ Always use Grok as primary
       });
 
       if (sessionId) {
@@ -64,7 +65,8 @@ router.get('/generate', authenticate, async (req, res, next) => {
     const result = await optimizedAnswerService.generateAnswer(question, {
       research: useResearch,
       context: undefined,
-      userId: req.user.id
+      userId: req.user.id,
+      forcePrimary: true  // ✅ Always use Grok as primary
     });
 
     if (sessionId) {

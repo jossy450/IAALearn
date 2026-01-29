@@ -1,5 +1,6 @@
-// Multi-Provider AI Service with Free API Support
+s// Multi-Provider AI Service with Free API Support
 // Supports OpenAI, Groq, Hugging Face, Cohere, and Together AI
+// PRIMARY PROVIDER: Grok/Groq
 
 const OpenAI = require('openai');
 const axios = require('axios');
@@ -7,19 +8,21 @@ const axios = require('axios');
 class AIProviderService {
   constructor() {
     this.providers = [];
+    this.primaryProvider = process.env.PRIMARY_AI_PROVIDER || 'groq'; // ✅ Grok as default
     this.initializeProviders();
   }
 
   initializeProviders() {
-    // Priority order: Free providers first, then paid
+    // GROK/GROQ IS PRIMARY - First choice for all operations
+    // Fallback order: Groq → HuggingFace → Together → Cohere → OpenAI
     const providerConfigs = [
       {
         name: 'groq',
         enabled: !!process.env.GROQ_API_KEY,
         priority: 1,
         free: true,
-        fastModel: 'mixtral-8x7b-32768',  // Fallback to fast model
-        smartModel: 'mixtral-8x7b-32768'   // Will try alternatives if this fails
+        fastModel: 'mixtral-8x7b-32768',
+        smartModel: 'mixtral-8x7b-32768'
       },
       {
         name: 'huggingface',
@@ -55,6 +58,7 @@ class AIProviderService {
       }
     ];
 
+    this.allProviders = providerConfigs;
     this.providers = providerConfigs
       .filter(p => p.enabled)
       .sort((a, b) => a.priority - b.priority);
@@ -62,6 +66,12 @@ class AIProviderService {
     if (this.providers.length === 0) {
       console.warn('⚠️  No AI providers configured. Please set at least one API key.');
     } else {
+      const primaryAvailable = this.providers.find(p => p.name === this.primaryProvider);
+      if (primaryAvailable) {
+        console.log(`🚀 PRIMARY AI PROVIDER: ${this.primaryProvider.toUpperCase()} (Grok)`);
+      } else {
+        console.warn(`⚠️  Primary provider "${this.primaryProvider}" not available, using: ${this.providers[0].name}`);
+      }
       console.log(`✅ AI Providers initialized: ${this.providers.map(p => p.name).join(', ')}`);
       console.log(`🆓 Free providers available: ${this.providers.filter(p => p.free).map(p => p.name).join(', ')}`);
     }
@@ -244,11 +254,18 @@ class AIProviderService {
   async generate(prompt, systemPrompt, options = {}) {
     const useSmartModel = options.smart || options.research || false;
     const preferFree = options.preferFree !== false; // Default to true
+    const forcePrimary = options.forcePrimary || this.forceUsePrimary || false;
 
     // Filter providers based on preference
     let availableProviders = [...this.providers];
-    if (preferFree) {
-      // Try free providers first
+
+    // ✅ If forcing primary provider (Grok), use it first
+    if (forcePrimary) {
+      const primary = this.getPrimaryProvider();
+      availableProviders = [primary, ...this.providers.filter(p => p.name !== primary.name)];
+      console.log(`🚀 Forcing primary provider: ${primary.name}`);
+    } else if (preferFree) {
+      // Try free providers first, but prioritize Grok
       const freeProviders = availableProviders.filter(p => p.free);
       const paidProviders = availableProviders.filter(p => !p.free);
       availableProviders = [...freeProviders, ...paidProviders];
@@ -374,6 +391,7 @@ class AIProviderService {
       name: p.name,
       free: p.free,
       priority: p.priority,
+      isPrimary: p.name === this.primaryProvider,
       models: {
         fast: p.fastModel,
         smart: p.smartModel
@@ -381,11 +399,32 @@ class AIProviderService {
     }));
   }
 
+  setPrimaryProvider(providerName) {
+    const provider = this.providers.find(p => p.name === providerName);
+    if (!provider) {
+      throw new Error(`Provider "${providerName}" not available. Available: ${this.providers.map(p => p.name).join(', ')}`);
+    }
+    this.primaryProvider = providerName;
+    console.log(`✅ Primary provider switched to: ${providerName}`);
+    return this.primaryProvider;
+  }
+
+  getPrimaryProvider() {
+    return this.providers.find(p => p.name === this.primaryProvider) || this.providers[0];
+  }
+
+  forcePrimary(forceFlag = true) {
+    this.forceUsePrimary = forceFlag;
+    console.log(`⚙️  Force primary provider: ${forceFlag ? 'ENABLED' : 'DISABLED'}`);
+  }
+
   getStatus() {
     return {
       total: this.providers.length,
       free: this.providers.filter(p => p.free).length,
       paid: this.providers.filter(p => !p.free).length,
+      primaryProvider: this.primaryProvider,
+      forceUsePrimary: this.forceUsePrimary || false,
       providers: this.getAvailableProviders()
     };
   }
