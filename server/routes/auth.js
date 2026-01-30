@@ -6,6 +6,34 @@ const { query } = require('../database/connection');
 
 const router = express.Router();
 
+const DEFAULT_GOOGLE_CLIENT_ID = '1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com';
+
+const getPublicServerUrl = (req) => {
+  const envUrl = process.env.SERVER_URL || process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_SERVER_URL || process.env.PUBLIC_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/$/, '');
+  }
+
+  const forwardedProto = req.get('x-forwarded-proto');
+  const protocol = forwardedProto ? forwardedProto.split(',')[0].trim() : req.protocol;
+  return `${protocol}://${req.get('host')}`;
+};
+
+const buildGoogleAuthUrl = (req) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
+  const redirectUri = `${getPublicServerUrl(req)}/api/auth/google/callback`;
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', 'profile email');
+  authUrl.searchParams.set('access_type', 'offline');
+  authUrl.searchParams.set('prompt', 'consent');
+
+  return authUrl.toString();
+};
+
 // In-memory users for demo mode
 const demoUsers = new Map();
 // In-memory password reset tokens for demo mode
@@ -254,18 +282,34 @@ router.get('/google', (req, res, next) => {
 
   // Check if OAuth is configured
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.status(500).json({ 
-      error: 'OAuth not configured', 
-      message: 'Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables' 
-    });
+    const googleAuthUrl = buildGoogleAuthUrl(req);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+
+    if (req.headers.accept && req.headers.accept.includes('text/html')) {
+      return res.status(200).send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0;url=${googleAuthUrl}" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redirecting…</title>
+  </head>
+  <body>
+    <p>Redirecting to Google sign-in…</p>
+    <script>window.location.replace(${JSON.stringify(googleAuthUrl)});</script>
+  </body>
+</html>`);
+    }
+
+    return res.redirect(302, googleAuthUrl);
   }
 
   const passport = require('passport');
-  
+
   // Use passport authenticate directly with immediate redirect
-  passport.authenticate('google', { 
+  passport.authenticate('google', {
     scope: ['profile', 'email'],
-    session: false 
+    session: false
   })(req, res, next);
 });
 

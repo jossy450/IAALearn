@@ -6,6 +6,8 @@ const GitHubStrategy = require('passport-github2').Strategy;
  * Configure Passport with Google and GitHub OAuth strategies
  */
 function configurePassport() {
+  const baseServerUrl = (process.env.SERVER_URL || process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_SERVER_URL || process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
+
   // Google OAuth Strategy
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use(
@@ -13,7 +15,7 @@ function configurePassport() {
         {
           clientID: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          callbackURL: `${process.env.SERVER_URL || 'http://localhost:3000'}/api/auth/google/callback`,
+          callbackURL: `${baseServerUrl}/api/auth/google/callback`,
           proxy: true
         },
         (accessToken, refreshToken, profile, done) => {
@@ -34,7 +36,7 @@ function configurePassport() {
         {
           clientID: process.env.GITHUB_CLIENT_ID,
           clientSecret: process.env.GITHUB_CLIENT_SECRET,
-          callbackURL: `${process.env.SERVER_URL || 'http://localhost:3000'}/api/auth/github/callback`,
+          callbackURL: `${baseServerUrl}/api/auth/github/callback`,
           proxy: true
         },
         (accessToken, refreshToken, profile, done) => {
