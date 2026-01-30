@@ -9,14 +9,17 @@ const router = express.Router();
 const DEFAULT_GOOGLE_CLIENT_ID = '1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com';
 
 const getPublicServerUrl = (req) => {
+  // Prioritize explicit environment URLs
   const envUrl = process.env.SERVER_URL || process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_SERVER_URL || process.env.PUBLIC_URL;
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
 
+  // Fallback: reconstruct from request headers
   const forwardedProto = req.get('x-forwarded-proto');
   const protocol = forwardedProto ? forwardedProto.split(',')[0].trim() : req.protocol;
-  return `${protocol}://${req.get('host')}`;
+  const host = req.get('x-forwarded-host') || req.get('host');
+  return `${protocol}://${host}`;
 };
 
 const buildGoogleAuthUrl = (req) => {
