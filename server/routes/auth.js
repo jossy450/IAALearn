@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const passport = require('passport');
 const { query } = require('../database/connection');
 
 const router = express.Router();
@@ -35,6 +36,26 @@ const buildGoogleAuthUrl = (req) => {
   authUrl.searchParams.set('prompt', 'consent');
 
   return authUrl.toString();
+};
+
+// Helper: Create JWT token
+const createToken = (userId, email, expiresIn = '7d') => {
+  return jwt.sign(
+    { id: userId, email },
+    process.env.JWT_SECRET || 'demo-secret',
+    { expiresIn }
+  );
+};
+
+// Helper: Get client redirect URL
+const getClientUrl = () => {
+  return process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
+};
+
+// Helper: Sanitize user response (remove sensitive fields)
+const sanitizeUser = (user) => {
+  const { password_hash, reset_token, reset_token_expiry, ...safe } = user;
+  return safe;
 };
 
 // In-memory users for demo mode
@@ -92,12 +113,7 @@ router.post('/register', async (req, res, next) => {
 
       demoUsers.set(email.toLowerCase(), { ...user, password_hash: passwordHash });
 
-      // Only include safe fields in token
-      const token = jwt.sign(
-        { id: user.id, email: user.email },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = createToken(user.id, user.email);
 
       return res.status(201).json({
         success: true,
@@ -131,11 +147,7 @@ router.post('/register', async (req, res, next) => {
       [user.id]
     );
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = createToken(user.id, user.email);
 
     res.status(201).json({
       success: true,
@@ -170,19 +182,11 @@ router.post('/login', async (req, res, next) => {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email },
-        process.env.JWT_SECRET || 'demo-secret',
-        { expiresIn: '7d' }
-      );
+      const token = createToken(user.id, user.email);
 
       return res.json({
         success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name
-        },
+        user: sanitizeUser(user),
         token
       });
     }
@@ -210,18 +214,11 @@ router.post('/login', async (req, res, next) => {
       [user.id]
     );
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Remove password from response
-    delete user.password_hash;
+    const token = createToken(user.id, user.email);
 
     res.json({
       success: true,
-      user,
+      user: sanitizeUser(user),
       token
     });
   } catch (error) {
@@ -238,7 +235,7 @@ router.get('/me', async (req, res, next) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'demo-secret');
 
     const result = await query(
       'SELECT id, email, full_name, created_at, last_login FROM users WHERE id = $1',
@@ -261,9 +258,8 @@ router.get('/me', async (req, res, next) => {
 });
 
 // Google OAuth - Initiate authentication
-router.get('/google', (req, res, next) => {
+router.get('/google', (req, res) => {
   if (isDemoMode) {
-    // Demo Mode: Simulate OAuth
     const demoUser = {
       id: `google-${Date.now()}`,
       email: 'demo@google.com',
@@ -271,56 +267,22 @@ router.get('/google', (req, res, next) => {
       provider: 'google'
     };
 
-    const token = jwt.sign(
-      { id: demoUser.id, email: demoUser.email },
-      process.env.JWT_SECRET || 'demo-secret',
-      { expiresIn: '7d' }
-    );
-
     demoUsers.set(demoUser.email, demoUser);
-
-    const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
-    return res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+    const token = createToken(demoUser.id, demoUser.email);
+    return res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
   }
 
-  // Check if OAuth is configured
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    const googleAuthUrl = buildGoogleAuthUrl(req);
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-
-    if (req.headers.accept && req.headers.accept.includes('text/html')) {
-      return res.status(200).send(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="0;url=${googleAuthUrl}" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Redirecting…</title>
-  </head>
-  <body>
-    <p>Redirecting to Google sign-in…</p>
-    <script>window.location.replace(${JSON.stringify(googleAuthUrl)});</script>
-  </body>
-</html>`);
-    }
-
-    return res.redirect(302, googleAuthUrl);
-  }
-
-  const passport = require('passport');
-
-  // Use passport authenticate directly with immediate redirect
-  passport.authenticate('google', {
-    scope: ['profile', 'email'],
-    session: false
-  })(req, res, next);
+  // Always redirect directly to Google OAuth endpoint
+  const googleAuthUrl = buildGoogleAuthUrl(req);
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  return res.redirect(302, googleAuthUrl);
 });
 
 // Google OAuth callback
 router.get('/google/callback', 
-  require('passport').authenticate('google', { 
+  passport.authenticate('google', { 
     session: false,
-    failureRedirect: process.env.CLIENT_URL || 'http://localhost:5173' 
+    failureRedirect: getClientUrl()
   }),
   async (req, res, next) => {
     try {
@@ -337,43 +299,23 @@ router.get('/google/callback',
         };
         demoUsers.set(email, user);
       } else {
-        // Check if user exists
-        const existingUser = await query(
-          'SELECT * FROM users WHERE email = $1',
-          [email]
-        );
+        const existingUser = await query('SELECT * FROM users WHERE email = $1', [email]);
 
         if (existingUser.rows.length > 0) {
           user = existingUser.rows[0];
-          await query(
-            'UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2',
-            ['google', user.id]
-          );
+          await query('UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2', ['google', user.id]);
         } else {
-          // Create new user
           const result = await query(
-            `INSERT INTO users (email, full_name, oauth_provider, oauth_id)
-             VALUES ($1, $2, $3, $4)
-             RETURNING id, email, full_name, created_at`,
+            'INSERT INTO users (email, full_name, oauth_provider, oauth_id) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, created_at',
             [email, displayName, 'google', id]
           );
           user = result.rows[0];
-
-          await query(
-            'INSERT INTO privacy_settings (user_id) VALUES ($1)',
-            [user.id]
-          );
+          await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
         }
       }
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email },
-        process.env.JWT_SECRET || 'demo-secret',
-        { expiresIn: '7d' }
-      );
-
-      const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
-      res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
+      const token = createToken(user.id, user.email);
+      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}`);
     } catch (error) {
       next(error);
     }
@@ -383,7 +325,6 @@ router.get('/google/callback',
 // GitHub OAuth - Initiate authentication
 router.get('/github', (req, res, next) => {
   if (isDemoMode) {
-    // Demo Mode: Simulate OAuth
     const demoUser = {
       id: `github-${Date.now()}`,
       email: 'demo@github.com',
@@ -391,16 +332,9 @@ router.get('/github', (req, res, next) => {
       provider: 'github'
     };
 
-    const token = jwt.sign(
-      { id: demoUser.id, email: demoUser.email },
-      process.env.JWT_SECRET || 'demo-secret',
-      { expiresIn: '7d' }
-    );
-
     demoUsers.set(demoUser.email, demoUser);
-
-    const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
-    return res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+    const token = createToken(demoUser.id, demoUser.email);
+    return res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
   }
 
   // Check if OAuth is configured
@@ -411,7 +345,6 @@ router.get('/github', (req, res, next) => {
     });
   }
 
-  const passport = require('passport');
   passport.authenticate('github', { 
     scope: ['user:email'],
     session: false 
@@ -420,9 +353,9 @@ router.get('/github', (req, res, next) => {
 
 // GitHub OAuth callback
 router.get('/github/callback', 
-  require('passport').authenticate('github', { 
+  passport.authenticate('github', { 
     session: false,
-    failureRedirect: process.env.CLIENT_URL || 'http://localhost:5173' 
+    failureRedirect: getClientUrl()
   }),
   async (req, res, next) => {
     try {
@@ -439,43 +372,23 @@ router.get('/github/callback',
         };
         demoUsers.set(email, user);
       } else {
-        // Check if user exists
-        const existingUser = await query(
-          'SELECT * FROM users WHERE email = $1 OR oauth_id = $2',
-          [email, id]
-        );
+        const existingUser = await query('SELECT * FROM users WHERE email = $1 OR oauth_id = $2', [email, id]);
 
         if (existingUser.rows.length > 0) {
           user = existingUser.rows[0];
-          await query(
-            'UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2',
-            ['github', user.id]
-          );
+          await query('UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2', ['github', user.id]);
         } else {
-          // Create new user
           const result = await query(
-            `INSERT INTO users (email, full_name, oauth_provider, oauth_id)
-             VALUES ($1, $2, $3, $4)
-             RETURNING id, email, full_name, created_at`,
+            'INSERT INTO users (email, full_name, oauth_provider, oauth_id) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, created_at',
             [email, displayName || username, 'github', id]
           );
           user = result.rows[0];
-
-          await query(
-            'INSERT INTO privacy_settings (user_id) VALUES ($1)',
-            [user.id]
-          );
+          await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
         }
       }
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email },
-        process.env.JWT_SECRET || 'demo-secret',
-        { expiresIn: '7d' }
-      );
-
-      const clientUrl = process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
-      res.redirect(`${clientUrl}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
+      const token = createToken(user.id, user.email);
+      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}`);
     } catch (error) {
       next(error);
     }
