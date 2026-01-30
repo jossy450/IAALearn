@@ -25,8 +25,13 @@ const getPublicServerUrl = (req) => {
 
 const buildGoogleAuthUrl = (req) => {
   const clientId = process.env.GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
-  const redirectUri = `${getPublicServerUrl(req)}/api/auth/google/callback`;
+  const publicUrl = getPublicServerUrl(req);
+  const redirectUri = `${publicUrl}/api/auth/google/callback`;
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+
+  console.log('📍 Public Server URL:', publicUrl);
+  console.log('🔗 Redirect URI:', redirectUri);
+  console.log('🆔 Client ID:', clientId.substring(0, 20) + '...');
 
   authUrl.searchParams.set('client_id', clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
@@ -259,23 +264,30 @@ router.get('/me', async (req, res, next) => {
 
 // Google OAuth - Initiate authentication
 router.get('/google', (req, res) => {
-  if (isDemoMode) {
-    const demoUser = {
-      id: `google-${Date.now()}`,
-      email: 'demo@google.com',
-      full_name: 'Google Demo User',
-      provider: 'google'
-    };
+  try {
+    if (isDemoMode) {
+      const demoUser = {
+        id: `google-${Date.now()}`,
+        email: 'demo@google.com',
+        full_name: 'Google Demo User',
+        provider: 'google'
+      };
 
-    demoUsers.set(demoUser.email, demoUser);
-    const token = createToken(demoUser.id, demoUser.email);
-    return res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+      demoUsers.set(demoUser.email, demoUser);
+      const token = createToken(demoUser.id, demoUser.email);
+      return res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+    }
+
+    // Always redirect directly to Google OAuth endpoint
+    const googleAuthUrl = buildGoogleAuthUrl(req);
+    console.log('🔵 Google OAuth redirect:', googleAuthUrl.substring(0, 100) + '...');
+    
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    return res.redirect(302, googleAuthUrl);
+  } catch (error) {
+    console.error('❌ Google OAuth error:', error);
+    return res.status(500).json({ error: 'OAuth initialization failed', message: error.message });
   }
-
-  // Always redirect directly to Google OAuth endpoint
-  const googleAuthUrl = buildGoogleAuthUrl(req);
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  return res.redirect(302, googleAuthUrl);
 });
 
 // Google OAuth callback
