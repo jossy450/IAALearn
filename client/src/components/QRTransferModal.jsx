@@ -105,6 +105,14 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
         qrUrl = `${baseUrl}${url.startsWith('/') ? url : '/' + url}`;
       }
       
+      console.log('🔍 QR Code Debug:', {
+        code,
+        rawUrl: url,
+        qrUrl,
+        baseUrl,
+        expiresIn
+      });
+      
       setTransferCode(code);
       setTransferUrl(qrUrl);
       setCountdown(expiresIn || 300); // Use server-provided expiry
@@ -179,6 +187,11 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
                     <div className="text-center mb-2">
                       <div className="text-3xl font-bold text-blue-600">{transferCode}</div>
                       <div className="text-sm text-gray-600">Transfer Code</div>
+                      {transferUrl && (
+                        <div className="text-xs text-gray-500 mt-2 break-all px-2">
+                          {transferUrl}
+                        </div>
+                      )}
                     </div>
                   </div>
 

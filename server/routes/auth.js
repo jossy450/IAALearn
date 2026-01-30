@@ -335,7 +335,16 @@ router.get('/google/callback',
       }
 
       const token = createToken(user.id, user.email);
-      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}`);
+      
+      // Add cache-busting headers to prevent browser caching
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Surrogate-Control': 'no-store'
+      });
+      
+      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}&_t=${Date.now()}`);
     } catch (error) {
       next(error);
     }
@@ -408,7 +417,16 @@ router.get('/github/callback',
       }
 
       const token = createToken(user.id, user.email);
-      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}`);
+      
+      // Add cache-busting headers to prevent browser caching
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Surrogate-Control': 'no-store'
+      });
+      
+      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}&_t=${Date.now()}`);
     } catch (error) {
       next(error);
     }

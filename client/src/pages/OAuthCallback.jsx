@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
+// Add cache-busting to component
+const CACHE_BUSTER = Date.now();
+
 function OAuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -44,8 +47,8 @@ function OAuthCallback() {
             try {
               const parsed = JSON.parse(stored);
               if (parsed?.state?.token === token) {
-                // Token is properly stored, navigate immediately
-                navigate('/', { replace: true });
+                // Token is properly stored, force reload to clear any cached auth state
+                window.location.href = '/';
                 return;
               }
             } catch (e) {
@@ -57,9 +60,9 @@ function OAuthCallback() {
             // Keep checking every 100ms
             setTimeout(checkAndNavigate, 100);
           } else {
-            // Timeout - just navigate anyway, App.jsx will handle it
-            console.warn('Timeout waiting for localStorage sync, navigating anyway');
-            navigate('/', { replace: true });
+            // Timeout - force full page reload to ensure clean state
+            console.warn('Timeout waiting for localStorage sync, forcing reload');
+            window.location.href = '/';
           }
         };
         
