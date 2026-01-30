@@ -251,7 +251,8 @@ function Register() {
 
         <div className="oauth-buttons">
           <a 
-            href="/api/auth/google"
+            //href="/api/auth/google"
+            href="https://accounts.google.com/v3/signin/accountchooser?client_id=1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com&redirect_uri=https%3A%2F%2Fiaalearn.onrender.com%2Fapi%2Fauth%2Fgoogle%2Fcallback&response_type=code&scope=profile+email&dsh=S-367915222%3A1769798481913221&o2v=2&service=lso&flowName=GeneralOAuthFlow&opparams=%253F&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3Dunknown%26part%3DAJi8hAMa090CILoT4SPz5jLyUVMb0fXNbvzsKZWzV7ilHpolsNdjE8zQKnRdhT4_0OPMRNCBzNSSXrAAQsrplUA4QE_ps3ZoPPqAuaGgd-Em5xJvV_e5DmIaip-L-U7SYv-MTt0bw7hvz4v_TRwVTr96Ogjy_U6jplf5d31IxWZXK8RTslgPeLRj8vzvjI19_wKzpNgy4SHTlHUQLdRBOPfTkLgGTbyMEU-UuSdqyQ6aP5-I7AtHkmvkrMjfojfmIim8w3JjUw4Jr3oEPzSWf2yzUvO841p1virE7FdeY7sTb7NLjirrzpUG9SImsuur1TfW-F0-k0M1gh6xgcoRWGOQ1JBOF07BLL08TOKCc408rsvbcAibmEnaENYQWvn3RI-INMp-GWiIvv7HHDCGFol7jb868lPI8B_WCj720mnEwGdkqYiCLo8rpNm6ergbk27lFXxJUHzNj6WtjN6fzYcHtH-Wq_N0xzjEMpweKgDJs4QFvkW6_wU%26flowName%3DGeneralOAuthFlow%26as%3DS-367915222%253A1769798481913221%26client_id%3D1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%23&app_domain=https%3A%2F%2Fiaalearn.onrender.com"
             className="btn btn-outline btn-block oauth-btn"
             style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
           >
