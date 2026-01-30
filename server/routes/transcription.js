@@ -1,9 +1,11 @@
 const express = require('express');
 const multer = require('multer');
 const freeNeuralTranscriptionService = require('../services/freeNeuralTranscription');
+const { getAIProvider } = require('../services/aiProvider');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
+const aiProvider = getAIProvider();
 
 // Configure multer for audio file uploads
 const storage = multer.memoryStorage();
@@ -64,19 +66,33 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
   }
 });
 
-// Get available transcription providers and health status
+// Get available transcription providers and health status (optimized)
 router.get('/status', authenticate, async (req, res) => {
   const providers = freeNeuralTranscriptionService.getAvailableProviders();
-  
+  const stats = freeNeuralTranscriptionService.cache;\n  
   res.json({
     status: 'operational',
     service: 'Neural Net Multi-Provider Transcription',
     availableProviders: providers.map(p => ({
       name: p.name,
-      priority: p.priority
+      priority: p.priority,
+      requiresKey: p.requiresKey || false
     })),
     primaryProvider: providers[0]?.name || 'None configured',
     totalProviders: providers.length,
+    cacheStats: {
+      size: stats.size,
+      hits: freeNeuralTranscriptionService.cacheHits || 0,
+      misses: freeNeuralTranscriptionService.cacheMisses || 0,
+      hitRate: freeNeuralTranscriptionService.cacheHits > 0 
+        ? ((freeNeuralTranscriptionService.cacheHits / (freeNeuralTranscriptionService.cacheHits + freeNeuralTranscriptionService.cacheMisses)) * 100).toFixed(2) + '%'
+        : '0%'
+    },
+    aiIntegration: {
+      available: true,
+      provider: aiProvider.getPrimaryProvider()?.name || 'none',
+      features: ['enhancement', 'grammar_fix', 'punctuation']
+    },
     timestamp: new Date().toISOString()
   });
 });

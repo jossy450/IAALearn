@@ -11,6 +11,11 @@ class FreeNeuralTranscriptionService {
   constructor() {
     this.providers = this.initializeProviders();
     this.cache = new Map();
+    this.cacheMaxSize = 100; // Limit cache size
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+    this.audioPreprocessing = true; // Enable preprocessing
+    this.minAudioDuration = 1000; // Minimum 1 second
   }
 
   initializeProviders() {
@@ -63,7 +68,7 @@ class FreeNeuralTranscriptionService {
   }
 
   /**
-   * Main transcription method with fallback support
+   * Main transcription method with fallback support and caching
    */
   async transcribeAudio(audioBuffer, format = 'webm', language = 'en') {
     if (!audioBuffer || audioBuffer.length === 0) {
@@ -72,6 +77,25 @@ class FreeNeuralTranscriptionService {
 
     if (audioBuffer.length < 1000) {
       throw new Error('Audio too short - please record at least 1 second');
+    }
+    
+    // Check cache first (use buffer hash as key)
+    const cacheKey = this.generateCacheKey(audioBuffer, format, language);
+    if (this.cache.has(cacheKey)) {
+      this.cacheHits++;
+      const cached = this.cache.get(cacheKey);
+      console.log(`⚡ Cache hit! (${this.cacheHits} hits, ${this.cacheMisses} misses)`);
+      return {
+        ...cached,
+        cached: true,
+        duration: 0
+      };
+    }
+    this.cacheMisses++;
+    
+    // Preprocess audio for better results
+    if (this.audioPreprocessing) {
+      audioBuffer = await this.preprocessAudio(audioBuffer, format);
     }
 
     const providers = this.getAvailableProviders();
@@ -89,14 +113,26 @@ class FreeNeuralTranscriptionService {
         const result = await provider.transcribe(audioBuffer, format, language);
         const duration = Date.now() - startTime;
 
-        return {
+        const response = {
           success: true,
           text: result.text,
           provider: provider.name,
           confidence: result.confidence || null,
           duration,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          cached: false
         };
+        
+        // Store in cache
+        this.cache.set(cacheKey, response);
+        
+        // Limit cache size
+        if (this.cache.size > this.cacheMaxSize) {
+          const firstKey = this.cache.keys().next().value;
+          this.cache.delete(firstKey);
+        }
+        
+        return response;
       } catch (error) {
         lastError = error;
         console.warn(`⚠️  ${provider.name} failed: ${error.message}`);
@@ -105,6 +141,44 @@ class FreeNeuralTranscriptionService {
     }
 
     throw new Error(`All transcription providers failed. Last error: ${lastError?.message || 'Unknown error'}`);
+  }
+
+  /**
+   * Generate cache key from audio buffer
+   */
+  generateCacheKey(audioBuffer, format, language) {
+    const crypto = require('crypto');
+    // Use first and last 1KB + size for fast hashing
+    const sample = Buffer.concat([
+      audioBuffer.slice(0, 1024),
+      audioBuffer.slice(-1024)
+    ]);
+    const hash = crypto.createHash('md5').update(sample).digest('hex');
+    return `${hash}:${audioBuffer.length}:${format}:${language}`;
+  }
+
+  /**
+   * Preprocess audio for better transcription
+   */
+  async preprocessAudio(audioBuffer, format) {
+    try {
+      // Basic preprocessing: normalize volume, reduce noise
+      // This is a placeholder - in production, use actual audio processing
+      // For now, just validate and return
+      
+      // Check if audio is too quiet (all values near zero)
+      const sample = audioBuffer.slice(0, Math.min(1000, audioBuffer.length));
+      const avgAmplitude = sample.reduce((sum, val) => sum + Math.abs(val), 0) / sample.length;
+      
+      if (avgAmplitude < 5) {
+        console.warn('⚠️  Audio appears very quiet - may affect transcription quality');
+      }
+      
+      return audioBuffer;
+    } catch (error) {
+      console.warn('Audio preprocessing failed:', error.message);
+      return audioBuffer; // Return original on error
+    }
   }
 
   getAvailableProviders() {
@@ -182,19 +256,35 @@ class FreeNeuralTranscriptionService {
           file: audioStream,
           model: 'whisper-1',
           language: language === 'en' ? 'en' : language,
-          response_format: 'text'
+          response_format: 'verbose_json', // Get more metadata
+          temperature: 0.0 // More deterministic
         });
 
-        // OpenAI Whisper returns plain text when response_format='text'
-        const text = typeof transcription === 'string' ? transcription : transcription.text;
+        // Handle both response formats
+        let text, confidence;
+        if (typeof transcription === 'string') {
+          text = transcription;
+          confidence = null;
+        } else {
+          text = transcription.text;
+          // Calculate confidence from segments if available
+          if (transcription.segments && transcription.segments.length > 0) {
+            const avgConfidence = transcription.segments.reduce(
+              (sum, seg) => sum + (seg.no_speech_prob || 0), 0
+            ) / transcription.segments.length;
+            confidence = 1 - avgConfidence; // Invert no_speech_prob
+          }
+        }
 
         if (!text || text.trim().length === 0) {
           throw new Error('OpenAI Whisper returned empty transcription');
         }
 
+        console.log(`✅ OpenAI Whisper transcribed ${text.length} chars with confidence: ${confidence || 'N/A'}`);
+
         return {
           text: text.trim(),
-          confidence: null
+          confidence
         };
       } finally {
         if (tempFilePath && fs.existsSync(tempFilePath)) {

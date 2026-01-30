@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { X, Smartphone, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { X, Smartphone, AlertCircle, CheckCircle, RefreshCw, Zap } from 'lucide-react';
 import { useSessionStore } from '../store/sessionStore';
 import { sessionAPI } from '../services/api';
 
@@ -8,20 +8,73 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
   const [transferCode, setTransferCode] = useState(null);
   const [transferUrl, setTransferUrl] = useState(null);
   const [isTransferred, setIsTransferred] = useState(false);
-  const [countdown, setCountdown] = useState(60);
+  const [countdown, setCountdown] = useState(300); // 5 minutes
   const [loading, setLoading] = useState(true);
+  const [statusCheckInterval, setStatusCheckInterval] = useState(2000); // Dynamic interval
+  
+  // Performance refs
+  const timerRef = useRef(null);
+  const statusCheckRef = useRef(null);
+  const codeGenerationCache = useRef(new Map());
+
+  // Memoize base URL for better performance
+  const baseUrl = useMemo(() => {
+    return window.location.origin;
+  }, []);
 
   useEffect(() => {
     if (isOpen && sessionId) {
-      generateTransferCode();
+      // Check cache first for recent codes
+      const cachedCode = codeGenerationCache.current.get(sessionId);
+      if (cachedCode && (Date.now() - cachedCode.timestamp) < 60000) {
+        // Use cached code if less than 1 minute old
+        setTransferCode(cachedCode.code);
+        setTransferUrl(cachedCode.url);
+        setCountdown(Math.floor((cachedCode.expiresAt - Date.now()) / 1000));
+        setLoading(false);
+      } else {
+        generateTransferCode();
+      }
     }
+    
+    return () => {
+      // Cleanup on unmount
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (statusCheckRef.current) clearInterval(statusCheckRef.current);
+    };
   }, [isOpen, sessionId]);
 
+  // Optimized status checking with exponential backoff
+  const checkTransferStatus = useCallback(async () => {
+    if (!transferCode || isTransferred) return;
+    
+    try {
+      const response = await sessionAPI.checkTransferStatus(transferCode);
+      if (response.data.transferred) {
+        setIsTransferred(true);
+        // Clear intervals on successful transfer
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (statusCheckRef.current) clearInterval(statusCheckRef.current);
+        return true;
+      }
+      // Gradually increase polling interval to reduce load
+      if (statusCheckInterval < 10000) {
+        setStatusCheckInterval(prev => Math.min(prev + 500, 10000));
+      }
+      return false;
+    } catch (error) {
+      console.error('Status check failed:', error);
+      // On error, slow down polling
+      setStatusCheckInterval(prev => Math.min(prev + 1000, 15000));
+      return false;
+    }
+  }, [transferCode, isTransferred, statusCheckInterval]);
+
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !transferCode) return;
 
     // Countdown timer
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
           generateTransferCode(); // Regenerate when expired
@@ -31,48 +84,53 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
       });
     }, 1000);
 
-    // Check transfer status
-    const statusCheck = setInterval(async () => {
-      if (transferCode) {
-        try {
-          const response = await sessionAPI.checkTransferStatus(transferCode);
-          if (response.data.transferred) {
-            setIsTransferred(true);
-          }
-        } catch (error) {
-          console.error('Status check failed:', error);
-        }
-      }
-    }, 2000);
+    // Smart status checking with dynamic interval
+    statusCheckRef.current = setInterval(checkTransferStatus, statusCheckInterval);
 
     return () => {
-      clearInterval(timer);
-      clearInterval(statusCheck);
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (statusCheckRef.current) clearInterval(statusCheckRef.current);
     };
-  }, [isOpen, transferCode]);
+  }, [isOpen, transferCode, statusCheckInterval, checkTransferStatus]);
 
-  const generateTransferCode = async () => {
+  const generateTransferCode = useCallback(async () => {
     setLoading(true);
     try {
       const response = await sessionAPI.generateTransferCode(sessionId);
-      const { code, url } = response.data;
-      setTransferCode(code);
+      const { code, url, expiresIn } = response.data;
+      
       // Ensure URL is properly formatted for QR encoding
-      // Add protocol if missing and ensure it's the mobile-transfer page
       let qrUrl = url;
       if (!qrUrl.startsWith('http')) {
-        const baseUrl = window.location.origin;
         qrUrl = `${baseUrl}${url.startsWith('/') ? url : '/' + url}`;
       }
+      
+      setTransferCode(code);
       setTransferUrl(qrUrl);
-      setCountdown(300); // 5 minutes
+      setCountdown(expiresIn || 300); // Use server-provided expiry
       setIsTransferred(false);
+      setStatusCheckInterval(2000); // Reset interval
+      
+      // Cache the code for quick re-use
+      codeGenerationCache.current.set(sessionId, {
+        code,
+        url: qrUrl,
+        timestamp: Date.now(),
+        expiresAt: Date.now() + ((expiresIn || 300) * 1000)
+      });
+      
+      // Cleanup old cache entries
+      for (const [key, value] of codeGenerationCache.current.entries()) {
+        if (Date.now() - value.timestamp > 300000) {
+          codeGenerationCache.current.delete(key);
+        }
+      }
     } catch (error) {
       console.error('Failed to generate transfer code:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, baseUrl]);
 
   if (!isOpen) return null;
 
