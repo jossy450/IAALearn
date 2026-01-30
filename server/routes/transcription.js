@@ -69,7 +69,8 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
 // Get available transcription providers and health status (optimized)
 router.get('/status', authenticate, async (req, res) => {
   const providers = freeNeuralTranscriptionService.getAvailableProviders();
-  const stats = freeNeuralTranscriptionService.cache;\n  
+  const stats = freeNeuralTranscriptionService.cache;
+  
   res.json({
     status: 'operational',
     service: 'Neural Net Multi-Provider Transcription',
