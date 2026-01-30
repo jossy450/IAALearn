@@ -22,7 +22,7 @@ const upload = multer({
   }
 });
 
-// Transcribe audio file with neural net AI models
+// Transcribe audio file - optimized with OpenAI Whisper
 router.post('/transcribe', authenticate, upload.single('audio'), async (req, res, next) => {
   try {
     if (!req.file) {
@@ -34,6 +34,15 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
 
     const format = req.body.format || 'webm';
     const language = req.body.language || 'en';
+    
+    // Check minimum audio size (at least 1KB for valid audio)
+    if (req.file.size < 1000) {
+      return res.status(400).json({
+        error: 'Audio too short',
+        message: 'Please record at least 1 second of audio',
+        details: 'Recording was too brief to transcribe'
+      });
+    }
     
     console.log(`🎤 Transcribing audio: ${req.file.size} bytes, format: ${format}, language: ${language}`);
 
@@ -49,7 +58,7 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     res.status(400).json({
       error: 'Transcription failed',
       message: error.message,
-      details: 'Please check:\n- Audio recording quality (at least 1 second)\n- Microphone permissions\n- Speak clearly and try again\n- If issue persists, check API keys',
+      details: 'Please check:\n- Speak clearly into microphone\n- Record for at least 2-3 seconds\n- Ensure microphone permissions granted\n- Try again with clearer audio',
       providers: freeNeuralTranscriptionService.getAvailableProviders().map(p => p.name)
     });
   }

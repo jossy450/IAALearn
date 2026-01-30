@@ -106,14 +106,14 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
             <>
               {!isTransferred ? (
                 <>
-                  <div className="bg-white border-4 border-gray-200 rounded-lg p-4 mb-4 inline-block">
+                  <div className="bg-white border-4 border-gray-200 rounded-lg p-6 mb-4 inline-block">
                     <QRCodeCanvas
                       value={transferUrl || ''}
-                      size={240}
-                      level="M"
+                      size={280}
+                      level="H"
                       includeMargin={true}
                       bgColor="#ffffff"
-                      fgColor="#111827"
+                      fgColor="#000000"
                     />
                   </div>
 
