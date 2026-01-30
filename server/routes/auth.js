@@ -282,8 +282,16 @@ router.get('/google', (req, res) => {
     const googleAuthUrl = buildGoogleAuthUrl(req);
     console.log('🔵 Google OAuth redirect:', googleAuthUrl.substring(0, 100) + '...');
     
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    return res.redirect(302, googleAuthUrl);
+    // Aggressive cache prevention
+    res.set({
+      'Cache-Control': 'no-store, no-cache, no-transform, must-revalidate, private, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Surrogate-Control': 'no-store',
+      'Location': googleAuthUrl
+    });
+    
+    return res.status(302).send('Redirecting...');
   } catch (error) {
     console.error('❌ Google OAuth error:', error);
     return res.status(500).json({ error: 'OAuth initialization failed', message: error.message });
