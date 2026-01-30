@@ -41,26 +41,36 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
+    // Force render after max 1 second, even if hydration hasn't completed
+    const maxWaitTimer = setTimeout(() => {
+      if (cancelled) return;
+      console.log('Forcing hydration complete after timeout');
+      setIsHydrated(true);
+    }, 1000);
+
     // Give persist middleware a moment to hydrate, then allow render even if no token
     const timer = setTimeout(() => {
       if (cancelled) return;
       setIsHydrated(true);
+      clearTimeout(maxWaitTimer);
     }, 200);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      clearTimeout(maxWaitTimer);
     };
   }, []);
 
-  // Show loading spinner while hydrating
+  // Show loading spinner while hydrating (max 1 second)
   if (!isHydrated) {
     return (
       <div style={{ 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center', 
-        minHeight: '100vh'
+        minHeight: '100vh',
+        backgroundColor: '#f3f4f6'
       }}>
         <div className="spinner"></div>
       </div>
