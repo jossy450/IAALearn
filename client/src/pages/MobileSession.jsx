@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Smartphone, Copy, CheckCircle, Volume2, VolumeX } from 'lucide-react';
+import { Smartphone, Copy, CheckCircle, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
 import { sessionAPI, answerAPI } from '../services/api';
 import useStealthStore from '../store/stealthStore';
 
@@ -13,6 +13,8 @@ const MobileSession = () => {
   const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(true);
   const [speaking, setSpeaking] = useState(false);
+  const [fullscreenMode, setFullscreenMode] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(window.matchMedia('(orientation: landscape)').matches);
   const { addToClipboard } = useStealthStore();
 
   // Poll for new questions/answers
@@ -43,6 +45,17 @@ const MobileSession = () => {
 
     return () => clearInterval(interval);
   }, [sessionId]);
+
+  // Track orientation changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(orientation: landscape)');
+    const handleOrientationChange = (e) => {
+      setIsLandscape(e.matches);
+    };
+    
+    mediaQuery.addEventListener('change', handleOrientationChange);
+    return () => mediaQuery.removeEventListener('change', handleOrientationChange);
+  }, []);
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
@@ -75,6 +88,57 @@ const MobileSession = () => {
           <h2 className="text-xl font-bold mb-2">Connection Lost</h2>
           <p className="text-gray-400">Unable to connect to desktop session</p>
         </div>
+      </div>
+    );
+  }
+
+  // Full-screen answer mode (optimized for reading)
+  if (fullscreenMode && currentAnswer) {
+    const fontSizeClass = isLandscape ? 'text-3xl' : 'text-4xl';
+    const paddingClass = isLandscape ? 'p-6' : 'p-8';
+    
+    return (
+      <div className={`min-h-screen bg-gradient-to-b from-blue-900 to-purple-900 text-white flex flex-col justify-center ${paddingClass}`}>
+        {/* Question at top (smaller) */}
+        {currentQuestion && (
+          <div className="text-center mb-6 text-blue-200 text-sm opacity-75">
+            {currentQuestion}
+          </div>
+        )}
+
+        {/* Large Answer */}
+        <div className={`${fontSizeClass} leading-relaxed text-center mb-12 flex-grow flex items-center justify-center`}>
+          {currentAnswer}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-center gap-4 flex-wrap">
+          <button 
+            onClick={() => handleCopy(currentAnswer)} 
+            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors"
+          >
+            <Copy size={20} /> Copy
+          </button>
+          <button 
+            onClick={() => handleSpeak(currentAnswer)} 
+            className={`${speaking ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors`}
+          >
+            {speaking ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            {speaking ? 'Stop' : 'Speak'}
+          </button>
+          <button 
+            onClick={() => setFullscreenMode(false)} 
+            className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors"
+          >
+            <Minimize2 size={20} /> Done
+          </button>
+        </div>
+
+        {copied && (
+          <div className="text-center mt-4 text-green-300 font-semibold animate-pulse">
+            ✓ Copied to clipboard!
+          </div>
+        )}
       </div>
     );
   }
@@ -120,20 +184,35 @@ const MobileSession = () => {
                 <button
                   onClick={() => handleSpeak(currentAnswer)}
                   className="p-2 bg-blue-600 bg-opacity-50 rounded hover:bg-opacity-75 transition-colors"
+                  title="Hear answer"
                 >
                   {speaking ? <VolumeX size={16} /> : <Volume2 size={16} />}
                 </button>
                 <button
                   onClick={() => handleCopy(currentAnswer)}
                   className="p-2 bg-blue-600 bg-opacity-50 rounded hover:bg-opacity-75 transition-colors"
+                  title="Copy to clipboard"
                 >
                   {copied ? <CheckCircle size={16} /> : <Copy size={16} />}
                 </button>
+                <button
+                  onClick={() => setFullscreenMode(true)}
+                  className="p-2 bg-purple-600 bg-opacity-50 rounded hover:bg-opacity-75 transition-colors"
+                  title="Full-screen answer view"
+                >
+                  <Maximize2 size={16} />
+                </button>
               </div>
             </div>
-            <div className="text-white leading-relaxed whitespace-pre-wrap">
+            <div className="text-white leading-relaxed whitespace-pre-wrap line-clamp-6">
               {currentAnswer}
             </div>
+            <button
+              onClick={() => setFullscreenMode(true)}
+              className="text-xs text-blue-400 hover:text-blue-300 mt-2"
+            >
+              Tap for full-screen view →
+            </button>
           </div>
 
           {copied && (
