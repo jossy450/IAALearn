@@ -21,6 +21,7 @@ IAALearn is an educational platform designed to help software engineers prepare 
 
 ### ✨ Key Features
 
+✅ **Enhanced Login & Security** - Modern authentication with password reset  
 ✅ **Structured Learning Materials** - Curated content for technical interview prep  
 ✅ **AI-Powered Practice** - Interactive learning with AI assistance  
 ✅ **Real-time Transcription** - Speech-to-text for practice sessions  

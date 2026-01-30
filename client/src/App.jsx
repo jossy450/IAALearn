@@ -4,6 +4,8 @@ import { useAuthStore } from './store/authStore';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import OAuthCallback from './pages/OAuthCallback';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -82,6 +84,8 @@ function App() {
       <Routes>
         <Route path="/login" element={token ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={token ? <Navigate to="/" /> : <Register />} />
+        <Route path="/forgot-password" element={token ? <Navigate to="/" /> : <ForgotPassword />} />
+        <Route path="/reset-password" element={token ? <Navigate to="/" /> : <ResetPassword />} />
         <Route path="/auth/callback" element={<OAuthCallback />} />
         <Route path="/decoy/:type" element={<DecoyScreen />} />
         <Route path="/mobile-transfer" element={<MobileScanner />} />

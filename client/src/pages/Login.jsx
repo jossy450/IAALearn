@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, documentsAPI } from '../services/api';
-import { Upload, FileText, Briefcase, X, Eye, EyeOff } from 'lucide-react';
+import { Upload, FileText, Briefcase, X, Eye, EyeOff, Lock, Mail, AlertCircle, CheckCircle } from 'lucide-react';
 import './Auth.css';
 
 function Login() {
@@ -12,6 +12,9 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
   
   // Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -23,14 +26,51 @@ function Login() {
   const cvFileRef = useRef(null);
   const jobDescFileRef = useRef(null);
 
+  // Check for locked account on mount
+  useEffect(() => {
+    const lockTime = localStorage.getItem('loginLockTime');
+    if (lockTime) {
+      const lockExpiry = parseInt(lockTime) + (15 * 60 * 1000); // 15 minutes
+      if (Date.now() < lockExpiry) {
+        setIsLocked(true);
+        const timeLeft = Math.ceil((lockExpiry - Date.now()) / 60000);
+        setError(`Too many login attempts. Please try again in ${timeLeft} minutes.`);
+      } else {
+        localStorage.removeItem('loginLockTime');
+        localStorage.removeItem('loginAttempts');
+      }
+    }
+    
+    const attempts = localStorage.getItem('loginAttempts');
+    if (attempts) {
+      setLoginAttempts(parseInt(attempts));
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (isLocked) {
+      return;
+    }
+    
     setError('');
     setLoading(true);
 
     try {
       const response = await authAPI.login(formData);
       const { token, user } = response.data;
+      
+      // Clear login attempts on success
+      localStorage.removeItem('loginAttempts');
+      localStorage.removeItem('loginLockTime');
+      setLoginAttempts(0);
+      
+      // Store auth with remember me preference
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+      }
+      
       setAuth(token, user);
       
       // Show upload modal after successful login
@@ -40,56 +80,175 @@ function Login() {
       setCvFile(null);
       setJobDescFile(null);
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      // Handle failed login attempts
+      const newAttempts = loginAttempts + 1;
+      setLoginAttempts(newAttempts);
+      localStorage.setItem('loginAttempts', newAttempts.toString());
+      
+      if (newAttempts >= 5) {
+        setIsLocked(true);
+        localStorage.setItem('loginLockTime', Date.now().toString());
+        setError('Too many failed attempts. Account locked for 15 minutes.');
+      } else {
+        const remainingAttempts = 5 - newAttempts;
+        setError(
+          err.response?.data?.error || 'Invalid credentials. ' +
+          `${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining.`
+        );
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCvChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCvFile(file);
+    }
+  };
+
+  const handleJobDescChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setJobDescFile(file);
+    }
+  };
+
+  const handleUploadDocuments = async () => {
+    if (!cvFile && !jobDescFile) return;
+    
+    setUploading(true);
+    setUploadError('');
+
+    try {
+      const uploadPromises = [];
+      
+      if (cvFile) {
+        uploadPromises.push(documentsAPI.uploadCV(cvFile));
+      }
+      
+      if (jobDescFile) {
+        uploadPromises.push(documentsAPI.uploadJobDescription(jobDescFile));
+      }
+
+      await Promise.all(uploadPromises);
+      
+      setUploadSuccess(true);
+      setTimeout(() => {
+        setShowUploadModal(false);
+        navigate('/');
+      }, 1500);
+    } catch (err) {
+      setUploadError(err.response?.data?.error || 'Upload failed. You can add documents later from your dashboard.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSkipUpload = () => {
+    setShowUploadModal(false);
+    navigate('/');
   };
 
 
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1 className="auth-title">Interview Answer Assistant</h1>
-        <h2 className="auth-subtitle">Sign In</h2>
+        <div className="auth-header">
+          <div className="auth-logo">
+            <Lock size={40} />
+          </div>
+          <h1 className="auth-title">Interview Answer Assistant</h1>
+          <h2 className="auth-subtitle">Welcome Back</h2>
+        </div>
 
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className={`alert ${isLocked ? 'alert-warning' : 'alert-error'}`}>
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+        
+        {loginAttempts > 0 && loginAttempts < 5 && !error && (
+          <div className="alert alert-info">
+            <AlertCircle size={18} />
+            <span>{5 - loginAttempts} login attempt{5 - loginAttempts !== 1 ? 's' : ''} remaining</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label className="label">Email</label>
+            <label className="label">
+              <Mail size={16} />
+              Email Address
+            </label>
             <input
               type="email"
-              className="input"
+              className="input input-with-icon"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="you@example.com"
               required
               autoFocus
+              disabled={isLocked}
             />
           </div>
 
           <div className="form-group">
-            <label className="label">Password</label>
+            <div className="label-with-link">
+              <label className="label">
+                <Lock size={16} />
+                Password
+              </label>
+              <Link to="/forgot-password" className="forgot-link">
+                Forgot?
+              </Link>
+            </div>
             <div className="password-input-wrapper">
               <input
                 type={showPassword ? 'text' : 'password'}
-                className="input"
+                className="input input-with-icon"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Enter your password"
                 required
+                disabled={isLocked}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="password-toggle"
+                disabled={isLocked}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
+          
+          <div className="form-extras">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                disabled={isLocked}
+              />
+              <span>Remember me for 30 days</span>
+            </label>
+          </div>
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+          <button 
+            type="submit" 
+            className="btn btn-primary btn-block" 
+            disabled={loading || isLocked}
+          >
+            {loading ? (
+              <>
+                <div className="spinner"></div>
+                Signing in...
+              </>
+            ) : 'Sign In'}
           </button>
         </form>
 

@@ -1,12 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { query } = require('../database/connection');
 
 const router = express.Router();
 
 // In-memory users for demo mode
 const demoUsers = new Map();
+// In-memory password reset tokens for demo mode
+const resetTokens = new Map();
 const isDemoMode = process.env.DEMO_MODE === 'true';
 
 // Helper function for input validation
@@ -443,6 +446,166 @@ router.post('/logout', (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Forgot Password - Request password reset
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+
+    if (isDemoMode) {
+      // Demo mode - store in memory
+      const user = Array.from(demoUsers.values()).find(u => u.email === email);
+      
+      if (user) {
+        resetTokens.set(resetTokenHash, {
+          userId: user.id,
+          email: user.email,
+          expiry: resetTokenExpiry
+        });
+        
+        console.log(`[DEMO] Password reset token for ${email}: ${resetToken}`);
+      }
+      
+      // Always return success to prevent email enumeration
+      return res.json({
+        success: true,
+        message: 'If an account exists, a password reset link has been sent',
+        // Include token in demo mode for testing
+        ...(user && { resetToken })
+      });
+    }
+
+    // Database mode
+    const result = await query(
+      'SELECT id, email FROM users WHERE email = $1 AND is_active = true',
+      [email]
+    );
+
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      
+      // Store reset token in database
+      await query(
+        `UPDATE users 
+         SET reset_token = $1, reset_token_expiry = $2 
+         WHERE id = $3`,
+        [resetTokenHash, resetTokenExpiry, user.id]
+      );
+
+      // In production, send email here
+      // For now, log the token (remove in production)
+      console.log(`Password reset token for ${email}: ${resetToken}`);
+      
+      // TODO: Send email with reset link
+      // const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
+      // await sendEmail(user.email, 'Password Reset', resetUrl);
+    }
+
+    // Always return success to prevent email enumeration
+    res.json({
+      success: true,
+      message: 'If an account exists, a password reset link has been sent'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Reset Password - Set new password with token
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and password are required' });
+    }
+
+    if (!validatePassword(password)) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters with uppercase, lowercase, and numbers' 
+      });
+    }
+
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    if (isDemoMode) {
+      // Demo mode - check in-memory tokens
+      const tokenData = resetTokens.get(resetTokenHash);
+      
+      if (!tokenData) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+
+      if (new Date() > tokenData.expiry) {
+        resetTokens.delete(resetTokenHash);
+        return res.status(400).json({ error: 'Reset token has expired' });
+      }
+
+      const user = Array.from(demoUsers.values()).find(u => u.id === tokenData.userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Update password
+      const passwordHash = await bcrypt.hash(password, 10);
+      user.password_hash = passwordHash;
+      demoUsers.set(user.email, user);
+      
+      // Remove used token
+      resetTokens.delete(resetTokenHash);
+
+      return res.json({
+        success: true,
+        message: 'Password has been reset successfully'
+      });
+    }
+
+    // Database mode
+    const result = await query(
+      `SELECT id, email FROM users 
+       WHERE reset_token = $1 
+       AND reset_token_expiry > NOW()
+       AND is_active = true`,
+      [resetTokenHash]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const user = result.rows[0];
+
+    // Update password and clear reset token
+    const passwordHash = await bcrypt.hash(password, 10);
+    await query(
+      `UPDATE users 
+       SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL 
+       WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Password has been reset successfully'
+    });
+  } catch (error) {
+    next(error);
   }
 });
 
