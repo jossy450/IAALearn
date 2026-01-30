@@ -261,6 +261,8 @@ router.get('/google', (req, res, next) => {
   }
 
   const passport = require('passport');
+  
+  // Use passport authenticate directly with immediate redirect
   passport.authenticate('google', { 
     scope: ['profile', 'email'],
     session: false 
