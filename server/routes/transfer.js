@@ -103,8 +103,15 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
       const clientUrl = baseUrl.replace(':5173', '');
       const transferUrl = `${clientUrl}/mobile-transfer?code=${existingCode}`;
       
-      console.log(`♻️  Reusing existing code ${existingCode} for session ${sessionId}`);\n      
-      return res.json({\n        code: existingCode,\n        url: transferUrl,\n        expiresIn: Math.floor((data.expiresAt - Date.now()) / 1000),\n        reused: true\n      });\n    }
+      console.log(`♻️  Reusing existing code ${existingCode} for session ${sessionId}`);
+      
+      return res.json({
+        code: existingCode,
+        url: transferUrl,
+        expiresIn: Math.floor((data.expiresAt - Date.now()) / 1000),
+        reused: true
+      });
+    }
 
     // Generate new 6-character alphanumeric code (uppercase)
     const code = crypto.randomBytes(3).toString('hex').toUpperCase();
