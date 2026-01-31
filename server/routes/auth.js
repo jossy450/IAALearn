@@ -53,8 +53,28 @@ const createToken = (userId, email, expiresIn = '7d') => {
 };
 
 // Helper: Get client redirect URL
-const getClientUrl = () => {
-  return process.env.CLIENT_URL?.replace(':5173', '') || 'http://localhost:5173';
+const getClientUrl = (req) => {
+  const envUrl =
+    process.env.CLIENT_URL ||
+    process.env.PUBLIC_CLIENT_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.PUBLIC_URL ||
+    process.env.SERVER_URL ||
+    process.env.PUBLIC_SERVER_URL;
+
+  if (envUrl) {
+    const normalized = envUrl.replace(/\/$/, '');
+    if (
+      req &&
+      process.env.NODE_ENV === 'production' &&
+      /localhost|127\.0\.0\.1/.test(normalized)
+    ) {
+      return getPublicServerUrl(req);
+    }
+    return normalized;
+  }
+
+  return req ? getPublicServerUrl(req) : 'http://localhost:5173';
 };
 
 // Helper: Sanitize user response (remove sensitive fields)
@@ -275,7 +295,7 @@ router.get('/google', (req, res) => {
 
       demoUsers.set(demoUser.email, demoUser);
       const token = createToken(demoUser.id, demoUser.email);
-      return res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+      return res.redirect(`${getClientUrl(req)}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
     }
 
     // Always redirect directly to Google OAuth endpoint
@@ -299,11 +319,15 @@ router.get('/google', (req, res) => {
 });
 
 // Google OAuth callback
-router.get('/google/callback', 
-  passport.authenticate('google', { 
-    session: false,
-    failureRedirect: getClientUrl()
-  }),
+router.get(
+  '/google/callback',
+  (req, res, next) => {
+    const failureRedirect = getClientUrl(req);
+    return passport.authenticate('google', {
+      session: false,
+      failureRedirect
+    })(req, res, next);
+  },
   async (req, res, next) => {
     try {
       const { id, emails, displayName } = req.user;
@@ -344,7 +368,7 @@ router.get('/google/callback',
         'Surrogate-Control': 'no-store'
       });
       
-      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}&_t=${Date.now()}`);
+      res.redirect(`${getClientUrl(req)}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}&_t=${Date.now()}`);
     } catch (error) {
       next(error);
     }
@@ -363,7 +387,7 @@ router.get('/github', (req, res, next) => {
 
     demoUsers.set(demoUser.email, demoUser);
     const token = createToken(demoUser.id, demoUser.email);
-    return res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
+    return res.redirect(`${getClientUrl(req)}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(demoUser))}`);
   }
 
   // Check if OAuth is configured
@@ -381,11 +405,15 @@ router.get('/github', (req, res, next) => {
 });
 
 // GitHub OAuth callback
-router.get('/github/callback', 
-  passport.authenticate('github', { 
-    session: false,
-    failureRedirect: getClientUrl()
-  }),
+router.get(
+  '/github/callback',
+  (req, res, next) => {
+    const failureRedirect = getClientUrl(req);
+    return passport.authenticate('github', {
+      session: false,
+      failureRedirect
+    })(req, res, next);
+  },
   async (req, res, next) => {
     try {
       const { id, username, emails, displayName } = req.user;
@@ -426,7 +454,7 @@ router.get('/github/callback',
         'Surrogate-Control': 'no-store'
       });
       
-      res.redirect(`${getClientUrl()}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}&_t=${Date.now()}`);
+      res.redirect(`${getClientUrl(req)}/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(sanitizeUser(user)))}&_t=${Date.now()}`);
     } catch (error) {
       next(error);
     }
