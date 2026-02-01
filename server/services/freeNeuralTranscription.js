@@ -196,16 +196,21 @@ class FreeNeuralTranscriptionService {
       
       // Hugging Face requires WAV, MP3, or FLAC
       // WebM is not supported - need to convert or skip this provider
+      let payloadBuffer = audioBuffer;
       if (format === 'webm' || format === 'ogg' || format === 'opus') {
-        throw new Error(`Hugging Face doesn't support ${format}. Try OpenAI Whisper or use WAV/MP3 format.`);
+        console.log(`   Converting ${format} to wav for Hugging Face...`);
+        payloadBuffer = await this.convertToWav(audioBuffer, format);
+        format = 'wav';
       }
 
       // Use Hugging Face's free Whisper endpoint
+      const contentType = format === 'mp3' ? 'audio/mpeg' : `audio/${format}`;
+
       const response = await fetch('https://api-inference.huggingface.co/models/openai/whisper-small', {
         method: 'POST',
-        body: audioBuffer,
+        body: payloadBuffer,
         headers: {
-          'Content-Type': 'audio/wav'
+          'Content-Type': contentType
         }
       });
 
@@ -439,14 +444,56 @@ class FreeNeuralTranscriptionService {
    * Helper: Convert audio to WAV
    */
   async convertToWav(audioBuffer, format) {
-    // This would require ffmpeg or audio conversion library
-    // For now, return as-is (works for WAV format)
     if (format === 'wav') {
       return audioBuffer;
     }
-    
-    // For production, use: npm install fluent-ffmpeg
-    throw new Error(`Audio format ${format} conversion requires ffmpeg. Install: npm install fluent-ffmpeg`);
+
+    let ffmpeg;
+    let ffmpegPath;
+    try {
+      ffmpeg = require('fluent-ffmpeg');
+      ffmpegPath = require('ffmpeg-static');
+    } catch (e) {
+      throw new Error('Audio conversion requires ffmpeg. Install: npm install fluent-ffmpeg ffmpeg-static');
+    }
+
+    if (!ffmpegPath) {
+      throw new Error('ffmpeg binary not found. Install: npm install ffmpeg-static');
+    }
+
+    ffmpeg.setFfmpegPath(ffmpegPath);
+
+    const tempDir = os.tmpdir();
+    const inputPath = path.join(tempDir, `audio-input-${Date.now()}.${format}`);
+    const outputPath = path.join(tempDir, `audio-output-${Date.now()}.wav`);
+
+    try {
+      fs.writeFileSync(inputPath, audioBuffer);
+
+      await new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+          .toFormat('wav')
+          .on('error', (err) => reject(err))
+          .on('end', () => resolve())
+          .save(outputPath);
+      });
+
+      const wavBuffer = fs.readFileSync(outputPath);
+      if (!wavBuffer || wavBuffer.length === 0) {
+        throw new Error('Audio conversion produced empty file');
+      }
+
+      return wavBuffer;
+    } catch (error) {
+      throw new Error(`Audio conversion failed: ${error.message}`);
+    } finally {
+      try {
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup temp audio files:', cleanupError.message);
+      }
+    }
   }
 
   /**
