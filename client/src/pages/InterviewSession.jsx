@@ -24,6 +24,7 @@ function InterviewSession() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const debounceTimerRef = useRef(null);
+  const recordingMimeTypeRef = useRef('audio/webm');
   const { setScreenRecording } = useStealthStore();
 
   useEffect(() => {
@@ -42,11 +43,30 @@ function InterviewSession() {
     }
   };
 
+  const resolveFormatFromMime = (mimeType = '') => {
+    const normalized = mimeType.split(';')[0].trim().toLowerCase();
+    if (normalized.includes('audio/ogg')) return 'ogg';
+    if (normalized.includes('audio/opus')) return 'opus';
+    if (normalized.includes('audio/wav')) return 'wav';
+    if (normalized.includes('audio/mpeg') || normalized.includes('audio/mp3')) return 'mp3';
+    if (normalized.includes('audio/mp4') || normalized.includes('audio/x-m4a')) return 'mp4';
+    return 'webm';
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const preferredTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4'
+      ];
+      const selectedType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      const mediaRecorder = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : undefined);
       mediaRecorderRef.current = mediaRecorder;
+      recordingMimeTypeRef.current = selectedType || mediaRecorder.mimeType || 'audio/webm';
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
@@ -54,7 +74,9 @@ function InterviewSession() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const mimeType = recordingMimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
+        const format = resolveFormatFromMime(mimeType);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         
         // Validate audio blob
         if (audioBlob.size === 0) {
@@ -71,7 +93,7 @@ function InterviewSession() {
         
         console.log('Audio recorded successfully:', audioBlob.size, 'bytes');
         
-        await transcribeAudio(audioBlob);
+        await transcribeAudio(audioBlob, format);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -90,19 +112,22 @@ function InterviewSession() {
     }
   };
 
-  const transcribeAudio = async (audioBlob) => {
+  const transcribeAudio = async (audioBlob, format = 'webm') => {
     setLoading(true);
     try {
       console.log('Transcribing audio blob:', audioBlob.size, 'bytes');
       
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('format', 'webm');
+      formData.append('audio', audioBlob, `recording.${format}`);
+      formData.append('format', format);
 
       const response = await transcriptionAPI.transcribe(formData);
       const transcribedText = response.data.text;
       
       console.log('Transcription successful:', transcribedText);
+      if (!transcribedText || !transcribedText.trim()) {
+        throw new Error('Transcription returned empty text. Please try again with clearer audio.');
+      }
       setCurrentQuestion(transcribedText);
       
       // Automatically generate answer
@@ -166,6 +191,11 @@ function InterviewSession() {
           if (data.type === 'chunk') {
             fullAnswer += data.content;
             setCurrentAnswer(fullAnswer);
+          } else if (data.type === 'error') {
+            eventSource.close();
+            setIsStreaming(false);
+            setLoading(false);
+            generateAnswerFallback(question, useResearch, startTime);
           } else if (data.type === 'complete') {
             eventSource.close();
             setIsStreaming(false);
@@ -221,7 +251,19 @@ function InterviewSession() {
 
   const generateAnswerFallback = async (question, useResearch, startTime) => {
     try {
-      const response = await answerAPI.generate({
+      const response = answerAPI.generateOptimized
+        ? await answerAPI.generateOptimized({
+          question,
+          sessionId: id,
+          research: useResearch,
+          stream: false,
+          context: {
+            position: session?.position,
+            company: session?.company_name,
+            sessionType: session?.session_type
+          }
+        })
+        : await answerAPI.generate({
         question,
         sessionId: id,
         research: useResearch,

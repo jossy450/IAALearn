@@ -148,7 +148,7 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
           streamCallback,
           { 
             preferFree: true,
-            forcePrimary: options.forcePrimary || true  // ✅ Default to Grok
+            forcePrimary: options.forcePrimary ?? true  // ✅ Default to Grok
           }
         );
         
@@ -164,7 +164,7 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
         systemPrompt,
         { 
           preferFree: true,
-          forcePrimary: options.forcePrimary || true  // ✅ Default to Grok
+          forcePrimary: options.forcePrimary ?? true  // ✅ Default to Grok
         }
       );
 
@@ -237,7 +237,7 @@ Provide a comprehensive, confident answer that demonstrates expertise.`;
         { 
           smart: true, 
           preferFree: true,
-          forcePrimary: options.forcePrimary || true  // ✅ Default to Grok
+          forcePrimary: options.forcePrimary ?? true  // ✅ Default to Grok
         }
       );
 

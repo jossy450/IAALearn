@@ -257,6 +257,10 @@ class AIProviderService {
     const useSmartModel = options.smart || options.research || false;
     const preferFree = options.preferFree !== false; // Default to true
     const forcePrimary = options.forcePrimary || this.forceUsePrimary || false;
+
+    if (!this.providers || this.providers.length === 0) {
+      throw new Error('No AI providers configured. Set GROQ_API_KEY, OPENAI_API_KEY, or another provider.');
+    }
     
     // ✅ Check cache first (skip system prompt for cache key to maximize hits)
     const cacheKey = `${prompt.substring(0, 200)}:${useSmartModel}`;
@@ -276,8 +280,10 @@ class AIProviderService {
     // ✅ If forcing primary provider (Grok), use it first
     if (forcePrimary) {
       const primary = this.getPrimaryProvider();
-      availableProviders = [primary, ...this.providers.filter(p => p.name !== primary.name)];
-      console.log(`🚀 Forcing primary provider: ${primary.name}`);
+      if (primary) {
+        availableProviders = [primary, ...this.providers.filter(p => p.name !== primary.name)];
+        console.log(`🚀 Forcing primary provider: ${primary.name}`);
+      }
     } else if (preferFree) {
       // Try free providers first, but prioritize Grok
       const freeProviders = availableProviders.filter(p => p.free);

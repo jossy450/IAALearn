@@ -58,11 +58,17 @@ export const sessionAPI = {
 };
 
 export const transcriptionAPI = {
-  transcribe: (data) => api.post("/transcription/transcribe", data),
+  transcribe: (data) =>
+    api.post("/transcription/transcribe", data, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }),
 };
 
 export const answerAPI = {
   generate: (data) => api.post("/answers/generate", data),
+  generateOptimized: (data) => api.post("/answers-optimized/generate", data),
 
   // Your client calls getHistory(); server doesn’t have a dedicated route,
   // so use session details as “history” to avoid runtime breakage.

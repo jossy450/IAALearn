@@ -43,13 +43,22 @@ router.get('/generate', authenticate, async (req, res, next) => {
         }
       };
 
-      await optimizedAnswerService.generateAnswer(question, {
-        research: useResearch,
-        context: undefined,
-        userId: req.user.id,
-        streamCallback,
-        forcePrimary: true  // ✅ Always use Grok as primary
-      });
+      try {
+        await optimizedAnswerService.generateAnswer(question, {
+          research: useResearch,
+          context: undefined,
+          userId: req.user.id,
+          streamCallback,
+          forcePrimary: true  // ✅ Always use Grok as primary
+        });
+      } catch (error) {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: error.message || 'Failed to generate answer'
+        })}\n\n`);
+        res.end();
+        return;
+      }
 
       if (sessionId) {
         await query(

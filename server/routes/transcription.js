@@ -1,5 +1,6 @@
 const express = require('express');
 const multer = require('multer');
+const path = require('path');
 const freeNeuralTranscriptionService = require('../services/freeNeuralTranscription');
 const { getAIProvider } = require('../services/aiProvider');
 const { authenticate } = require('../middleware/auth');
@@ -9,17 +10,36 @@ const aiProvider = getAIProvider();
 
 // Configure multer for audio file uploads
 const storage = multer.memoryStorage();
+const normalizeMime = (mime = '') => mime.split(';')[0].trim().toLowerCase();
+const mimeToFormat = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/opus': 'opus',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/mp4': 'mp4',
+  'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac'
+};
+const allowedMimes = new Set(Object.keys(mimeToFormat));
+const allowedExtensions = new Set(['webm', 'wav', 'mp3', 'mpeg', 'ogg', 'opus', 'mp4', 'm4a', 'aac']);
+
 const upload = multer({
   storage,
   limits: {
     fileSize: 25 * 1024 * 1024 // 25MB limit (AssemblyAI/Deepgram support larger files)
   },
   fileFilter: (req, file, cb) => {
-    const allowedMimes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/opus'];
-    if (allowedMimes.includes(file.mimetype)) {
+    const mime = normalizeMime(file.mimetype);
+    const ext = path.extname(file.originalname || '').replace('.', '').toLowerCase();
+    const isAllowed = allowedMimes.has(mime) || allowedExtensions.has(ext);
+
+    if (isAllowed) {
       cb(null, true);
     } else {
-      cb(new Error(`Invalid audio format: ${file.mimetype}. Allowed: webm, wav, mp3, ogg`));
+      cb(new Error(`Invalid audio format: ${file.mimetype}. Allowed: webm, wav, mp3, ogg, mp4, m4a`));
     }
   }
 });
@@ -34,7 +54,10 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
       });
     }
 
-    const format = req.body.format || 'webm';
+    const normalizedMime = normalizeMime(req.file.mimetype);
+    const formatFromMime = mimeToFormat[normalizedMime];
+    const formatFromName = path.extname(req.file.originalname || '').replace('.', '').toLowerCase();
+    const format = (req.body.format || formatFromMime || formatFromName || 'webm').toLowerCase();
     const language = req.body.language || 'en';
     
     // Check minimum audio size (at least 1KB for valid audio)
