@@ -34,11 +34,12 @@ class FreeNeuralTranscriptionService {
     // transcription endpoint accepts a wide range of formats including
     // WebM directly, so no conversion is necessary. Because OpenAI is more
     // reliable than the Hugging Face free endpoint, place it first.
-    if (process.env.OPENAI_API_KEY) {
+    
+    if (process.env.GROK_API_KEY) {
       providers.push({
-        name: 'OpenAI Whisper',
+        name: 'Grok STT (FREE)',
         priority: 1,
-        transcribe: this.transcribeOpenAI.bind(this),
+        transcribe: this.transcribeGrok.bind(this),
         requiresKey: true
       });
     }
@@ -50,15 +51,14 @@ class FreeNeuralTranscriptionService {
     // GROK_API_URL). It sends the audio file as multipart/form-data along
     // with the model and language. If the endpoint is unavailable, this
     // provider will fail and fall back to the next provider.
-    if (process.env.GROK_API_KEY) {
+    if (process.env.OPENAI_API_KEY) {
       providers.push({
-        name: 'Grok STT (FREE)',
+        name: 'OpenAI Whisper',
         priority: providers.length + 1,
-        transcribe: this.transcribeGrok.bind(this),
+        transcribe: this.transcribeOpenAI.bind(this),
         requiresKey: true
       });
     }
-
     // 2. Use Hugging Face’s free inference API as a fallback. This API
     // hosts the OpenAI Whisper model and does not require any API key. It
     // only accepts WAV/MP3/FLAC, so WebM/OGG/OPUS must be converted. The
