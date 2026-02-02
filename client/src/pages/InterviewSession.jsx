@@ -4,6 +4,7 @@ import { Mic, MicOff, Copy, QrCode, MonitorUp, Loader, Square } from 'lucide-rea
 import { sessionAPI, transcriptionAPI } from '../services/api';
 import QRTransferModal from '../components/QRTransferModal';
 import FloatingAnswer from '../components/FloatingAnswer';
+import ScreenShareDetector from '../components/ScreenShareDetector';
 import useStealthStore from '../store/stealthStore';
 import './InterviewSession.css';
 
@@ -21,6 +22,7 @@ function InterviewSession() {
   const [sessionQuestions, setSessionQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [screenShareActive, setScreenShareActive] = useState(false);
+  const [isScreenShareDetected, setIsScreenShareDetected] = useState(false); // Mobile mode requirement
   const [showQRTransfer, setShowQRTransfer] = useState(false);
   const [responseTime, setResponseTime] = useState(null);
   const [autoListen, setAutoListen] = useState(false); // default manual; user can opt-in to auto listening
@@ -52,6 +54,11 @@ function InterviewSession() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, type });
     toastTimerRef.current = setTimeout(() => setToast(null), 3200);
+  };
+
+  const handleMobileRequired = () => {
+    // Redirect to mobile interview session view
+    navigate(`/mobile/${id}`);
   };
 
   const formatAnswer = useMemo(() => {
@@ -607,6 +614,15 @@ function InterviewSession() {
           onClose={() => setShowFloatingAnswer(false)}
           isStreaming={isStreaming}
           formatAnswer={formatAnswer}
+        />
+      )}
+
+      {/* Screen Share Detection for Security */}
+      {stealthMode && (
+        <ScreenShareDetector 
+          isScreenShareDetected={isScreenShareDetected}
+          onScreenShareDetected={(detected) => setIsScreenShareDetected(detected)}
+          onMobileRequired={handleMobileRequired}
         />
       )}
     </div>

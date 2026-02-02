@@ -1,0 +1,215 @@
+.screen-share-detector-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.screen-share-warning-modal {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%);
+  border: 2px solid rgba(255, 107, 107, 0.4);
+  border-radius: 20px;
+  padding: 3rem;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 25px 60px rgba(255, 107, 107, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.warning-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.2) 0%, rgba(255, 107, 107, 0.1) 100%);
+  border: 2px solid rgba(255, 107, 107, 0.3);
+  border-radius: 16px;
+  margin: 0 auto 1.5rem;
+  color: #ff6b6b;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.warning-title {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: #ff6b6b;
+  text-align: center;
+  margin-bottom: 1rem;
+  letter-spacing: -0.5px;
+}
+
+.warning-message {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  line-height: 1.7;
+  margin-bottom: 2rem;
+}
+
+.warning-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.15);
+  border-radius: 12px;
+}
+
+.detail-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.detail-item svg {
+  color: #ff6b6b;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.detail-item strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.detail-item p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.warning-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-mobile-mode,
+.btn-stop-sharing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  letter-spacing: 0.3px;
+}
+
+.btn-mobile-mode {
+  background: linear-gradient(135deg, #1e90ff 0%, #0066ff 100%);
+  color: white;
+  box-shadow: 0 8px 24px rgba(30, 144, 255, 0.35);
+  border: 1px solid rgba(30, 144, 255, 0.3);
+}
+
+.btn-mobile-mode:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(30, 144, 255, 0.45);
+  border-color: rgba(30, 144, 255, 0.5);
+}
+
+.btn-stop-sharing {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-stop-sharing:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.warning-note {
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(0, 208, 132, 0.1) 0%, rgba(0, 200, 150, 0.05) 100%);
+  border: 1px solid rgba(0, 208, 132, 0.2);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.warning-note p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .screen-share-warning-modal {
+    padding: 2rem;
+    margin: 1rem;
+    width: calc(100% - 2rem);
+  }
+
+  .warning-title {
+    font-size: 1.5rem;
+  }
+
+  .warning-message {
+    font-size: 0.95rem;
+  }
+
+  .warning-details {
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .warning-actions {
+    gap: 0.75rem;
+  }
+
+  .btn-mobile-mode,
+  .btn-stop-sharing {
+    padding: 0.85rem;
+    font-size: 0.95rem;
+  }
+}
