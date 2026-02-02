@@ -121,8 +121,6 @@ function ResetPassword() {
             Enter a strong password for your account
           </p>
         </div>
-          </p>
-        </div>
 
         {error && (
           <div className="alert alert-error">
