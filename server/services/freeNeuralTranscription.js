@@ -176,7 +176,11 @@ class FreeNeuralTranscriptionService {
       }
     }
 
-    throw new Error(`All transcription providers failed. Last error: ${lastError?.message || 'Unknown error'}`);
+    // Provide detailed error with available providers list
+    const availableProviderNames = providers.map(p => p.name).join(', ');
+    const errorMsg = `All transcription providers failed. Last error: ${lastError?.message || 'Unknown error'}.\n\nAvailable providers: ${availableProviderNames}\n\nTo fix:\n1. Set OPENAI_API_KEY in environment for reliable transcription\n2. Ensure audio is at least 2-3 seconds long\n3. Check microphone permissions\n4. For Render: Ensure ffmpeg is installed in build command`;
+    
+    throw new Error(errorMsg);
   }
 
   /**
@@ -236,9 +240,14 @@ class FreeNeuralTranscriptionService {
       // provider will be skipped in favour of the next fallback.
       let payloadBuffer = audioBuffer;
       if ([ 'webm', 'ogg', 'opus' ].includes(format)) {
-        console.log(`   Converting ${format} to wav for Hugging Face...`);
-        payloadBuffer = await this.convertToWav(audioBuffer, format);
-        format = 'wav';
+        try {
+          console.log(`   Converting ${format} to wav for Hugging Face...`);
+          payloadBuffer = await this.convertToWav(audioBuffer, format);
+          format = 'wav';
+        } catch (conversionError) {
+          console.warn(`   Conversion failed: ${conversionError.message}`);
+          throw new Error(`Hugging Face requires WAV/MP3/FLAC format. Conversion failed: ${conversionError.message}`);
+        }
       }
 
       // Determine appropriate content type for request. MP3 uses audio/mpeg,
@@ -581,11 +590,18 @@ class FreeNeuralTranscriptionService {
       ffmpeg = require('fluent-ffmpeg');
       ffmpegPath = require('ffmpeg-static');
     } catch (e) {
-      throw new Error('Audio conversion requires ffmpeg. Install: npm install fluent-ffmpeg ffmpeg-static');
+      throw new Error('Audio conversion not available - ffmpeg packages not installed. Skipping this provider.');
     }
 
     if (!ffmpegPath) {
-      throw new Error('ffmpeg binary not found. Install: npm install ffmpeg-static');
+      // Try system ffmpeg
+      try {
+        const { execSync } = require('child_process');
+        execSync('ffmpeg -version', { stdio: 'ignore' });
+        // System ffmpeg exists, use it without setting path
+      } catch (e) {
+        throw new Error('ffmpeg not available. Skipping this provider.');
+      }
     }
 
     ffmpeg.setFfmpegPath(ffmpegPath);
