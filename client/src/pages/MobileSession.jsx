@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Smartphone, Copy, CheckCircle, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
 import { sessionAPI, answerAPI } from '../services/api';
@@ -16,34 +16,102 @@ const MobileSession = () => {
   const [fullscreenMode, setFullscreenMode] = useState(false);
   const [isLandscape, setIsLandscape] = useState(window.matchMedia('(orientation: landscape)').matches);
   const { addToClipboard } = useStealthStore();
+  const pollTimeoutRef = useRef(null);
+  const isFetchingRef = useRef(false);
+  const pollDelayRef = useRef(2500);
+  const lastSnapshotRef = useRef({ questionText: '', answerText: '' });
+  const hasSessionRef = useRef(false);
 
   // Poll for new questions/answers
   useEffect(() => {
     if (!sessionId) return;
 
-    const fetchSession = async () => {
+    const hydrateFromStorage = () => {
       try {
-        const response = await sessionAPI.getOne(sessionId);
-        setSession(response.data);
-        
-        // Get latest question/answer
-        const historyResponse = await answerAPI.getHistory(sessionId);
-        if (historyResponse.data.length > 0) {
-          const latest = historyResponse.data[0];
-          setCurrentQuestion(latest.question);
-          setCurrentAnswer(latest.answer);
-          setAnswerHistory(historyResponse.data);
+        const stored = localStorage.getItem('transferred-session');
+        if (!stored) return;
+        const parsed = JSON.parse(stored);
+        if (parsed?.session && String(parsed.sessionId) === String(sessionId)) {
+          setSession(parsed.session);
+          hasSessionRef.current = true;
         }
-      } catch (error) {
-        console.error('Failed to fetch session:', error);
-        setConnected(false);
+      } catch {
+        // ignore bad storage
       }
     };
 
-    fetchSession();
-    const interval = setInterval(fetchSession, 2000); // Poll every 2 seconds
+    const normalizeHistory = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.session?.questions)) return data.session.questions;
+      if (Array.isArray(data?.questions)) return data.questions;
+      return [];
+    };
 
-    return () => clearInterval(interval);
+    const toHistoryItems = (items) => items.map((item) => ({
+      question: item.question || item.question_text || item.questionText || '',
+      answer: item.answer || item.answer_text || ''
+    })).filter((item) => item.question);
+
+    const fetchSessionOnce = async () => {
+      if (hasSessionRef.current) return;
+      try {
+        const response = await sessionAPI.getOne(sessionId);
+        setSession(response.data?.session || response.data);
+        hasSessionRef.current = true;
+      } catch (error) {
+        console.error('Failed to fetch session:', error);
+      }
+    };
+
+    const fetchLatest = async () => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+
+      try {
+        await fetchSessionOnce();
+
+        const historyResponse = await answerAPI.getHistory(sessionId);
+        const history = toHistoryItems(normalizeHistory(historyResponse.data));
+
+        if (history.length > 0) {
+          const latest = history[history.length - 1];
+          if (
+            latest.question !== lastSnapshotRef.current.questionText ||
+            latest.answer !== lastSnapshotRef.current.answerText
+          ) {
+            setCurrentQuestion(latest.question);
+            setCurrentAnswer(latest.answer);
+            lastSnapshotRef.current = {
+              questionText: latest.question,
+              answerText: latest.answer
+            };
+          }
+          setAnswerHistory(history.slice().reverse());
+        }
+
+        setConnected(true);
+        pollDelayRef.current = 2500;
+      } catch (error) {
+        console.error('Failed to fetch session:', error);
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          setConnected(hasSessionRef.current);
+        } else {
+          setConnected(false);
+        }
+        pollDelayRef.current = Math.min(pollDelayRef.current + 1500, 10000);
+      } finally {
+        isFetchingRef.current = false;
+        pollTimeoutRef.current = setTimeout(fetchLatest, pollDelayRef.current);
+      }
+    };
+
+    hydrateFromStorage();
+    fetchLatest();
+
+    return () => {
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
   }, [sessionId]);
 
   // Track orientation changes

@@ -1,4 +1,4 @@
-app = "iaalearn-cold-cloud-8490"
+app = "iaalearn-cloud"
 primary_region = "cdg"
 
 [build]

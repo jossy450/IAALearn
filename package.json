@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "server:dev": "nodemon server/index.js",
     "client:dev": "cd client && npm run dev",
-    "postinstall": "cd client && npm install --legacy-peer-deps",
+    "postinstall": "test -d client && cd client && npm install --legacy-peer-deps || true",
     "build": "cd client && npm run build",
     "start": "node server/index.js",
     "db:migrate": "node server/database/migrate.js",

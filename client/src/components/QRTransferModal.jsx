@@ -11,15 +11,22 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
   const [countdown, setCountdown] = useState(300); // 5 minutes
   const [loading, setLoading] = useState(true);
   const [statusCheckInterval, setStatusCheckInterval] = useState(2000); // Dynamic interval
+  const [copied, setCopied] = useState(false);
   
   // Performance refs
   const timerRef = useRef(null);
   const statusCheckRef = useRef(null);
+  const statusCheckInFlight = useRef(false);
   const codeGenerationCache = useRef(new Map());
 
   // Memoize base URL for better performance
   const baseUrl = useMemo(() => {
     return window.location.origin;
+  }, []);
+
+  const qrSize = useMemo(() => {
+    const isSmall = window.innerWidth < 640;
+    return isSmall ? 240 : 320;
   }, []);
 
   useEffect(() => {
@@ -47,6 +54,8 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
   // Optimized status checking with exponential backoff
   const checkTransferStatus = useCallback(async () => {
     if (!transferCode || isTransferred) return;
+    if (statusCheckInFlight.current) return;
+    statusCheckInFlight.current = true;
     
     try {
       const response = await sessionAPI.checkTransferStatus(transferCode);
@@ -54,7 +63,7 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
         setIsTransferred(true);
         // Clear intervals on successful transfer
         if (timerRef.current) clearInterval(timerRef.current);
-        if (statusCheckRef.current) clearInterval(statusCheckRef.current);
+        if (statusCheckRef.current) clearTimeout(statusCheckRef.current);
         return true;
       }
       // Gradually increase polling interval to reduce load
@@ -67,6 +76,8 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
       // On error, slow down polling
       setStatusCheckInterval(prev => Math.min(prev + 1000, 15000));
       return false;
+    } finally {
+      statusCheckInFlight.current = false;
     }
   }, [transferCode, isTransferred, statusCheckInterval]);
 
@@ -84,12 +95,21 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
       });
     }, 1000);
 
-    // Smart status checking with dynamic interval
-    statusCheckRef.current = setInterval(checkTransferStatus, statusCheckInterval);
+    // Smart status checking with dynamic interval (avoid overlapping requests)
+    const scheduleStatusCheck = () => {
+      statusCheckRef.current = setTimeout(async () => {
+        const transferred = await checkTransferStatus();
+        if (!transferred && isOpen && transferCode) {
+          scheduleStatusCheck();
+        }
+      }, statusCheckInterval);
+    };
+
+    scheduleStatusCheck();
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (statusCheckRef.current) clearInterval(statusCheckRef.current);
+      if (statusCheckRef.current) clearTimeout(statusCheckRef.current);
     };
   }, [isOpen, transferCode, statusCheckInterval, checkTransferStatus]);
 
@@ -140,11 +160,27 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
     }
   }, [sessionId, baseUrl]);
 
+  const handleCopyLink = async () => {
+    if (!transferUrl) return;
+    try {
+      await navigator.clipboard.writeText(transferUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copy link', transferUrl);
+    }
+  };
+
+  const handleOpenLink = () => {
+    if (!transferUrl) return;
+    window.open(transferUrl, '_blank', 'noopener,noreferrer');
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6 relative">
+      <div className="bg-white rounded-xl max-w-2xl w-full p-6 md:p-8 relative shadow-2xl border border-gray-100">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -154,14 +190,14 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
 
         <div className="text-center">
           <div className="mb-4 flex items-center justify-center">
-            <div className="bg-blue-100 p-3 rounded-full">
-              <Smartphone className="text-blue-600" size={32} />
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-3 rounded-full shadow-lg">
+              <Smartphone className="text-white" size={32} />
             </div>
           </div>
 
-          <h2 className="text-2xl font-bold mb-2">Transfer to Mobile</h2>
+          <h2 className="text-2xl font-bold mb-1 text-gray-900">Transfer to Mobile</h2>
           <p className="text-gray-600 mb-6">
-            Scan this QR code with your phone to continue the interview session on mobile
+            Scan the QR below or open the link to keep this session on your phone.
           </p>
 
           {loading ? (
@@ -172,27 +208,45 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
             <>
               {!isTransferred ? (
                 <>
-                  <div className="bg-white border-4 border-gray-200 rounded-lg p-6 mb-4 inline-block">
+                  <div className="bg-white border-8 border-gray-100 rounded-2xl p-4 mb-4 inline-block shadow-md">
                     <QRCodeCanvas
                       value={transferUrl || ''}
-                      size={280}
+                      size={qrSize}
                       level="H"
-                      includeMargin={true}
+                      includeMargin
                       bgColor="#ffffff"
                       fgColor="#000000"
+                      aria-label="Mobile transfer QR code"
                     />
                   </div>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <div className="text-center mb-2">
-                      <div className="text-3xl font-bold text-blue-600">{transferCode}</div>
-                      <div className="text-sm text-gray-600">Transfer Code</div>
-                      {transferUrl && (
-                        <div className="text-xs text-gray-500 mt-2 break-all px-2">
-                          {transferUrl}
-                        </div>
-                      )}
+                  <div className="flex flex-col gap-3 mb-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-blue-600 tracking-wide">{transferCode}</div>
+                        <div className="text-sm text-gray-600">Transfer Code</div>
+                      </div>
                     </div>
+
+                    {transferUrl && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="text-xs text-gray-700 break-all md:flex-1 md:text-left text-center">{transferUrl}</div>
+                        <div className="flex items-center gap-2 justify-center">
+                          <button
+                            onClick={handleOpenLink}
+                            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors"
+                          >
+                            Open Link
+                          </button>
+                          <button
+                            onClick={handleCopyLink}
+                            className="px-3 py-2 rounded-lg bg-gray-200 text-gray-800 text-sm hover:bg-gray-300 transition-colors"
+                          >
+                            {copied ? 'Copied!' : 'Copy'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
@@ -208,11 +262,11 @@ const QRTransferModal = ({ isOpen, onClose, sessionId }) => {
                   <div className="text-left space-y-2 text-sm text-gray-600 mb-4">
                     <div className="flex items-start gap-2">
                       <div className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 text-xs">1</div>
-                      <div>Open camera or QR scanner app on your phone</div>
+                      <div>Open your camera or QR scanner on your phone</div>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 text-xs">2</div>
-                      <div>Scan the QR code above</div>
+                      <div>Scan the QR (high-contrast, with margin) so the link is detected</div>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 text-xs">3</div>

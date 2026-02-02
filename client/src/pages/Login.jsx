@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, documentsAPI } from '../services/api';
-import { Upload, FileText, Briefcase, X, Eye, EyeOff, Lock, Mail, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, Briefcase, X, Eye, EyeOff, Lock, Mail, AlertCircle, CheckCircle, KeyRound, Send } from 'lucide-react';
 import './Auth.css';
 
 function Login() {
@@ -13,8 +13,13 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [isLocked, setIsLocked] = useState(false);
+  
+  // OTP State
+  const [useOtp, setUseOtp] = useState(true);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
   
   // Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -26,31 +31,49 @@ function Login() {
   const cvFileRef = useRef(null);
   const jobDescFileRef = useRef(null);
 
-  // Check for locked account on mount
+  // Resend timer effect
   useEffect(() => {
-    const lockTime = localStorage.getItem('loginLockTime');
-    if (lockTime) {
-      const lockExpiry = parseInt(lockTime) + (15 * 60 * 1000); // 15 minutes
-      if (Date.now() < lockExpiry) {
-        setIsLocked(true);
-        const timeLeft = Math.ceil((lockExpiry - Date.now()) / 60000);
-        setError(`Too many login attempts. Please try again in ${timeLeft} minutes.`);
-      } else {
-        localStorage.removeItem('loginLockTime');
-        localStorage.removeItem('loginAttempts');
-      }
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
+
+  const handleRequestOtp = async (e) => {
+    e?.preventDefault();
+    
+    if (!formData.email) {
+      setError('Please enter your email address');
+      return;
     }
     
-    const attempts = localStorage.getItem('loginAttempts');
-    if (attempts) {
-      setLoginAttempts(parseInt(attempts));
-    }
-  }, []);
+    setError('');
+    setOtpLoading(true);
 
-  const handleSubmit = async (e) => {
+    try {
+      const response = await authAPI.requestOtp({ email: formData.email });
+      
+      setOtpSent(true);
+      setResendTimer(60);
+      setOtpCode('');
+      
+      // In development, show the code (remove in production)
+      if (response.data.code) {
+        setError(`Development mode: Your code is ${response.data.code}`);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send verification code');
+      setOtpSent(false);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
     
-    if (isLocked) {
+    if (!otpCode || otpCode.length !== 6) {
+      setError('Please enter the 6-digit verification code');
       return;
     }
     
@@ -58,13 +81,12 @@ function Login() {
     setLoading(true);
 
     try {
-      const response = await authAPI.login(formData);
-      const { token, user } = response.data;
+      const response = await authAPI.verifyOtp({ 
+        email: formData.email, 
+        code: otpCode 
+      });
       
-      // Clear login attempts on success
-      localStorage.removeItem('loginAttempts');
-      localStorage.removeItem('loginLockTime');
-      setLoginAttempts(0);
+      const { token, user } = response.data;
       
       // Store auth with remember me preference
       if (rememberMe) {
@@ -80,22 +102,37 @@ function Login() {
       setCvFile(null);
       setJobDescFile(null);
     } catch (err) {
-      // Handle failed login attempts
-      const newAttempts = loginAttempts + 1;
-      setLoginAttempts(newAttempts);
-      localStorage.setItem('loginAttempts', newAttempts.toString());
+      setError(err.response?.data?.error || 'Invalid verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordLogin = async (e) => {
+    e.preventDefault();
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await authAPI.login(formData);
+      const { token, user } = response.data;
       
-      if (newAttempts >= 5) {
-        setIsLocked(true);
-        localStorage.setItem('loginLockTime', Date.now().toString());
-        setError('Too many failed attempts. Account locked for 15 minutes.');
-      } else {
-        const remainingAttempts = 5 - newAttempts;
-        setError(
-          err.response?.data?.error || 'Invalid credentials. ' +
-          `${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining.`
-        );
+      // Store auth with remember me preference
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
       }
+      
+      setAuth(token, user);
+      
+      // Show upload modal after successful login
+      setShowUploadModal(true);
+      setUploadError('');
+      setUploadSuccess(false);
+      setCvFile(null);
+      setJobDescFile(null);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -164,20 +201,20 @@ function Login() {
         </div>
 
         {error && (
-          <div className={`alert ${isLocked ? 'alert-warning' : 'alert-error'}`}>
+          <div className="alert alert-error">
             <AlertCircle size={18} />
             <span>{error}</span>
           </div>
         )}
         
-        {loginAttempts > 0 && loginAttempts < 5 && !error && (
-          <div className="alert alert-info">
+        {otpSent && !error && (
+          <div className="alert alert-success">
             <AlertCircle size={18} />
-            <span>{5 - loginAttempts} login attempt{5 - loginAttempts !== 1 ? 's' : ''} remaining</span>
+            <span>Verification code sent to your email</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={useOtp ? (otpSent ? handleVerifyOtp : handleRequestOtp) : handlePasswordLogin} className="auth-form">
           <div className="form-group">
             <label className="label">
               <Mail size={16} />
@@ -191,65 +228,129 @@ function Login() {
               placeholder="you@example.com"
               required
               autoFocus
-              disabled={isLocked}
+              disabled={otpSent}
             />
           </div>
 
-          <div className="form-group">
-            <div className="label-with-link">
+          {!useOtp && (
+            <div className="form-group">
+              <div className="label-with-link">
+                <label className="label">
+                  <Lock size={16} />
+                  Password
+                </label>
+                <Link to="/forgot-password" className="forgot-link">
+                  Forgot?
+                </Link>
+              </div>
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="input input-with-icon"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="password-toggle"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {useOtp && otpSent && (
+            <div className="form-group">
               <label className="label">
-                <Lock size={16} />
-                Password
+                <KeyRound size={16} />
+                Verification Code
               </label>
-              <Link to="/forgot-password" className="forgot-link">
-                Forgot?
-              </Link>
-            </div>
-            <div className="password-input-wrapper">
               <input
-                type={showPassword ? 'text' : 'password'}
+                type="text"
                 className="input input-with-icon"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Enter your password"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Enter 6-digit code"
                 required
-                disabled={isLocked}
+                maxLength={6}
+                autoFocus
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="password-toggle"
-                disabled={isLocked}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+              {resendTimer > 0 ? (
+                <p className="form-hint">Resend code in {resendTimer}s</p>
+              ) : (
+                <button 
+                  type="button" 
+                  onClick={handleRequestOtp}
+                  className="btn-link"
+                  style={{ marginTop: '8px', fontSize: '14px' }}
+                >
+                  Resend code
+                </button>
+              )}
             </div>
-          </div>
+          )}
           
-          <div className="form-extras">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                disabled={isLocked}
-              />
-              <span>Remember me for 30 days</span>
-            </label>
-          </div>
+          {!useOtp && (
+            <div className="form-extras">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                <span>Remember me for 30 days</span>
+              </label>
+            </div>
+          )}
 
           <button 
             type="submit" 
             className="btn btn-primary btn-block" 
-            disabled={loading || isLocked}
+            disabled={loading || (useOtp && otpSent && otpCode.length !== 6)}
           >
             {loading ? (
               <>
                 <div className="spinner"></div>
-                Signing in...
+                {useOtp && otpSent ? 'Verifying...' : useOtp ? 'Sending code...' : 'Signing in...'}
               </>
-            ) : 'Sign In'}
+            ) : (
+              <>
+                {useOtp && otpSent ? (
+                  <>
+                    <KeyRound size={18} />
+                    Verify Code
+                  </>
+                ) : useOtp ? (
+                  <>
+                    <Send size={18} />
+                    Send Verification Code
+                  </>
+                ) : (
+                  'Sign In'
+                )}
+              </>
+            )}
           </button>
+          
+          <div style={{ textAlign: 'center', marginTop: '12px' }}>
+            <button 
+              type="button" 
+              onClick={() => {
+                setUseOtp(!useOtp);
+                setOtpSent(false);
+                setOtpCode('');
+                setError('');
+              }}
+              className="btn-link"
+              style={{ fontSize: '14px' }}
+            >
+              {useOtp ? 'Use password instead' : 'Use verification code instead'}
+            </button>
+          </div>
         </form>
 
         <div className="auth-divider">

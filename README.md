@@ -159,6 +159,20 @@ JWT_SECRET=your-secure-secret-key
 CLIENT_URL=http://localhost:5173
 ```
 
+### Local API smoke test (Windows/PowerShell)
+
+```
+# 1) Start the API server in another terminal
+npm run server:dev
+
+# 2) Generate a JWT using your JWT_SECRET
+$token = node -e "console.log(require('jsonwebtoken').sign({id:1,email:'demo@example.com'}, process.env.JWT_SECRET, {expiresIn:'1h'}))"
+
+# 3) Post to the perfect-answer endpoint
+$body = @{ interviewerQuestion = 'Tell me about yourself'; position = 'Software Engineer'; company = 'Acme Corp'; cv = 'Senior engineer with 5 years in Node/React'; jobDescription = 'Building scalable web apps' } | ConvertTo-Json -Depth 3
+Invoke-RestMethod -Method Post -Uri "http://localhost:3001/api/smart-ai/get-perfect-answer" -Headers @{ Authorization = "Bearer $token" } -ContentType 'application/json' -Body $body
+```
+
 ### Running the Application
 
 ```bash

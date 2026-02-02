@@ -12,17 +12,11 @@ const pool = new Pool(
   hasDatabaseUrl
     ? {
         connectionString: process.env.DATABASE_URL,
-        // Render Postgres typically requires SSL in production.
-        // Setting rejectUnauthorized=false avoids cert chain issues in managed environments.
-        ssl:
-          process.env.NODE_ENV === 'production'
-            ? { rejectUnauthorized: false }
-            : false,
+        // Supabase and Render Postgres require SSL
+        ssl: { rejectUnauthorized: false },
         max: 20,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000,
-        // Force IPv4 to avoid ENETUNREACH errors with IPv6 addresses
-        host: process.env.DB_HOST || undefined,
         options: '-c search_path=public',
       }
     : {

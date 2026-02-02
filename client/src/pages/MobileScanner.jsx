@@ -13,6 +13,7 @@ const MobileScanner = () => {
   const [loading, setLoading] = useState(false);
   const html5QrCodeRef = useRef(null);
   const qrReaderRef = useRef(null);
+  const isConnectingRef = useRef(false);
 
   useEffect(() => {
     if (scanning && qrReaderRef.current) {
@@ -21,6 +22,8 @@ const MobileScanner = () => {
 
       const qrCodeSuccessCallback = async (decodedText) => {
         try {
+          if (isConnectingRef.current) return;
+
           // Extract transfer code from URL or direct code
           let code = decodedText.trim();
           
@@ -37,6 +40,12 @@ const MobileScanner = () => {
 
           // Validate code format (6 alphanumeric characters)
           if (code && /^[A-Z0-9]{6}$/.test(code)) {
+            isConnectingRef.current = true;
+            setError(null);
+            setScanning(false);
+            if (html5QrCodeRef.current?.isScanning) {
+              await html5QrCodeRef.current.stop().catch(() => {});
+            }
             await connectWithCode(code);
           } else {
             setError('Invalid QR code format. Expected 6-character code.');
@@ -67,6 +76,7 @@ const MobileScanner = () => {
   }, [scanning]);
 
   const connectWithCode = async (code) => {
+    if (isConnectingRef.current && loading) return;
     setLoading(true);
     setError(null);
 
@@ -80,6 +90,8 @@ const MobileScanner = () => {
         // Store session info in local storage
         localStorage.setItem('transferred-session', JSON.stringify({
           sessionId: response.data.sessionId,
+          session: response.data.session || null,
+          transferCode: code,
           transferredAt: Date.now()
         }));
 
@@ -91,6 +103,7 @@ const MobileScanner = () => {
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid transfer code. Please try again.');
       setScanning(true);
+      isConnectingRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -99,7 +112,7 @@ const MobileScanner = () => {
   const handleManualSubmit = (e) => {
     e.preventDefault();
     if (manualCode.length === 6) {
-      connectWithCode(manualCode);
+      connectWithCode(manualCode.trim().toUpperCase());
     }
   };
 

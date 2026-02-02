@@ -184,7 +184,189 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-// Login
+// Request Login OTP
+router.post('/request-otp', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !validateEmail(email)) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+
+    // Check if user exists
+    if (isDemoMode) {
+      const user = demoUsers.get(email);
+      if (!user) {
+        return res.status(404).json({ error: 'No account found with this email' });
+      }
+    } else {
+      const result = await query(
+        'SELECT id, email, full_name FROM users WHERE email = $1 AND is_active = true',
+        [email]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'No account found with this email' });
+      }
+    }
+
+    // Generate 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    if (!isDemoMode) {
+      // Delete any existing OTPs for this email
+      await query(
+        'DELETE FROM login_otp WHERE email = $1',
+        [email]
+      );
+
+      // Store OTP in database
+      await query(
+        `INSERT INTO login_otp (email, otp_code, expires_at, delivery_method)
+         VALUES ($1, $2, $3, $4)`,
+        [email, otpCode, expiresAt, 'email']
+      );
+    } else {
+      // Store in memory for demo mode
+      demoUsers.get(email).otp = {
+        code: otpCode,
+        expiresAt: expiresAt.getTime()
+      };
+    }
+
+    // TODO: Send email/SMS with OTP
+    // For now, log it (in production, integrate with email service)
+    console.log(`🔐 OTP for ${email}: ${otpCode} (expires in 10 minutes)`);
+
+    res.json({
+      success: true,
+      message: 'Verification code sent to your email',
+      email,
+      // In development, send the code (remove in production)
+      ...(process.env.NODE_ENV === 'development' && { code: otpCode })
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Verify OTP and Login
+router.post('/verify-otp', async (req, res, next) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+
+    if (isDemoMode) {
+      const user = demoUsers.get(email);
+      
+      if (!user || !user.otp) {
+        return res.status(401).json({ error: 'Invalid or expired verification code' });
+      }
+
+      if (user.otp.expiresAt < Date.now()) {
+        delete user.otp;
+        return res.status(410).json({ error: 'Verification code expired. Please request a new one.' });
+      }
+
+      if (user.otp.code !== code) {
+        return res.status(401).json({ error: 'Invalid verification code' });
+      }
+
+      // Clear OTP after successful verification
+      delete user.otp;
+
+      const token = createToken(user.id, user.email);
+
+      return res.json({
+        success: true,
+        user: sanitizeUser(user),
+        token
+      });
+    }
+
+    // Database mode
+    const otpResult = await query(
+      `SELECT * FROM login_otp 
+       WHERE email = $1 AND otp_code = $2 AND is_verified = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, code]
+    );
+
+    if (otpResult.rows.length === 0) {
+      // Increment attempts
+      await query(
+        'UPDATE login_otp SET attempts = attempts + 1 WHERE email = $1 AND is_verified = false',
+        [email]
+      );
+      return res.status(401).json({ error: 'Invalid verification code' });
+    }
+
+    const otp = otpResult.rows[0];
+
+    // Check if expired
+    if (new Date(otp.expires_at) < new Date()) {
+      await query(
+        'DELETE FROM login_otp WHERE email = $1',
+        [email]
+      );
+      return res.status(410).json({ error: 'Verification code expired. Please request a new one.' });
+    }
+
+    // Check attempts
+    if (otp.attempts >= 5) {
+      await query(
+        'DELETE FROM login_otp WHERE email = $1',
+        [email]
+      );
+      return res.status(429).json({ error: 'Too many failed attempts. Please request a new code.' });
+    }
+
+    // Mark as verified
+    await query(
+      'UPDATE login_otp SET is_verified = true WHERE id = $1',
+      [otp.id]
+    );
+
+    // Get user
+    const userResult = await query(
+      'SELECT * FROM users WHERE email = $1 AND is_active = true',
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Update last login
+    await query(
+      'UPDATE users SET last_login = NOW() WHERE id = $1',
+      [user.id]
+    );
+
+    // Clean up used OTP
+    setTimeout(() => {
+      query('DELETE FROM login_otp WHERE id = $1', [otp.id]).catch(console.error);
+    }, 5000);
+
+    const token = createToken(user.id, user.email);
+
+    res.json({
+      success: true,
+      user: sanitizeUser(user),
+      token
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Login (legacy password-based - kept for backward compatibility)
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;

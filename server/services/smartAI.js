@@ -1,7 +1,18 @@
 const OpenAI = require('openai');
 const { query } = require('../database/connection');
 
+let groqClient = null;
 let openai = null;
+
+function getGroq() {
+  if (!groqClient && process.env.GROQ_API_KEY) {
+    groqClient = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1'
+    });
+  }
+  return groqClient;
+}
 
 function getOpenAI() {
   if (!openai && process.env.OPENAI_API_KEY) {
@@ -10,6 +21,10 @@ function getOpenAI() {
     });
   }
   return openai;
+}
+
+function getLLMClient() {
+  return getGroq() || getOpenAI();
 }
 
 class SmartAIService {
@@ -414,6 +429,69 @@ Questions covered: ${session.questions?.length || 0}`
       return JSON.parse(response.choices[0].message.content);
     } catch (error) {
       return { sentiment: 'neutral', difficulty: 'medium', stress_level: 5 };
+    }
+  }
+
+  // Generate perfect answer based on interviewer question + CV + Job Description
+  async generatePerfectAnswer(question, userId, context, onChunk) {
+    const client = getLLMClient();
+    if (!client) {
+      throw new Error('No AI provider configured (set GROQ_API_KEY or OPENAI_API_KEY)');
+    }
+
+    try {
+      const { cv = '', jobDescription = '', position = '', company = '' } = context;
+
+      const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, and concise.
+
+    You will consider:
+    1. The candidate's CV/Resume
+    2. The job description
+    3. The company and position
+    4. Best interview practices
+
+    Formatting & style:
+    - Keep it tight (2 short paragraphs max, or bullets if clearer).
+    - Be factual and specific; avoid fluff and hype.
+    - Bold 3-6 key skills/technologies/achievements for quick skimming (use **like this**).
+    - Include 1-2 concrete examples or metrics when possible.
+    - Sound like a confident candidate, not a generic AI.
+
+    Answer directly without preamble. Make it actionable for the candidate to speak aloud.`;
+
+      const userPrompt = `
+Interview Question: "${question}"
+
+Company: ${company || 'Unknown'}
+Position: ${position || 'Unknown'}
+
+Candidate's CV/Resume:
+${cv || 'No CV provided'}
+
+Job Description:
+${jobDescription || 'No job description provided'}
+
+Provide the perfect answer the candidate should give:`;
+
+      const stream = await client.chat.completions.create({
+        model: process.env.GROQ_API_KEY ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 1000
+      });
+
+      for await (const chunk of stream) {
+        if (chunk.choices[0]?.delta?.content) {
+          onChunk(chunk.choices[0].delta.content);
+        }
+      }
+    } catch (error) {
+      console.error('Error generating perfect answer:', error);
+      throw error;
     }
   }
 }

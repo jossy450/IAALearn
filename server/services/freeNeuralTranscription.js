@@ -72,33 +72,37 @@ class FreeNeuralTranscriptionService {
     });
 
     // 3. Coqui STT - FREE, open‑source (local or cloud). Requires model
-    // downloads and installation. Included for completeness but usually
-    // skipped in hosted environments because the models are not bundled.
-    providers.push({
-      name: 'Coqui STT (FREE)',
-      priority: providers.length + 1,
-      transcribe: this.transcribeCoqui.bind(this),
-      requiresKey: false
-    });
+    // downloads and installation. Only include if module is available.
+    if (this.hasModule('coqui-stt')) {
+      providers.push({
+        name: 'Coqui STT (FREE)',
+        priority: providers.length + 1,
+        transcribe: this.transcribeCoqui.bind(this),
+        requiresKey: false
+      });
+    }
 
-    // 4. Wav2Vec 2.0 (Facebook) - FREE, open‑source. Also requires
-    // installation of transformers.js and downloading the model. This
-    // provider may be heavy and is therefore placed after Coqui.
-    providers.push({
-      name: 'Wav2Vec 2.0 (FREE)',
-      priority: providers.length + 1,
-      transcribe: this.transcribeWav2Vec.bind(this),
-      requiresKey: false
-    });
+    // 4. Wav2Vec 2.0 (Facebook) - FREE, open‑source. Requires
+    // transformers.js and model download. Only include if available.
+    if (this.hasModule('transformers')) {
+      providers.push({
+        name: 'Wav2Vec 2.0 (FREE)',
+        priority: providers.length + 1,
+        transcribe: this.transcribeWav2Vec.bind(this),
+        requiresKey: false
+      });
+    }
 
     // 5. Silero STT - FREE, lightweight. Note that this library is
     // primarily for voice activity detection and not full transcription.
-    providers.push({
-      name: 'Silero STT (FREE)',
-      priority: providers.length + 1,
-      transcribe: this.transcribeSilero.bind(this),
-      requiresKey: false
-    });
+    if (this.hasModule('silero-vad-js')) {
+      providers.push({
+        name: 'Silero STT (FREE)',
+        priority: providers.length + 1,
+        transcribe: this.transcribeSilero.bind(this),
+        requiresKey: false
+      });
+    }
 
     return providers;
   }
@@ -240,13 +244,18 @@ class FreeNeuralTranscriptionService {
       // provider will be skipped in favour of the next fallback.
       let payloadBuffer = audioBuffer;
       if ([ 'webm', 'ogg', 'opus' ].includes(format)) {
-        try {
-          console.log(`   Converting ${format} to wav for Hugging Face...`);
-          payloadBuffer = await this.convertToWav(audioBuffer, format);
-          format = 'wav';
-        } catch (conversionError) {
-          console.warn(`   Conversion failed: ${conversionError.message}`);
-          throw new Error(`Hugging Face requires WAV/MP3/FLAC format. Conversion failed: ${conversionError.message}`);
+        if (this.canUseFfmpeg()) {
+          try {
+            console.log(`   Converting ${format} to wav for Hugging Face...`);
+            payloadBuffer = await this.convertToWav(audioBuffer, format);
+            format = 'wav';
+          } catch (conversionError) {
+            console.warn(`   Conversion failed: ${conversionError.message}`);
+            // Fall back to sending original format if conversion fails
+            console.warn('   Sending original audio format to Hugging Face (no conversion).');
+          }
+        } else {
+          console.warn('   ffmpeg not usable. Sending original audio format to Hugging Face.');
         }
       }
 
@@ -254,32 +263,81 @@ class FreeNeuralTranscriptionService {
       // otherwise we use audio/<format> (e.g. audio/wav, audio/flac).
       const contentType = format === 'mp3' ? 'audio/mpeg' : `audio/${format}`;
 
-      // Use axios for HTTP requests instead of the global fetch API. On some
-      // server environments (like Node.js < 18), fetch may not be defined.
-      const response = await axios.post(
-        'https://api-inference.huggingface.co/models/openai/whisper-small',
-        payloadBuffer,
-        {
-          headers: {
-            'Content-Type': contentType
-          },
-          // Hugging Face endpoints can take a few seconds to respond; set a
-          // generous timeout to avoid premature termination (default is 0 = no timeout).
-          timeout: 30000
-        }
-      );
+      const hfToken = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY || '';
+      const modelEnv = process.env.HF_MODEL || '';
+      const models = modelEnv
+        ? modelEnv.split(',').map(m => m.trim()).filter(Boolean)
+        : [
+            'openai/whisper-tiny',     // Fastest, loads quickly
+            'openai/whisper-base',
+            'openai/whisper-small'
+          ];
 
-      const result = response.data;
-      // Validate the response structure. Hugging Face returns an object with a
-      // `text` property on success. If missing, consider it an error.
-      if (!result || typeof result !== 'object' || !result.text) {
-        throw new Error('Hugging Face returned no transcription text');
+      let lastError = null;
+
+      for (const model of models) {
+        try {
+          console.log(`   Trying HF model: ${model}...`);
+          
+          // Retry logic for socket hang ups
+          let retries = 2;
+          let response = null;
+          
+          while (retries > 0) {
+            try {
+              response = await axios.post(
+                `https://api-inference.huggingface.co/models/${model}`,
+                payloadBuffer,
+                {
+                  headers: {
+                    'Content-Type': contentType,
+                    ...(hfToken ? { Authorization: `Bearer ${hfToken}` } : {})
+                  },
+                  timeout: 60000, // 60 seconds for model loading
+                  maxContentLength: Infinity,
+                  maxBodyLength: Infinity
+                }
+              );
+              break; // Success, exit retry loop
+            } catch (retryErr) {
+              retries--;
+              if (retryErr.code === 'ECONNRESET' || retryErr.message.includes('socket hang up')) {
+                if (retries > 0) {
+                  console.warn(`   Socket hang up, retrying... (${retries} left)`);
+                  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                  continue;
+                }
+              }
+              throw retryErr; // Not a retryable error or out of retries
+            }
+          }
+
+          const result = response.data;
+          if (!result || typeof result !== 'object' || !result.text) {
+            throw new Error('Hugging Face returned no transcription text');
+          }
+
+          return {
+            text: result.text || '',
+            confidence: null
+          };
+        } catch (err) {
+          const status = err.response?.status;
+          const statusText = err.response?.statusText || err.message;
+          lastError = new Error(`Hugging Face error (${model}): ${statusText}`);
+
+          // Try next model on common model errors
+          if ([404, 410, 429, 503].includes(status)) {
+            console.warn(`   HF model ${model} unavailable (${status}). Trying next...`);
+            continue;
+          }
+
+          // For other errors, rethrow immediately
+          throw lastError;
+        }
       }
 
-      return {
-        text: result.text || '',
-        confidence: null
-      };
+      throw lastError || new Error('Hugging Face failed for all models');
     } catch (error) {
       // Normalise errors from axios and other sources. Axios errors include
       // `response` with status and data. Expose useful information to callers.
@@ -298,7 +356,9 @@ class FreeNeuralTranscriptionService {
     try {
       const OpenAI = require('openai');
       const client = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
+        apiKey: process.env.OPENAI_API_KEY,
+        timeout: 30000, // 30 second timeout
+        maxRetries: 2  // Retry on failure
       });
 
       console.log('🤖 OpenAI Whisper processing...');
@@ -584,27 +644,32 @@ class FreeNeuralTranscriptionService {
       return audioBuffer;
     }
 
-    let ffmpeg;
-    let ffmpegPath;
+    let ffmpeg, ffmpegPath;
+    
+    // Try to load ffmpeg packages
     try {
       ffmpeg = require('fluent-ffmpeg');
-      ffmpegPath = require('ffmpeg-static');
     } catch (e) {
-      throw new Error('Audio conversion not available - ffmpeg packages not installed. Skipping this provider.');
+      throw new Error('fluent-ffmpeg not installed - skipping audio conversion');
     }
 
-    if (!ffmpegPath) {
+    // Try to load ffmpeg-static for bundled ffmpeg
+    try {
+      ffmpegPath = require('ffmpeg-static');
+      if (ffmpegPath) {
+        ffmpeg.setFfmpegPath(ffmpegPath);
+      }
+    } catch (e) {
+      console.warn('ffmpeg-static not available, trying system ffmpeg...');
       // Try system ffmpeg
       try {
         const { execSync } = require('child_process');
         execSync('ffmpeg -version', { stdio: 'ignore' });
-        // System ffmpeg exists, use it without setting path
-      } catch (e) {
-        throw new Error('ffmpeg not available. Skipping this provider.');
+        console.log('✅ Using system ffmpeg');
+      } catch (sysErr) {
+        throw new Error('ffmpeg not available (neither ffmpeg-static nor system ffmpeg found)');
       }
     }
-
-    ffmpeg.setFfmpegPath(ffmpegPath);
 
     const tempDir = os.tmpdir();
     const inputPath = path.join(tempDir, `audio-input-${Date.now()}.${format}`);
@@ -636,6 +701,40 @@ class FreeNeuralTranscriptionService {
       } catch (cleanupError) {
         console.warn('Failed to cleanup temp audio files:', cleanupError.message);
       }
+    }
+  }
+
+  /**
+   * Helper: Check if ffmpeg is usable without invoking fluent-ffmpeg
+   */
+  canUseFfmpeg() {
+    try {
+      const { execFileSync } = require('child_process');
+      const ffmpegPath = (() => {
+        try {
+          return require('ffmpeg-static');
+        } catch {
+          return 'ffmpeg';
+        }
+      })();
+
+      execFileSync(ffmpegPath, ['-version'], { stdio: 'ignore' });
+      return true;
+    } catch (err) {
+      console.warn(`ffmpeg not usable: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Helper: Check if optional module is available
+   */
+  hasModule(moduleName) {
+    try {
+      require.resolve(moduleName);
+      return true;
+    } catch {
+      return false;
     }
   }
 

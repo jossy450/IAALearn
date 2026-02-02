@@ -9,11 +9,29 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
+    phone_number VARCHAR(20),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP,
     is_active BOOLEAN DEFAULT true
 );
+
+-- Login OTP table
+CREATE TABLE IF NOT EXISTS login_otp (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(6) NOT NULL,
+    delivery_method VARCHAR(10) DEFAULT 'email',
+    is_verified BOOLEAN DEFAULT false,
+    attempts INTEGER DEFAULT 0,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_otp_email ON login_otp(email);
+CREATE INDEX IF NOT EXISTS idx_login_otp_expires ON login_otp(expires_at);
+CREATE INDEX IF NOT EXISTS idx_login_otp_verified ON login_otp(is_verified);
 
 -- Interview Sessions table
 CREATE TABLE IF NOT EXISTS interview_sessions (

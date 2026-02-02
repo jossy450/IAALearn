@@ -142,4 +142,40 @@ router.post('/cache-decision', authenticate, async (req, res, next) => {
   }
 });
 
+// Get perfect answer based on interviewer question + CV + Job Description
+router.post('/get-perfect-answer', authenticate, async (req, res, next) => {
+  try {
+    const { interviewerQuestion, position, company, cv, jobDescription } = req.body;
+    const userId = req.user.id;
+
+    if (!interviewerQuestion) {
+      return res.status(400).json({ error: 'Interviewer question is required' });
+    }
+
+    // Set response headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Generate perfect answer with streaming
+    await smartAI.generatePerfectAnswer(
+      interviewerQuestion,
+      userId,
+      {
+        position,
+        company,
+        cv,
+        jobDescription
+      },
+      (chunk) => {
+        res.write(chunk);
+      }
+    );
+
+    res.end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

@@ -38,6 +38,8 @@ api.interceptors.request.use(
  */
 export const authAPI = {
   login: (data) => api.post("/auth/login", data),
+  requestOtp: (data) => api.post("/auth/request-otp", data),
+  verifyOtp: (data) => api.post("/auth/verify-otp", data),
   register: (data) => api.post("/auth/register", data),
   forgotPassword: (data) => api.post("/auth/forgot-password", data),
   resetPassword: (data) => api.post("/auth/reset-password", data),

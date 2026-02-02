@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const db = require('../database/connection');
+const { authenticate } = require('../middleware/auth');
 
 // Enhanced in-memory store with TTL and cleanup
 class TransferCodeStore {
@@ -74,8 +75,13 @@ class TransferCodeStore {
 
 const transferCodes = new TransferCodeStore();
 
+const getClientBaseUrl = () =>
+  (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+
+const normalizeCode = (code) => (code || '').toString().trim().toUpperCase();
+
 // Generate transfer code for session (optimized)
-router.post('/:sessionId/transfer-code', async (req, res) => {
+router.post('/:sessionId/transfer-code', authenticate, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const userId = req.user?.id;
@@ -99,9 +105,8 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
     // Reuse existing code if found
     if (existingCode) {
       const data = transferCodes.get(existingCode);
-      const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-      const clientUrl = baseUrl.replace(':5173', '');
-      const transferUrl = `${clientUrl}/mobile-transfer?code=${existingCode}`;
+      const baseUrl = getClientBaseUrl();
+      const transferUrl = `${baseUrl}/mobile-transfer?code=${existingCode}`;
       
       console.log(`♻️  Reusing existing code ${existingCode} for session ${sessionId}`);
       
@@ -109,6 +114,7 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
         code: existingCode,
         url: transferUrl,
         expiresIn: Math.floor((data.expiresAt - Date.now()) / 1000),
+        expiresAt: data.expiresAt,
         reused: true
       });
     }
@@ -128,9 +134,8 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
     transferCodes.set(code, transferData);
 
     // Generate transfer URL
-    const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const clientUrl = baseUrl.replace(':5173', '');
-    const transferUrl = `${clientUrl}/mobile-transfer?code=${code}`;
+    const baseUrl = getClientBaseUrl();
+    const transferUrl = `${baseUrl}/mobile-transfer?code=${code}`;
 
     console.log(`🆕 Generated new code ${code} for session ${sessionId} (${transferCodes.size()} active codes)`);
 
@@ -138,6 +143,7 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
       code,
       url: transferUrl,
       expiresIn: 300, // seconds
+      expiresAt: transferData.expiresAt,
       reused: false
     });
   } catch (error) {
@@ -149,7 +155,11 @@ router.post('/:sessionId/transfer-code', async (req, res) => {
 // Check transfer status (optimized with caching headers)
 router.get('/transfer-status/:code', async (req, res) => {
   try {
-    const { code } = req.params;
+    const code = normalizeCode(req.params.code);
+    if (!code) {
+      return res.status(400).json({ error: 'Transfer code required' });
+    }
+
     const transferData = transferCodes.get(code);
 
     if (!transferData) {
@@ -171,6 +181,7 @@ router.get('/transfer-status/:code', async (req, res) => {
       valid: true,
       transferred: transferData.transferred,
       expiresIn: Math.floor((transferData.expiresAt - Date.now()) / 1000),
+      expiresAt: transferData.expiresAt,
       sessionId: transferData.sessionId
     });
   } catch (error) {
@@ -182,7 +193,8 @@ router.get('/transfer-status/:code', async (req, res) => {
 // Connect via transfer code
 router.post('/connect-transfer', async (req, res) => {
   try {
-    const { code } = req.body;
+    const code = normalizeCode(req.body?.code);
+    const deviceInfo = req.body?.deviceInfo || {};
 
     if (!code) {
       return res.status(400).json({ error: 'Transfer code required' });
@@ -208,10 +220,18 @@ router.post('/connect-transfer', async (req, res) => {
     transferCodes.set(code, transferData);
 
     // Log transfer in database
+    const expiresAt = transferData.expiresAt || (Date.now() + (5 * 60 * 1000));
     await db.query(
-      `INSERT INTO session_transfers (session_id, transfer_code, transferred_at)
-       VALUES ($1, $2, NOW())`,
-      [transferData.sessionId, code]
+      `INSERT INTO session_transfers (session_id, transfer_code, transferred_at, device_info, ip_address, user_agent, expires_at, is_active)
+       VALUES ($1, $2, NOW(), $3, $4, $5, to_timestamp($6 / 1000.0), true)`,
+      [
+        transferData.sessionId,
+        code,
+        deviceInfo,
+        req.ip,
+        req.get('user-agent'),
+        expiresAt
+      ]
     );
 
     // Return session info
@@ -226,6 +246,7 @@ router.post('/connect-transfer', async (req, res) => {
     res.json({
       success: true,
       sessionId: transferData.sessionId,
+      expiresAt,
       session: session.rows[0]
     });
 

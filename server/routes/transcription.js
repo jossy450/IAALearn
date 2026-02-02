@@ -78,13 +78,25 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     res.json(result);
   } catch (error) {
     console.error('❌ Transcription error:', error.message);
-    
-    // Send detailed error to client
-    res.status(400).json({
+
+    const status = error.statusCode || 500;
+    const providers = freeNeuralTranscriptionService.getAvailableProviders().map(p => p.name);
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    // Send detailed error to client (include debug info in development)
+    res.status(status).json({
       error: 'Transcription failed',
       message: error.message,
       details: 'Please check:\n- Speak clearly into microphone\n- Record for at least 2-3 seconds\n- Ensure microphone permissions granted\n- Try again with clearer audio',
-      providers: freeNeuralTranscriptionService.getAvailableProviders().map(p => p.name)
+      providers,
+      debug: isDev ? {
+        name: error.name,
+        stack: error.stack,
+        status,
+        format: req.body?.format,
+        mime: req.file?.mimetype,
+        size: req.file?.size
+      } : undefined
     });
   }
 });

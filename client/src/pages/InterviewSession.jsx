@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Zap, Brain, Copy, Save, QrCode, MonitorUp, Clock } from 'lucide-react';
-import { sessionAPI, transcriptionAPI, answerAPI } from '../services/api';
+import { Mic, MicOff, Copy, QrCode, MonitorUp, Loader, Square } from 'lucide-react';
+import { sessionAPI, transcriptionAPI } from '../services/api';
 import QRTransferModal from '../components/QRTransferModal';
 import useStealthStore from '../store/stealthStore';
 import './InterviewSession.css';
@@ -11,31 +11,66 @@ function InterviewSession() {
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState('');
-  const [currentAnswer, setCurrentAnswer] = useState('');
+  const [recordedQuestion, setRecordedQuestion] = useState(''); // Transcribed interviewer's question
+  const [perfectAnswer, setPerfectAnswer] = useState(''); // AI-generated perfect answer
+  const [questionHistory, setQuestionHistory] = useState([]); // History of questions and answers
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(null); // 'recording' | 'transcribing' | 'analyzing' | null
   const [isStreaming, setIsStreaming] = useState(false);
-  const [answerSource, setAnswerSource] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [showQRTransfer, setShowQRTransfer] = useState(false);
+  const [sessionQuestions, setSessionQuestions] = useState([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [screenShareActive, setScreenShareActive] = useState(false);
+  const [showQRTransfer, setShowQRTransfer] = useState(false);
   const [responseTime, setResponseTime] = useState(null);
-  const [performanceWarning, setPerformanceWarning] = useState(false);
+  const [autoListen, setAutoListen] = useState(false); // default manual; user can opt-in to auto listening
+  const [isAnswerHidden, setIsAnswerHidden] = useState(false); // default reveal; user can hide
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const debounceTimerRef = useRef(null);
   const recordingMimeTypeRef = useRef('audio/webm');
+  const conversationEndRef = useRef(null);
+  const speechRecognitionRef = useRef(null);
   const { setScreenRecording } = useStealthStore();
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    if (conversationEndRef.current) {
+      conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [sessionQuestions]);
 
   useEffect(() => {
     loadSession();
   }, [id]);
 
+
+  const showToast = (message, type = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ message, type });
+    toastTimerRef.current = setTimeout(() => setToast(null), 3200);
+  };
+
+  const formatAnswer = useMemo(() => {
+    const escapeHtml = (str = '') =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    return (text = '') => {
+      const safe = escapeHtml(text);
+      // Convert **bold** to <strong> for emphasis
+      return safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    };
+  }, []);
+
   const loadSession = async () => {
     try {
       const response = await sessionAPI.getOne(id);
       setSession(response.data.session);
-      setQuestions(response.data.session.questions || []);
+      setSessionQuestions(response.data.session.questions || []);
     } catch (error) {
       console.error('Failed to load session:', error);
       alert('Session not found');
@@ -55,6 +90,70 @@ function InterviewSession() {
 
   const startRecording = async () => {
     try {
+      // Check if Web Speech API is available
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      if (SpeechRecognition) {
+        // Use Web Speech API to record interviewer's question
+        const recognition = new SpeechRecognition();
+        speechRecognitionRef.current = recognition;
+        recognition.lang = 'en-US';
+        recognition.continuous = false;  // Single question, not continuous
+        recognition.interimResults = true;
+        
+        let finalTranscript = '';
+        
+        recognition.onstart = () => {
+          console.log('🎤 Recording interviewer question...');
+          setIsRecording(true);
+          setLoadingStep('recording');
+          setRecordedQuestion('');
+          setPerfectAnswer('');
+        };
+        
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + ' ';
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          
+          // Show real-time transcription of interviewer's question
+          setRecordedQuestion(finalTranscript + interimTranscript);
+        };
+        
+        recognition.onerror = (event) => {
+          console.error('Web Speech API error:', event.error);
+          setIsRecording(false);
+          setLoadingStep(null);
+          alert('Error recording question. Please try again.');
+        };
+        
+        recognition.onend = () => {
+          console.log('🎤 Question recording ended');
+          setIsRecording(false);
+          
+          if (finalTranscript.trim()) {
+            setRecordedQuestion(finalTranscript.trim());
+            // Auto-analyze the question
+            analyzQuestion(finalTranscript.trim());
+          } else {
+            setLoadingStep(null);
+            alert('No speech detected. Please try again.');
+          }
+        };
+        
+        recognition.start();
+        return;
+      }
+      
+      // Fallback: Use MediaRecorder if Web Speech API not available
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredTypes = [
         'audio/webm;codecs=opus',
@@ -106,42 +205,18 @@ function InterviewSession() {
   };
 
   const stopRecording = () => {
+    // Stop Web Speech API if it's running
+    if (speechRecognitionRef.current) {
+      setIsRecording(false);
+      speechRecognitionRef.current.stop();
+      setLoadingStep(null);
+      return;
+    }
+    
+    // Stop MediaRecorder if it's running
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-    }
-  };
-
-  const transcribeAudio = async (audioBlob, format = 'webm') => {
-    setLoading(true);
-    try {
-      console.log('Transcribing audio blob:', audioBlob.size, 'bytes');
-      
-      const formData = new FormData();
-      formData.append('audio', audioBlob, `recording.${format}`);
-      formData.append('format', format);
-
-      const response = await transcriptionAPI.transcribe(formData);
-      const transcribedText = response.data.text;
-      
-      console.log('Transcription successful:', transcribedText);
-      if (!transcribedText || !transcribedText.trim()) {
-        throw new Error('Transcription returned empty text. Please try again with clearer audio.');
-      }
-      setCurrentQuestion(transcribedText);
-      
-      // Automatically generate answer
-      await generateAnswer(transcribedText);
-    } catch (error) {
-      console.error('Transcription failed:', error);
-      
-      // Show detailed error message
-      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      const providers = error.response?.data?.providers?.join(', ') || 'OpenAI Whisper';
-      
-      alert(`Failed to transcribe audio: ${errorMessage}\n\nAvailable providers: ${providers}\n\nPlease check:\n- Microphone permissions\n- Audio quality (1+ seconds)\n- API keys configured`);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -156,160 +231,113 @@ function InterviewSession() {
     }
   };
 
-  const generateAnswer = useCallback(async (question, useResearch = false) => {
-    // Clear any pending debounce
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
+  const analyzQuestion = async (question) => {
+    if (!question.trim()) {
+      alert('Please record a question first');
+      return;
     }
 
     const startTime = Date.now();
     setLoading(true);
+    setLoadingStep('analyzing');
     setIsStreaming(true);
-    setCurrentAnswer('');
-    setAnswerSource(null);
+    setPerfectAnswer('');
     setResponseTime(null);
-    setPerformanceWarning(false);
 
     try {
-      // Try streaming first for faster perceived response
-      const streamingSupported = !useResearch; // Only fast answers support streaming
+      // Get auth token from persisted auth store
+      const token = getAuthToken();
+      const base = (import.meta.env.VITE_API_URL || window.location.origin || '').replace(/\/$/, '');
+      const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
       
-      if (streamingSupported) {
-        // Server-sent events for streaming
-        const token = getAuthToken();
-        const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
-        const eventSource = new EventSource(
-          `/api/answers-optimized/generate?stream=true&question=${encodeURIComponent(question)}&sessionId=${id}${tokenQuery}`,
-          { withCredentials: true }
-        );
+      // Send question with CV and job description to get perfect answer
+      const contextData = {
+        interviewerQuestion: question,
+        position: session?.position,
+        company: session?.company_name,
+        cv: session?.cv_content || '',
+        jobDescription: session?.job_description || '',
+      };
 
-        let fullAnswer = '';
-
-        eventSource.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'chunk') {
-            fullAnswer += data.content;
-            setCurrentAnswer(fullAnswer);
-          } else if (data.type === 'error') {
-            eventSource.close();
-            setIsStreaming(false);
-            setLoading(false);
-            generateAnswerFallback(question, useResearch, startTime);
-          } else if (data.type === 'complete') {
-            eventSource.close();
-            setIsStreaming(false);
-            setLoading(false);
-            
-            const totalTime = Date.now() - startTime;
-            setResponseTime(totalTime);
-            
-            // Warn if response was slow (> 3 seconds)
-            if (totalTime > 3000) {
-              setPerformanceWarning(true);
-            }
-            
-            setAnswerSource({
-              cached: data.cached || false,
-              source: 'streaming',
-              responseTime: totalTime
-            });
-
-            // Add to questions list
-            setQuestions(prev => [...prev, {
-              question_text: question,
-              answer: fullAnswer,
-              asked_at: new Date().toISOString(),
-              response_time_ms: totalTime
-            }]);
-
-            // Clear current question for next one
-            setTimeout(() => setCurrentQuestion(''), 100);
-          }
-        };
-
-        eventSource.onerror = () => {
-          eventSource.close();
-          setIsStreaming(false);
-          // Fallback to regular API call
-          generateAnswerFallback(question, useResearch, startTime);
-        };
-
-        return;
-      }
-
-      // Non-streaming for research mode
-      await generateAnswerFallback(question, useResearch, startTime);
-      
-    } catch (error) {
-      console.error('Failed to generate answer:', error);
-      alert('Failed to generate answer. Please try again.');
-      setLoading(false);
-      setIsStreaming(false);
-    }
-  }, [id, session]);
-
-  const generateAnswerFallback = async (question, useResearch, startTime) => {
-    try {
-      const response = answerAPI.generateOptimized
-        ? await answerAPI.generateOptimized({
-          question,
-          sessionId: id,
-          research: useResearch,
-          stream: false,
-          context: {
-            position: session?.position,
-            company: session?.company_name,
-            sessionType: session?.session_type
-          }
-        })
-        : await answerAPI.generate({
-        question,
-        sessionId: id,
-        research: useResearch,
-        stream: false,
-        context: {
-          position: session?.position,
-          company: session?.company_name,
-          sessionType: session?.session_type
+      // Use streaming fetch for the perfect answer
+      const response = await fetch(
+        `${base}/api/smart-ai/get-perfect-answer${tokenQuery}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(contextData),
         }
-      });
+      );
 
-      const totalTime = Date.now() - startTime;
-      
-      setCurrentAnswer(response.data.answer);
-      setResponseTime(totalTime);
-      
-      // Warn if response was slow
-      if (totalTime > 3000) {
-        setPerformanceWarning(true);
+      if (!response.ok) throw new Error('Failed to generate perfect answer');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullAnswer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        fullAnswer += chunk;
+        setPerfectAnswer(fullAnswer);
+      }
+
+      const endTime = Date.now();
+      setResponseTime(endTime - startTime);
+      if (fullAnswer.trim()) {
+        showToast('Perfect answer ready', 'success');
       }
       
-      setAnswerSource({
-        cached: response.data.cached,
-        source: response.data.source,
-        responseTime: totalTime
-      });
-
-      // Add to questions list
-      setQuestions(prev => [...prev, {
-        question_text: question,
-        answer: response.data.answer,
-        asked_at: new Date().toISOString(),
-        response_time_ms: totalTime
+      // Add to history
+      setQuestionHistory(prev => [...prev, {
+        question: question,
+        perfectAnswer: fullAnswer,
+        timestamp: new Date().toISOString()
       }]);
-
-      // Clear current question for next one
-      setTimeout(() => setCurrentQuestion(''), 100);
+    } catch (error) {
+      console.error('Error generating perfect answer:', error);
+      showToast('Error generating perfect answer. Please try again.', 'error');
     } finally {
       setLoading(false);
+      setLoadingStep(null);
       setIsStreaming(false);
     }
   };
 
-  const copyAnswer = () => {
-    navigator.clipboard.writeText(currentAnswer);
-    alert('Answer copied to clipboard!');
+  const transcribeAudio = async (audioBlob, format = 'webm') => {
+    setLoading(true);
+    setLoadingStep('transcribing');
+    try {
+      console.log('Transcribing interviewer question audio blob:', audioBlob.size, 'bytes');
+
+      const formData = new FormData();
+      formData.append('audio', audioBlob, `question.${format}`);
+      formData.append('format', format);
+
+      const response = await transcriptionAPI.transcribe(formData);
+      const transcribedText = response.data.text;
+
+      console.log('Transcription successful:', transcribedText);
+      if (!transcribedText || !transcribedText.trim()) {
+        throw new Error('Transcription returned empty text. Please try again with clearer audio.');
+      }
+
+      const cleaned = transcribedText.trim();
+      setRecordedQuestion(cleaned);
+      // Automatically ask AI for perfect answer based on the transcribed question
+      await analyzQuestion(cleaned);
+
+      setLoadingStep(null);
+    } catch (error) {
+      console.error('Transcription failed:', error);
+      setLoadingStep(null);
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      showToast(`Transcription failed: ${errorMessage}`, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const checkScreenShare = async () => {
@@ -368,6 +396,13 @@ function InterviewSession() {
 
   return (
     <div className="interview-session">
+      {toast && (
+        <div className="toast-container">
+          <div className={`toast toast-${toast.type}`}>
+            {toast.message}
+          </div>
+        </div>
+      )}
       <QRTransferModal 
         isOpen={showQRTransfer}
         onClose={() => setShowQRTransfer(false)}
@@ -380,7 +415,7 @@ function InterviewSession() {
           <div className="session-meta">
             {session.company_name && <span>{session.company_name}</span>}
             {session.position && <span>• {session.position}</span>}
-            <span>• {questions.length} questions</span>
+            <span>• Question {currentQuestionIndex + 1} of {sessionQuestions.length}</span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -407,108 +442,154 @@ function InterviewSession() {
       </div>
 
       <div className="session-content">
-        {/* Recording Control */}
-        <div className="card recording-card">
-          <h2>Ask a Question</h2>
-          <div className="recording-controls">
-            <button
-              className={`record-btn ${isRecording ? 'recording' : ''}`}
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={loading}
-            >
-              {isRecording ? <MicOff size={32} /> : <Mic size={32} />}
-            </button>
-            <div className="recording-status">
-              {isRecording && <span className="recording-indicator">Recording...</span>}
-              {loading && <span>Processing...</span>}
-              {!isRecording && !loading && <span>Click to record your question</span>}
-            </div>
-          </div>
-
-          {currentQuestion && (
-            <div className="current-question">
-              <h3>Question:</h3>
-              <p>{currentQuestion}</p>
-              <div className="answer-actions">
-                <button
-                  className="btn btn-primary"
-                  onClick={() => generateAnswer(currentQuestion, false)}
+        {/* Interview Question Recording View - Record interviewer question, get perfect answer */}
+        <div className="interview-coaching-view">
+          {/* Recording Status */}
+          {!recordedQuestion && !perfectAnswer && (
+            <div className="recording-status-card">
+              <div className="status-content">
+                <h2>Interview Coaching Assistant</h2>
+                <p>Click the mic button to record what the interviewer is asking, then get the perfect answer.</p>
+                <button 
+                  className={`record-btn ${isRecording ? 'recording' : ''}`}
+                  onClick={isRecording ? stopRecording : startRecording}
                   disabled={loading}
+                  title="Click to record interviewer question"
                 >
-                  <Zap size={18} />
-                  Fast Answer
+                  {isRecording ? <MicOff size={48} /> : <Mic size={48} />}
                 </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => generateAnswer(currentQuestion, true)}
-                  disabled={loading}
-                >
-                  <Brain size={18} />
-                  Research Answer
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Answer Display */}
-        {currentAnswer && (
-          <div className="card answer-card fade-in">
-            <div className="answer-header">
-              <h3>Suggested Answer</h3>
-              <div className="answer-meta">
-                {isStreaming && (
-                  <span className="badge badge-streaming">⚡ Streaming...</span>
-                )}
-                {answerSource?.cached && (
-                  <span className="badge badge-success">✓ Cached</span>
-                )}
-                {answerSource?.source && (
-                  <span className="badge badge-info">{answerSource.source}</span>
-                )}
-                {responseTime && (
-                  <span className={`badge ${responseTime < 1000 ? 'badge-success' : responseTime < 2000 ? 'badge-warning' : 'badge-danger'}`}>
-                    <Clock size={14} />
-                    {responseTime}ms
-                  </span>
-                )}
-              </div>
-            </div>
-            {performanceWarning && responseTime > 3000 && (
-              <div className="performance-warning">
-                ⚠️ Slow response detected ({responseTime}ms). Consider using mobile transfer for stealth mode.
-              </div>
-            )}
-            <div className="answer-text">{currentAnswer}</div>
-            <button className="btn btn-secondary" onClick={copyAnswer}>
-              <Copy size={18} />
-              Copy Answer
-            </button>
-          </div>
-        )}
-
-        {/* Questions History */}
-        <div className="card">
-          <h2>Question History</h2>
-          {questions.length === 0 ? (
-            <p className="empty-state">No questions yet</p>
-          ) : (
-            <div className="questions-history">
-              {questions.slice().reverse().map((q, idx) => (
-                <div key={idx} className="history-item">
-                  <div className="history-question">
-                    <strong>Q:</strong> {q.question_text}
-                  </div>
-                  {q.answer && (
-                    <div className="history-answer">
-                      <strong>A:</strong> {q.answer}
+                <div className="status-text">
+                  {isRecording && (
+                    <div className="recording-indicator">
+                      <div className="pulse-ring"></div>
+                      <span>🎤 Recording... Listening to interviewer question</span>
+                    </div>
+                  )}
+                  {!isRecording && !loading && <span>Ready to record</span>}
+                  {loading && (
+                    <div className="loading-indicator">
+                      <Loader className="spinner" size={24} />
+                      <span>
+                        {loadingStep === 'recording' && 'Recording question...'}
+                        {loadingStep === 'analyzing' && 'Analyzing question and generating perfect answer...'}
+                      </span>
                     </div>
                   )}
                 </div>
-              ))}
+
+                <div className="record-control-buttons">
+                  <button
+                    className="btn btn-primary"
+                    onClick={startRecording}
+                    disabled={isRecording || loading}
+                    title="Start recording interviewer question"
+                  >
+                    <Mic size={18} />
+                    <span className="ml-2">Start Recording</span>
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={stopRecording}
+                    disabled={!isRecording || loading}
+                    title="Manually stop when the question ends"
+                  >
+                    <Square size={18} />
+                    <span className="ml-2">Stop Recording</span>
+                  </button>
+                  <label className="flex items-center gap-2 text-sm text-gray-800 bg-white bg-opacity-40 px-3 py-2 rounded-md border border-white/40">
+                    <input
+                      type="checkbox"
+                      checked={autoListen}
+                      onChange={(e) => setAutoListen(e.target.checked)}
+                    />
+                    <span>Auto-listen (speech-to-text)</span>
+                  </label>
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Recorded Question Display */}
+          {recordedQuestion && (
+            <div className="question-display-card">
+              <div className="question-header">
+                <h3>Interviewer's Question</h3>
+                {isRecording && <span className="recording-badge">Still recording...</span>}
+              </div>
+              <div className="question-box">
+                <p>{recordedQuestion}</p>
+              </div>
+              {!isRecording && (
+                <div className="question-controls">
+                  <button 
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setRecordedQuestion('');
+                      setPerfectAnswer('');
+                    }}
+                  >
+                    Re-record Question
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Perfect Answer Display */}
+          {perfectAnswer && (
+            <div className="perfect-answer-card">
+              <div className="answer-header">
+                <h3>✨ Perfect Answer</h3>
+                <span className="answer-badge">Based on: {session.company_name} + Your CV & Job Description</span>
+              </div>
+              {loading && loadingStep === 'analyzing' && (
+                <div className="loading-indicator">
+                  <Loader className="spinner" size={24} />
+                  <span>Generating perfect answer...</span>
+                </div>
+              )}
+              <div className={`answer-box ${isAnswerHidden ? 'answer-hidden' : ''}`}>
+                {!isAnswerHidden && (
+                  <>
+                    <div
+                      className="answer-text"
+                      dangerouslySetInnerHTML={{ __html: formatAnswer(perfectAnswer) }}
+                    />
+                    {isStreaming && <span className="streaming-cursor">▌</span>}
+                  </>
+                )}
+              </div>
+              <div className="answer-controls">
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => setIsAnswerHidden((prev) => !prev)}
+                >
+                  {isAnswerHidden ? 'Reveal Answer' : 'Hide Answer'}
+                </button>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => navigator.clipboard.writeText(perfectAnswer)}
+                  disabled={isAnswerHidden}
+                >
+                  <Copy size={20} />
+                  Copy Answer
+                </button>
+                <button 
+                  className="btn btn-success"
+                  onClick={() => {
+                    setRecordedQuestion('');
+                    setPerfectAnswer('');
+                  }}
+                >
+                  Record Next Question
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
+
+        {/* End session-content */}
       </div>
     </div>
   );
