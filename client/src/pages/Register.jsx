@@ -90,9 +90,10 @@ function Register() {
       <div className="auth-card register-card">
         <div className="auth-header">
           <div className="auth-logo">
-            <User size={40} />
+            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '70px', height: '70px'}} />
           </div>
-          <h1 className="auth-title">Interview Answer Assistant</h1>
+          <h1 className="auth-title">Mightysky</h1>
+          <p className="auth-tagline">Interview Answer Assistant</p>
           <h2 className="auth-subtitle">Create Your Account</h2>
         </div>
 

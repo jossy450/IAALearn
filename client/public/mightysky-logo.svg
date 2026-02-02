@@ -1,0 +1,31 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#00D9FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00FF88;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0044CC;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer curved shape left -->
+  <path d="M 60 60 Q 80 40 100 60 L 100 320 Q 80 340 60 320 Z" fill="url(#blueGradient)" opacity="0.9"/>
+  
+  <!-- Outer curved shape right -->
+  <path d="M 340 60 Q 320 40 300 60 L 300 320 Q 320 340 340 320 Z" fill="url(#blueGradient)" opacity="0.9"/>
+  
+  <!-- Top wave -->
+  <path d="M 100 80 Q 150 40 200 60 Q 250 40 300 80 L 280 100 Q 230 70 200 90 Q 170 70 120 100 Z" fill="url(#skyGradient)"/>
+  
+  <!-- Middle swoosh left -->
+  <path d="M 140 160 Q 160 140 180 160 L 180 240 Q 160 250 140 240 Z" fill="url(#skyGradient)" opacity="0.85"/>
+  
+  <!-- Middle swoosh right -->
+  <path d="M 220 160 Q 240 140 260 160 L 260 240 Q 240 250 220 240 Z" fill="url(#skyGradient)" opacity="0.85"/>
+  
+  <!-- Center accent stripe -->
+  <path d="M 190 140 Q 200 130 210 140 L 220 280 Q 200 295 180 280 Z" fill="url(#skyGradient)"/>
+</svg>

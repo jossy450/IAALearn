@@ -1,8 +1,8 @@
 {
-  "name": "Interview Answer Assistant",
-  "short_name": "IAA",
-  "description": "AI-powered interview assistance with real-time transcription and answer generation",
-  "theme_color": "#3b82f6",
+  "name": "Mightysky - Interview Answer Assistant",
+  "short_name": "Mightysky",
+  "description": "Mightysky Technologies - AI-powered interview assistance with real-time transcription and answer generation",
+  "theme_color": "#0066FF",
   "background_color": "#ffffff",
   "display": "standalone",
   "start_url": "/",

@@ -69,8 +69,8 @@ function AdminDashboard() {
       <aside className={`admin-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="admin-header">
           <div className="admin-logo">
-            <BarChart3 size={28} />
-            <span>Admin</span>
+            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '32px', height: '32px', marginRight: '8px'}} />
+            <span>Mightysky Admin</span>
           </div>
           <button
             className="sidebar-toggle"

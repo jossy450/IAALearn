@@ -194,9 +194,10 @@ function Login() {
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-logo">
-            <Lock size={40} />
+            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '70px', height: '70px'}} />
           </div>
-          <h1 className="auth-title">Interview Answer Assistant</h1>
+          <h1 className="auth-title">Mightysky</h1>
+          <p className="auth-tagline">Interview Answer Assistant</p>
           <h2 className="auth-subtitle">Welcome Back</h2>
         </div>
 

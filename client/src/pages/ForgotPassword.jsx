@@ -63,9 +63,10 @@ function ForgotPassword() {
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-logo">
-            <Mail size={40} />
+            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '70px', height: '70px'}} />
           </div>
-          <h1 className="auth-title">Reset Your Password</h1>
+          <h1 className="auth-title">Mightysky</h1>
+          <p className="auth-tagline">Interview Answer Assistant</p>
           <p className="auth-subtitle">
             Enter your email and we'll send you instructions to reset your password
           </p>

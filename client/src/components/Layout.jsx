@@ -61,7 +61,8 @@ function Layout() {
     <div className={`layout ${disguiseMode ? 'disguise-mode' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h1>{disguiseMode ? 'Productivity' : 'Interview Assistant'}</h1>
+          <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '32px', height: '32px', marginRight: '8px'}} />
+          <h1>{disguiseMode ? 'Productivity' : 'Mightysky'}</h1>
         </div>
 
         <nav className="sidebar-nav">

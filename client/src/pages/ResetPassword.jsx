@@ -113,11 +113,14 @@ function ResetPassword() {
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-logo">
-            <Lock size={40} />
+            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '70px', height: '70px'}} />
           </div>
-          <h1 className="auth-title">Create New Password</h1>
+          <h1 className="auth-title">Mightysky</h1>
+          <p className="auth-tagline">Interview Answer Assistant</p>
           <p className="auth-subtitle">
             Enter a strong password for your account
+          </p>
+        </div>
           </p>
         </div>
 
