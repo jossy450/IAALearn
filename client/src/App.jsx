@@ -11,6 +11,7 @@ import OAuthCallback from './pages/OAuthCallback';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import InterviewSession from './pages/InterviewSession';
+import MobileInterviewSession from './pages/MobileInterviewSession';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Mobile from './pages/Mobile';
@@ -91,6 +92,7 @@ function App() {
         <Route path="/decoy/:type" element={<DecoyScreen />} />
         <Route path="/mobile-transfer" element={<MobileScanner />} />
         <Route path="/mobile-session/:sessionId" element={<MobileSession />} />
+        <Route path="/mobile/:sessionId" element={<MobileInterviewSession />} />
         <Route path="/admin" element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />
         
         <Route path="/" element={token ? <Layout /> : <Navigate to="/login" />}>
