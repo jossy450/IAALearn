@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Mic, MicOff, Copy, QrCode, MonitorUp, Loader, Square } from 'lucide-react';
 import { sessionAPI, transcriptionAPI } from '../services/api';
 import QRTransferModal from '../components/QRTransferModal';
+import FloatingAnswer from '../components/FloatingAnswer';
 import useStealthStore from '../store/stealthStore';
 import './InterviewSession.css';
 
@@ -24,13 +25,14 @@ function InterviewSession() {
   const [responseTime, setResponseTime] = useState(null);
   const [autoListen, setAutoListen] = useState(false); // default manual; user can opt-in to auto listening
   const [isAnswerHidden, setIsAnswerHidden] = useState(false); // default reveal; user can hide
+  const [showFloatingAnswer, setShowFloatingAnswer] = useState(false); // floating answer visibility
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const debounceTimerRef = useRef(null);
   const recordingMimeTypeRef = useRef('audio/webm');
   const conversationEndRef = useRef(null);
   const speechRecognitionRef = useRef(null);
-  const { setScreenRecording } = useStealthStore();
+  const { setScreenRecording, stealthMode } = useStealthStore();
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
 
@@ -282,6 +284,11 @@ function InterviewSession() {
         const chunk = decoder.decode(value);
         fullAnswer += chunk;
         setPerfectAnswer(fullAnswer);
+        
+        // Show floating answer in stealth mode
+        if (stealthMode && !showFloatingAnswer) {
+          setShowFloatingAnswer(true);
+        }
       }
 
       const endTime = Date.now();
@@ -591,6 +598,17 @@ function InterviewSession() {
 
         {/* End session-content */}
       </div>
+
+      {/* Floating Answer for Stealth Mode */}
+      {stealthMode && (
+        <FloatingAnswer 
+          answer={perfectAnswer}
+          isVisible={showFloatingAnswer}
+          onClose={() => setShowFloatingAnswer(false)}
+          isStreaming={isStreaming}
+          formatAnswer={formatAnswer}
+        />
+      )}
     </div>
   );
 }
