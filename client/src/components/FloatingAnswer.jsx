@@ -11,8 +11,17 @@ const FloatingAnswer = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const [position, setPosition] = useState({ x: 20, y: 20 });
-  const [size, setSize] = useState({ width: 400, height: 250 });
+  const [position, setPosition] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const defaultWidth = 420;
+      return {
+        x: Math.max(8, (window.innerWidth - defaultWidth) / 2),
+        y: 8,  // Very top, near camera position
+      };
+    }
+    return { x: 20, y: 8 };
+  });
+  const [size, setSize] = useState({ width: 480, height: 300 });
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
@@ -36,8 +45,8 @@ const FloatingAnswer = ({
       });
     }
     if (isResizing) {
-      const minWidth = 300;
-      const minHeight = 150;
+      const minWidth = 320;
+      const minHeight = 140;
       const rect = containerRef.current.getBoundingClientRect();
       
       setSize({

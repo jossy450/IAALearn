@@ -1,14 +1,14 @@
 :root {
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --primary-light: #e0e7ff;
+  --primary: #1fb6ff;
+  --primary-dark: #0f8ac7;
+  --primary-light: #6fd6ff;
   --gray-50: #f9fafb;
   --gray-100: #f3f4f6;
   --gray-200: #e5e7eb;
   --gray-600: #4b5563;
   --gray-800: #1f2937;
   --gray-900: #111827;
-  --success: #10b981;
+  --success: #16a34a;
   --danger: #ef4444;
 }
 
@@ -16,7 +16,8 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
-  background: #ffffff;
+  background: linear-gradient(135deg, #0a0f1a 0%, #0d1420 100%);
+  color: #e5e7eb;
 }
 
 .session-header {
@@ -24,24 +25,26 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f0f1f3 100%);
-  border-radius: 12px;
-  border-bottom: 3px solid #2563eb;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(31, 182, 255, 0.04) 100%);
+  border-radius: 14px;
+  border: 1.5px solid rgba(31, 182, 255, 0.25);
+  box-shadow: 0 8px 32px rgba(31, 182, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
 }
 
 .session-header h1 {
   font-size: 1.75rem;
-  font-weight: 700;
-  color: #111827;
+  font-weight: 800;
+  color: #ffffff;
   margin-bottom: 0.5rem;
+  letter-spacing: -0.5px;
 }
 
 .session-meta {
   font-size: 0.875rem;
-  color: #6b7280;
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 600;
 }
 
 .session-meta span {
@@ -70,9 +73,10 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: white;
-  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+  background: linear-gradient(135deg, #1fb6ff 0%, #6fd6ff 100%);
+  color: #04101e;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(31, 182, 255, 0.35);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -190,23 +194,28 @@
 }
 
 .recording-status-card {
-  background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%);
-  color: #1e40af;
-  padding: 2rem;
-  border-radius: 12px;
-  border: 2px solid #2563eb;
+  background: linear-gradient(135deg, rgba(31, 182, 255, 0.12) 0%, rgba(74, 221, 255, 0.08) 100%);
+  color: #e0f2fe;
+  padding: 2.5rem;
+  border-radius: 16px;
+  border: 1.5px solid rgba(31, 182, 255, 0.3);
   text-align: center;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgba(31, 182, 255, 0.15);
 }
 
 .recording-status-card h2 {
-  color: #1e40af;
+  color: #ffffff;
   margin-bottom: 1rem;
-  font-size: 1.25rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.3px;
 }
 
 .recording-status-card p {
-  color: #3b82f6;
+  color: #a0d8ff;
   margin-bottom: 1.5rem;
+  font-weight: 600;
 }
 
 .status-content {
@@ -225,15 +234,16 @@
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: rgba(37, 99, 235, 0.2);
-  border: 4px solid #2563eb;
-  color: #2563eb;
+  background: linear-gradient(135deg, rgba(31, 182, 255, 0.25) 0%, rgba(74, 221, 255, 0.15) 100%);
+  border: 3px solid #1fb6ff;
+  color: #ffffff;
   font-size: 2.5rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
+  box-shadow: 0 0 24px rgba(31, 182, 255, 0.3);
 }
 
 .record-btn:hover:not(:disabled) {
@@ -282,11 +292,12 @@
 }
 
 .question-display-card {
-  background: white;
-  border: 2px solid #dbeafe;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%);
+  border: 1.5px solid rgba(59, 130, 246, 0.25);
   padding: 1.5rem;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
 }
 
 .question-header {
@@ -297,9 +308,10 @@
 }
 
 .question-header h3 {
-  color: #1e40af;
+  color: #a0d8ff;
   margin: 0;
   font-size: 1.1rem;
+  font-weight: 800;
 }
 
 .recording-badge {
@@ -328,11 +340,12 @@
 }
 
 .perfect-answer-card {
-  background: white;
-  border: 2px solid #bbf7d0;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.05) 100%);
+  border: 1.5px solid rgba(16, 185, 129, 0.25);
   padding: 2rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.12);
+  backdrop-filter: blur(12px);
 }
 
 .perfect-answer-card .answer-header {
@@ -344,30 +357,31 @@
 }
 
 .perfect-answer-card .answer-header h3 {
-  color: #047857;
+  color: #86efac;
   margin: 0;
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .answer-badge {
-  background: #d1fae5;
-  color: #065f46;
+  background: rgba(16, 185, 129, 0.2);
+  color: #86efac;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.85rem;
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: 700;
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .answer-box {
-  background: #f0fdf4;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%);
   padding: 1.5rem;
-  border-radius: 8px;
-  border-left: 4px solid #10b981;
+  border-radius: 10px;
+  border-left: 4px solid #16a34a;
   line-height: 1.8;
   font-size: 1rem;
-  color: #1f2937;
+  color: #e0f2fe;
   margin-bottom: 1.5rem;
   position: relative;
   overflow: hidden;
@@ -426,18 +440,20 @@
 }
 
 .history-card {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 2rem;
   border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(10px);
 }
 
 .history-card h3 {
-  color: #111827;
+  color: #ffffff;
   margin-top: 0;
   margin-bottom: 1.5rem;
   font-size: 1.1rem;
+  font-weight: 800;
 }
 
 .history-list {
@@ -447,10 +463,11 @@
 }
 
 .history-item {
-  background: #f9fafb;
+  background: rgba(255, 255, 255, 0.04);
   padding: 1.5rem;
-  border-radius: 8px;
-  border-left: 4px solid #2563eb;
+  border-radius: 10px;
+  border-left: 4px solid #1fb6ff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .history-section {
@@ -458,13 +475,14 @@
 }
 
 .history-section strong {
-  color: #374151;
+  color: #a0d8ff;
   display: block;
   margin-bottom: 0.5rem;
+  font-weight: 700;
 }
 
 .history-section p {
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.7);
   margin: 0;
   line-height: 1.6;
 }

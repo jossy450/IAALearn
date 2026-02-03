@@ -72,7 +72,7 @@ function App() {
         alignItems: 'center', 
         justifyContent: 'center', 
         minHeight: '100vh',
-        backgroundColor: '#f3f4f6'
+        background: 'radial-gradient(circle at 20% 20%, rgba(31,182,255,0.16), transparent 35%), linear-gradient(145deg, #05080f, #0b1220)'
       }}>
         <div className="spinner"></div>
       </div>

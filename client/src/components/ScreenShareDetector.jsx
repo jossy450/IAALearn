@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, Smartphone, Eye, Monitor } from 'lucide-react';
 import '../styles/ScreenShareDetector.css';
 
 function ScreenShareDetector({ isScreenShareDetected, onScreenShareDetected, onMobileRequired }) {
   const [showWarning, setShowWarning] = useState(false);
   const [meetingAppDetected, setMeetingAppDetected] = useState(null);
-  const detectionIntervalRef = useRef(null);
-  const screenStreamRef = useRef(null);
 
   // Detect meeting app from various sources
   const detectMeetingApp = () => {
@@ -33,145 +31,28 @@ function ScreenShareDetector({ isScreenShareDetected, onScreenShareDetected, onM
     return null;
   };
 
-  // Advanced screen share detection
-  const detectScreenSharing = async () => {
-    try {
-      // Method 1: Try to request display media (only works if screen is already being shared)
-      if (navigator.mediaDevices?.getDisplayMedia) {
-        // Check if user has active screen share by attempting to list display media
-        const displayMediaOptions = {
-          video: {
-            cursor: 'always',
-            displaySurface: 'monitor'
-          },
-          audio: false
-        };
-
-        // Try to get display media
-        const stream = await Promise.race([
-          navigator.mediaDevices.getDisplayMedia(displayMediaOptions),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('timeout')), 100)
-          )
-        ]);
-
-        // If successful, screen share is active
-        if (stream && stream.active) {
-          // Store reference to stop it
-          screenStreamRef.current = stream;
-          
-          // Stop all tracks immediately
-          stream.getTracks().forEach(track => track.stop());
-          
-          return true;
-        }
-      }
-    } catch (error) {
-      // Expected: User denied permission or timeout
-      // This means no screen sharing was active
-    }
-
-    return false;
-  };
-
-  // Alternative detection: Monitor document visibility and focus changes
-  // Screen share in meeting apps often causes visibility changes
-  const monitorSessionActivity = () => {
-    let focusLostCount = 0;
-    let lastFocusTime = Date.now();
-
-    const handleFocus = () => {
-      const timeSinceLastFocus = Date.now() - lastFocusTime;
-      
-      // If tab regained focus after < 100ms, likely screen sharing in another tab
-      if (timeSinceLastFocus < 100) {
-        focusLostCount++;
-      } else {
-        focusLostCount = Math.max(0, focusLostCount - 1);
-      }
-
-      lastFocusTime = Date.now();
-    };
-
-    const handleBlur = () => {
-      // Tab lost focus - could indicate meeting app is active
-    };
-
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-    };
-  };
-
   useEffect(() => {
     // Detect if we're in a meeting app
     const detectedApp = detectMeetingApp();
     setMeetingAppDetected(detectedApp);
-
-    // Only run screen share detection if in stealth mode
-    if (!isScreenShareDetected) {
-      const detectAndMonitor = async () => {
-        const isSharing = await detectScreenSharing();
-        
-        if (isSharing) {
-          onScreenShareDetected(true);
-          setShowWarning(true);
-        }
-      };
-
-      // Initial detection
-      detectAndMonitor();
-
-      // Periodic detection every 3 seconds
-      detectionIntervalRef.current = setInterval(detectAndMonitor, 3000);
-
-      // Monitor visibility changes
-      const handleVisibilityChange = () => {
-        if (!document.hidden) {
-          detectAndMonitor();
-        }
-      };
-
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-
-      return () => {
-        clearInterval(detectionIntervalRef.current);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        monitorSessionActivity();
-        
-        // Cleanup screen stream if any
-        if (screenStreamRef.current) {
-          screenStreamRef.current.getTracks().forEach(track => track.stop());
-        }
-      };
+    
+    // If we detect a meeting app and haven't already shown a warning,
+    // show a one-time advisory without triggering any browser prompts.
+    if (detectedApp && !isScreenShareDetected) {
+      setShowWarning(true);
+      onScreenShareDetected(true);
     }
 
-    return () => {
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-      }
-    };
+    // No advanced polling or media API calls here to avoid
+    // repeatedly opening the browser's screen-share dialog.
   }, [isScreenShareDetected, onScreenShareDetected]);
 
   const handleSwitchToMobile = () => {
-    // Stop any active screen streams
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-    
     onMobileRequired();
     setShowWarning(false);
   };
 
   const handleStoppedSharing = () => {
-    // Stop any active screen streams
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-    
     setShowWarning(false);
     onScreenShareDetected(false);
   };
