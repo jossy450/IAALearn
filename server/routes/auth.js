@@ -62,19 +62,30 @@ const getClientUrl = (req) => {
     process.env.SERVER_URL ||
     process.env.PUBLIC_SERVER_URL;
 
+  const runningInFly = !!process.env.FLY_APP_NAME;
+
   if (envUrl) {
     const normalized = envUrl.replace(/\/$/, '');
-    if (
-      req &&
-      process.env.NODE_ENV === 'production' &&
-      /localhost|127\.0\.0\.1/.test(normalized)
-    ) {
+    const isLocal = /localhost|127\.0\.0\.1/.test(normalized);
+
+    // On Fly/production, never send users back to localhost; prefer Fly hostname
+    if (req && (process.env.NODE_ENV === 'production' || runningInFly) && isLocal) {
+      if (runningInFly) {
+        return `https://${process.env.FLY_APP_NAME}.fly.dev`;
+      }
       return getPublicServerUrl(req);
     }
     return normalized;
   }
 
-  return req ? getPublicServerUrl(req) : 'http://localhost:5173';
+  // Fallbacks when nothing is configured
+  if (runningInFly) {
+    return `https://${process.env.FLY_APP_NAME}.fly.dev`;
+  }
+  if (req) {
+    return getPublicServerUrl(req);
+  }
+  return 'http://localhost:5173';
 };
 
 // Helper: Sanitize user response (remove sensitive fields)
@@ -88,6 +99,19 @@ const demoUsers = new Map();
 // In-memory password reset tokens for demo mode
 const resetTokens = new Map();
 const isDemoMode = process.env.DEMO_MODE === 'true';
+
+// Pre-seed demo user for OTP testing
+if (isDemoMode) {
+  const demoUser = {
+    id: 'demo-user-1',
+    email: 'demo@example.com',
+    full_name: 'Demo User',
+    created_at: new Date().toISOString(),
+    password_hash: '$2b$10$' + 'a'.repeat(53) // Dummy hash - OTP doesn't need real password
+  };
+  demoUsers.set('demo@example.com', demoUser);
+  console.log('✅ Demo user pre-seeded: demo@example.com (use for OTP login)');
+}
 
 // Helper function for input validation
 const validateEmail = (email) => {
@@ -484,16 +508,15 @@ router.get('/google', (req, res) => {
     const googleAuthUrl = buildGoogleAuthUrl(req);
     console.log('🔵 Google OAuth redirect:', googleAuthUrl.substring(0, 100) + '...');
     
-    // Aggressive cache prevention
+    // Aggressive cache prevention + explicit redirect
     res.set({
       'Cache-Control': 'no-store, no-cache, no-transform, must-revalidate, private, max-age=0',
       'Pragma': 'no-cache',
       'Expires': '0',
-      'Surrogate-Control': 'no-store',
-      'Location': googleAuthUrl
+      'Surrogate-Control': 'no-store'
     });
-    
-    return res.status(302).send('Redirecting...');
+
+    return res.redirect(302, googleAuthUrl);
   } catch (error) {
     console.error('❌ Google OAuth error:', error);
     return res.status(500).json({ error: 'OAuth initialization failed', message: error.message });

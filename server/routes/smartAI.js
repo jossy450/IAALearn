@@ -142,10 +142,10 @@ router.post('/cache-decision', authenticate, async (req, res, next) => {
   }
 });
 
-// Get perfect answer based on interviewer question + CV + Job Description
+// Get perfect answer based on interviewer question + CV + Job Description + Person Spec + AI Instructions
 router.post('/get-perfect-answer', authenticate, async (req, res, next) => {
   try {
-    const { interviewerQuestion, position, company, cv, jobDescription } = req.body;
+    const { interviewerQuestion, position, company, cv, jobDescription, personSpecification, aiInstructions } = req.body;
     const userId = req.user.id;
 
     if (!interviewerQuestion) {
@@ -165,7 +165,9 @@ router.post('/get-perfect-answer', authenticate, async (req, res, next) => {
         position,
         company,
         cv,
-        jobDescription
+        jobDescription,
+        personSpecification,
+        aiInstructions
       },
       (chunk) => {
         res.write(chunk);

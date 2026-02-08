@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import Layout from './components/Layout';
+import { initializePushNotifications } from './services/pushNotifications';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -39,6 +40,11 @@ function ProtectedRoute({ children }) {
 function App() {
   const { token, user } = useAuthStore();
   const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    // Initialize push notifications on app mount (native platforms only)
+    initializePushNotifications();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

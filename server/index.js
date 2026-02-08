@@ -1,4 +1,8 @@
 require('dotenv').config();
+// Default to production when unset so Fly machines serve the built client
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -24,9 +28,9 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         imgSrc: ["'self'", 'data:', 'https:'],
-        fontSrc: ["'self'"],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
         connectSrc: ["'self'"],
         frameSrc: ["'none'"],
         baseUri: ["'self'"],
@@ -47,20 +51,38 @@ app.use(
 );
 
 // CORS configuration
+const allowedOrigins = [
+  process.env.CLIENT_URL || 'http://localhost:5173',
+  'https://iaalearn-cloud.fly.dev',
+  'capacitor://localhost',
+  'http://localhost',
+  'https://localhost',
+  'https://interviewassistant.app',
+];
+
 const corsOptions = {
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, server-to-server)
+    if (!origin) {
+      console.log('[CORS] Request with no Origin header allowed');
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      console.log(`[CORS] Allowed origin: ${origin}`);
+      return callback(null, true);
+    }
+
+    console.warn(`[CORS] Rejected origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400,
 };
 
-if (process.env.NODE_ENV !== 'production') {
-  app.use(cors(corsOptions));
-} else {
-  // In production, CORS from trusted origin only
-  app.use(cors(corsOptions));
-}
+app.use(cors(corsOptions));
 
 // Force HTTPS in production
 if (process.env.NODE_ENV === 'production') {
@@ -74,8 +96,45 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Request parsing
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  // Capture raw body so we can log/recover from malformed JSON payloads
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Recover from malformed JSON (e.g., urlencoded payloads sent with JSON headers)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.type === 'entity.parse.failed') {
+    const rawBody = req.rawBody || '';
+
+    // Try to salvage simple key/value payloads
+    try {
+      const parsed = Object.fromEntries(new URLSearchParams(rawBody));
+      if (Object.keys(parsed).length > 0) {
+        req.body = parsed;
+        console.warn('[BodyParser] Recovered malformed JSON payload via URLSearchParams', {
+          path: req.path,
+          rawBody: rawBody.slice(0, 200),
+        });
+        return next();
+      }
+    } catch (_) {
+      // fall through to error response
+    }
+
+    console.error('[BodyParser] Invalid JSON payload', {
+      path: req.path,
+      message: err.message,
+      rawBody: rawBody.slice(0, 500),
+    });
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+
+  next(err);
+});
 app.use(compression());
 
 app.set("trust proxy", 1);
@@ -104,37 +163,35 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api', routes);
 
-// Serve static files from React app in production
-if (process.env.NODE_ENV === 'production') {
-  const candidates = [
-    path.join(__dirname, '../client/dist'),
-    path.join(process.cwd(), 'client/dist'),
-    '/opt/render/project/src/client/dist',
-  ];
+// Serve static files from React app whenever a build exists (avoids NODE_ENV drift)
+const clientBuildCandidates = [
+  path.join(__dirname, '../client/dist'),
+  path.join(process.cwd(), 'client/dist'),
+  '/opt/render/project/src/client/dist',
+];
 
-  const clientDistPath = candidates.find(
-    (p) => fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))
-  );
+const clientDistPath = clientBuildCandidates.find(
+  (p) => fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))
+);
 
-  if (!clientDistPath) {
-    console.error('❌ Client build not found. Expected Vite output at client/dist.');
-    app.get('*', (req, res) => {
-      res.status(500).json({
-        error: 'Client build not found',
-        message:
-          'Build the client during deploy. On Render set Build Command to: npm install && npm install --prefix server && npm install --prefix client && npm run build --prefix client',
-        checkedPaths: candidates,
-      });
+if (!clientDistPath) {
+  console.error('❌ Client build not found. Expected Vite output at client/dist.');
+  app.get('*', (req, res) => {
+    res.status(500).json({
+      error: 'Client build not found',
+      message:
+        'Build the client during deploy. On Render set Build Command to: npm install && npm install --prefix server && npm install --prefix client && npm run build --prefix client',
+      checkedPaths: clientBuildCandidates,
     });
-  } else {
-    console.log('✅ Serving client from:', clientDistPath);
-    app.use(express.static(clientDistPath));
+  });
+} else {
+  console.log('✅ Serving client from:', clientDistPath);
+  app.use(express.static(clientDistPath));
 
-    // React Router fallback
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(clientDistPath, 'index.html'));
-    });
-  }
+  // React Router fallback
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
 }
 
 // Error handling

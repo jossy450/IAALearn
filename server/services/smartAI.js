@@ -432,7 +432,7 @@ Questions covered: ${session.questions?.length || 0}`
     }
   }
 
-  // Generate perfect answer based on interviewer question + CV + Job Description
+  // Generate perfect answer based on interviewer question + CV + Job Description + Person Spec + AI Instructions
   async generatePerfectAnswer(question, userId, context, onChunk) {
     const client = getLLMClient();
     if (!client) {
@@ -440,24 +440,52 @@ Questions covered: ${session.questions?.length || 0}`
     }
 
     try {
-      const { cv = '', jobDescription = '', position = '', company = '' } = context;
+      const { 
+        cv = '', 
+        jobDescription = '', 
+        personSpecification = '',
+        aiInstructions = '',
+        position = '', 
+        company = '' 
+      } = context;
+
+      // Build custom instruction section
+      let instructionSection = '';
+      if (aiInstructions) {
+        instructionSection = `
+
+IMPORTANT - Follow these specific instructions from the candidate:
+${aiInstructions}`;
+      }
+
+      // Build person specification section
+      let personSpecSection = '';
+      if (personSpecification) {
+        personSpecSection = `
+
+Person Specification (required competencies/criteria):
+${personSpecification}`;
+      }
 
       const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, and concise.
 
-    You will consider:
-    1. The candidate's CV/Resume
-    2. The job description
-    3. The company and position
-    4. Best interview practices
+You will consider:
+1. The candidate's CV/Resume
+2. The job description
+3. The person specification (if provided) - match your answer to the required competencies
+4. The company and position
+5. Best interview practices
+6. Any specific instructions from the candidate (e.g., STAR method, answer style)${instructionSection}
 
-    Formatting & style:
-    - Keep it tight (2 short paragraphs max, or bullets if clearer).
-    - Be factual and specific; avoid fluff and hype.
-    - Bold 3-6 key skills/technologies/achievements for quick skimming (use **like this**).
-    - Include 1-2 concrete examples or metrics when possible.
-    - Sound like a confident candidate, not a generic AI.
+Formatting & style:
+- Keep it tight (2 short paragraphs max, or bullets if clearer).
+- Be factual and specific; avoid fluff and hype.
+- Bold 3-6 key skills/technologies/achievements for quick skimming (use **like this**).
+- Include 1-2 concrete examples or metrics when possible.
+- Sound like a confident candidate, not a generic AI.
+- If STAR/STARR method is requested, structure the answer accordingly.
 
-    Answer directly without preamble. Make it actionable for the candidate to speak aloud.`;
+Answer directly without preamble. Make it actionable for the candidate to speak aloud.`;
 
       const userPrompt = `
 Interview Question: "${question}"
@@ -469,7 +497,7 @@ Candidate's CV/Resume:
 ${cv || 'No CV provided'}
 
 Job Description:
-${jobDescription || 'No job description provided'}
+${jobDescription || 'No job description provided'}${personSpecSection}
 
 Provide the perfect answer the candidate should give:`;
 

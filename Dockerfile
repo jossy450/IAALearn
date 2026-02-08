@@ -17,7 +17,11 @@ COPY server/ ./server/
 COPY package*.json ./
 
 # Install production dependencies
-RUN npm install --production
+ENV npm_config_python=/usr/bin/python3
+ENV SKIP_CLIENT_INSTALL=true
+RUN apk add --no-cache python3 make g++ ffmpeg \
+	&& npm install --production \
+	&& apk del python3 make g++
 
 # Copy built client files
 COPY --from=client-builder /app/client/dist ./client/dist

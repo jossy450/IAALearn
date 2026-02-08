@@ -1,14 +1,17 @@
 import axios from "axios";
+import { Capacitor } from "@capacitor/core";
 
-// Prefer same-origin in production (Render) so "/api" hits the same server.
-// If you ever split frontend/backend, set VITE_API_URL to:
-//   https://your-api.onrender.com   (we append /api)
-// or https://your-api.onrender.com/api (used as-is)
-const rawBase = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-const API_BASE_URL = rawBase
-  ? rawBase.endsWith("/api")
-    ? rawBase
-    : `${rawBase}/api`
+// Prefer same-origin in web. For native (Android/iOS), always use an explicit API base
+// so packaged apps do not rely on an unavailable /api relative path.
+const rawBaseEnv = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+const isNative = (Capacitor.isNativePlatform?.() ?? false) || Capacitor.getPlatform() !== "web";
+const fallbackBase = "https://iaalearn-cloud.fly.dev"; // matches .env
+
+const effectiveRoot = rawBaseEnv || (isNative ? fallbackBase : "");
+const API_BASE_URL = effectiveRoot
+  ? effectiveRoot.endsWith("/api")
+    ? effectiveRoot
+    : `${effectiveRoot}/api`
   : "/api";
 
 const api = axios.create({
@@ -62,9 +65,10 @@ export const sessionAPI = {
 export const transcriptionAPI = {
   transcribe: (data) =>
     api.post("/transcription/transcribe", data, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+      // Remove default Content-Type so axios sets multipart/form-data with boundary
+      headers: { "Content-Type": undefined },
+      // Ensure axios handles FormData properly
+      transformRequest: [(d) => d],
     }),
 };
 
@@ -102,20 +106,20 @@ export const documentsAPI = {
   uploadCV: (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post("/documents/upload/cv", formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+    // Let axios auto-set Content-Type with proper boundary
+    return api.post("/documents/upload/cv", formData);
   },
   uploadJobDescription: (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post("/documents/upload/job_description", formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+    // Let axios auto-set Content-Type with proper boundary
+    return api.post("/documents/upload/job_description", formData);
+  },
+  uploadPersonSpec: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    // Let axios auto-set Content-Type with proper boundary
+    return api.post("/documents/upload/person_specification", formData);
   },
   getUserDocuments: () => api.get("/documents"),
   deleteDocument: (id) => api.delete(`/documents/${id}`),

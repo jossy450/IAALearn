@@ -16,8 +16,8 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
-  background: linear-gradient(135deg, #0a0f1a 0%, #0d1420 100%);
-  color: #e5e7eb;
+  background: #ffffff;
+  color: #0f172a;
 }
 
 .session-header {
@@ -26,24 +26,23 @@
   align-items: center;
   margin-bottom: 2rem;
   padding: 1.5rem 2rem;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(31, 182, 255, 0.04) 100%);
+  background: #f8fafc;
   border-radius: 14px;
-  border: 1.5px solid rgba(31, 182, 255, 0.25);
-  box-shadow: 0 8px 32px rgba(31, 182, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(12px);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .session-header h1 {
   font-size: 1.75rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f172a;
   margin-bottom: 0.5rem;
   letter-spacing: -0.5px;
 }
 
 .session-meta {
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.65);
+  color: #475569;
   font-weight: 600;
 }
 
@@ -205,7 +204,7 @@
 }
 
 .recording-status-card h2 {
-  color: #ffffff;
+  color: #0284c7;
   margin-bottom: 1rem;
   font-size: 1.35rem;
   font-weight: 800;
@@ -213,7 +212,7 @@
 }
 
 .recording-status-card p {
-  color: #a0d8ff;
+  color: #0369a1;
   margin-bottom: 1.5rem;
   font-weight: 600;
 }
@@ -254,8 +253,9 @@
 
 .record-btn.recording {
   animation: pulse 1.5s infinite;
-  background: rgba(239, 68, 68, 0.3);
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: #ffffff;
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.8), 0 0 60px rgba(239, 68, 68, 0.4);
 }
 
 @keyframes pulse {
@@ -308,7 +308,7 @@
 }
 
 .question-header h3 {
-  color: #a0d8ff;
+  color: #0369a1;
   margin: 0;
   font-size: 1.1rem;
   font-weight: 800;
@@ -330,7 +330,7 @@
   border-left: 4px solid #0284c7;
   line-height: 1.8;
   font-size: 1rem;
-  color: #0c4a6e;
+  color: #0f172a;
   margin-bottom: 1rem;
 }
 
@@ -357,31 +357,31 @@
 }
 
 .perfect-answer-card .answer-header h3 {
-  color: #86efac;
+  color: #059669;
   margin: 0;
   font-size: 1.25rem;
   font-weight: 800;
 }
 
 .answer-badge {
-  background: rgba(16, 185, 129, 0.2);
-  color: #86efac;
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-size: 0.85rem;
   white-space: nowrap;
   font-weight: 700;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.4);
 }
 
 .answer-box {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(236, 253, 245, 0.95) 100%);
   padding: 1.5rem;
   border-radius: 10px;
   border-left: 4px solid #16a34a;
   line-height: 1.8;
   font-size: 1rem;
-  color: #e0f2fe;
+  color: #0f172a;
   margin-bottom: 1.5rem;
   position: relative;
   overflow: hidden;
@@ -397,6 +397,9 @@
 .answer-text {
   white-space: pre-wrap;
   word-break: break-word;
+  color: #000000 !important;
+  font-weight: 500;
+  font-size: 1.05rem;
 }
 
 .streaming-cursor {

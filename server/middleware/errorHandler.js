@@ -1,11 +1,15 @@
 const errorHandler = (err, req, res, next) => {
   // Log error securely (don't expose sensitive info in logs)
+  const isProd = process.env.NODE_ENV === 'production';
+  const safeMessage = err.name === 'SyntaxError' ? err.message : (isProd ? '[Redacted]' : err.message);
   const errorLog = {
     timestamp: new Date().toISOString(),
     status: err.status || 500,
     name: err.name,
     code: err.code,
-    message: process.env.NODE_ENV === 'production' ? '[Redacted]' : err.message
+    path: req.path,
+    message: safeMessage,
+    rawBody: req.rawBody ? req.rawBody.slice(0, 500) : undefined,
   };
   console.error('Error:', JSON.stringify(errorLog));
 

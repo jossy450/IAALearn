@@ -3,6 +3,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 const { query } = require('../database/connection');
 const { authenticate } = require('../middleware/auth');
 
@@ -66,14 +69,24 @@ const extractTextFromFile = async (filePath, mimeType) => {
   try {
     if (mimeType === 'text/plain') {
       const content = await fs.readFile(filePath, 'utf8');
-      // Limit extracted text to prevent DoS
       return content.substring(0, 50000);
     }
-    // For PDF and Office docs, you would use libraries like pdf-parse or mammoth
-    // For now, return a placeholder - these would need to be implemented
-    return '[Document content extraction for this format not yet implemented]';
+    if (mimeType === 'application/pdf') {
+      const data = await fs.readFile(filePath);
+      const pdfData = await pdfParse(data);
+      return pdfData.text.substring(0, 50000);
+    }
+    if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mimeType === 'application/msword'
+    ) {
+      const data = await fs.readFile(filePath);
+      const result = await mammoth.extractRawText({ buffer: data });
+      return result.value.substring(0, 50000);
+    }
+    // Fallback: return empty string
+    return '';
   } catch (error) {
-    // Don't expose detailed error information
     return '';
   }
 };
@@ -86,7 +99,7 @@ router.post('/upload/:documentType', authenticate, upload.single('file'), async 
     const file = req.file;
 
     // Validate document type
-    if (!['cv', 'job_description'].includes(documentType)) {
+    if (!['cv', 'job_description', 'person_specification'].includes(documentType)) {
       if (file?.path) await fs.unlink(file.path).catch(() => {});
       return res.status(400).json({ 
         error: 'Invalid document type',

@@ -20,6 +20,23 @@ class FreeNeuralTranscriptionService {
     this.minAudioDuration = 1000; // Minimum 1 second
   }
 
+  /**
+   * Run a promise with a timeout to avoid long stalls per provider
+   */
+  async runWithTimeout(promise, timeoutMs, timeoutMessage) {
+    let timeoutHandle;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      return result;
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
   initializeProviders() {
     /**
      * Build a list of available transcription providers. The order in which
@@ -30,28 +47,26 @@ class FreeNeuralTranscriptionService {
      */
     const providers = [];
 
-    // 1. Prefer OpenAI Whisper when an API key is configured. OpenAI's
-    // transcription endpoint accepts a wide range of formats including
-    // WebM directly, so no conversion is necessary. Because OpenAI is more
-    // reliable than the Hugging Face free endpoint, place it first.
+    // Detect configured API keys for paid/primary providers.
+    // NOTE: GROQ (groq.com) and xAI/Grok are DIFFERENT companies!
+    // - GROQ_API_KEY = Groq Inc (fast inference, has Whisper STT)
+    // - XAI_API_KEY = xAI/Grok (Elon Musk's AI company)
+    const groqKey = process.env.GROQ_API_KEY; // Groq Inc - has Whisper API
+    const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY; // Only use if explicitly xAI key
+    const openaiKey = process.env.OPENAI_API_KEY;
     
-    if (process.env.GROK_API_KEY) {
+    // GROQ Whisper is fastest and free - prioritize it first if key is available
+    if (groqKey) {
       providers.push({
-        name: 'Grok STT (FREE)',
+        name: 'GROQ Whisper (FREE)',
         priority: 1,
-        transcribe: this.transcribeGrok.bind(this),
+        transcribe: this.transcribeGroqWhisper.bind(this),
         requiresKey: true
       });
     }
-
-    // 1b. If an xAI Grok API key is provided, include the experimental
-    // Grok speech‑to‑text provider. xAI announced standalone STT endpoints
-    // in late 2025. This implementation assumes a REST endpoint at
-    // https://api.x.ai/v1/audio/transcriptions (or an override via
-    // GROK_API_URL). It sends the audio file as multipart/form-data along
-    // with the model and language. If the endpoint is unavailable, this
-    // provider will fail and fall back to the next provider.
-    if (process.env.OPENAI_API_KEY) {
+    
+    // OpenAI Whisper as fallback (reliable but slower)
+    if (openaiKey) {
       providers.push({
         name: 'OpenAI Whisper',
         priority: providers.length + 1,
@@ -59,17 +74,29 @@ class FreeNeuralTranscriptionService {
         requiresKey: true
       });
     }
-    // 2. Use Hugging Face’s free inference API as a fallback. This API
-    // hosts the OpenAI Whisper model and does not require any API key. It
-    // only accepts WAV/MP3/FLAC, so WebM/OGG/OPUS must be converted. The
-    // call can occasionally be rate‑limited or return errors when the
-    // service is overloaded, so we attempt it after OpenAI.
-    providers.push({
-      name: 'Hugging Face (FREE)',
-      priority: providers.length + 1,
-      transcribe: this.transcribeHuggingFace.bind(this),
-      requiresKey: false
-    });
+    
+    // xAI/Grok STT only if XAI_API_KEY is explicitly set (not GROQ_API_KEY)
+    if (xaiKey && xaiKey !== groqKey) {
+      providers.push({
+        name: 'xAI Grok STT',
+        priority: providers.length + 1,
+        transcribe: this.transcribeGrok.bind(this),
+        requiresKey: true
+      });
+    }
+
+    // Only use Hugging Face as a fallback when no primary key‑based
+    // providers are configured, or when explicitly enabled via env.
+    const hasPrimaryProvider = providers.length > 0;
+    const enableHFFallback = process.env.ENABLE_HF_FALLBACK === 'true';
+    if (!hasPrimaryProvider || enableHFFallback) {
+      providers.push({
+        name: 'Hugging Face (FREE)',
+        priority: providers.length + 1,
+        transcribe: this.transcribeHuggingFace.bind(this),
+        requiresKey: false
+      });
+    }
 
     // 3. Coqui STT - FREE, open‑source (local or cloud). Requires model
     // downloads and installation. Only include if module is available.
@@ -144,13 +171,18 @@ class FreeNeuralTranscriptionService {
     }
 
     let lastError = null;
+    const providerTimeoutMs = parseInt(process.env.STT_PROVIDER_TIMEOUT_MS || '8000', 10);
     const startTime = Date.now();
 
     for (const provider of providers) {
       try {
         console.log(`🎤 Attempting transcription with ${provider.name}...`);
 
-        const result = await provider.transcribe(audioBuffer, format, language);
+        const result = await this.runWithTimeout(
+          provider.transcribe(audioBuffer, format, language),
+          providerTimeoutMs,
+          `${provider.name} timed out after ${providerTimeoutMs} ms`
+        );
         const duration = Date.now() - startTime;
 
         const response = {
@@ -350,6 +382,74 @@ class FreeNeuralTranscriptionService {
   }
 
   /**
+   * GROQ Whisper - Fast and FREE transcription via Groq's Whisper API
+   * Uses the same GROQ_API_KEY as the chat completion service
+   * https://console.groq.com/docs/speech-text
+   */
+  async transcribeGroqWhisper(audioBuffer, format, language) {
+    try {
+      console.log('⚡ GROQ Whisper processing...');
+      console.log(`   Audio size: ${audioBuffer.length} bytes, format: ${format}`);
+      
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) {
+        throw new Error('GROQ_API_KEY not configured');
+      }
+
+      // Convert unsupported formats to WAV if needed
+      // GROQ Whisper supports: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm
+      let payloadBuffer = audioBuffer;
+      let fileFormat = format;
+      
+      // Most formats are supported, but ensure we have a valid extension
+      const supportedFormats = ['flac', 'mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'ogg', 'wav', 'webm'];
+      if (!supportedFormats.includes(format.toLowerCase())) {
+        console.log(`   Converting ${format} to wav for GROQ Whisper...`);
+        payloadBuffer = await this.convertToWav(audioBuffer, format);
+        fileFormat = 'wav';
+      }
+
+      // Build multipart/form-data payload
+      const formData = new FormData();
+      formData.append('file', payloadBuffer, {
+        filename: `audio.${fileFormat}`,
+        contentType: fileFormat === 'mp3' ? 'audio/mpeg' : `audio/${fileFormat}`
+      });
+      formData.append('model', 'whisper-large-v3-turbo'); // Fast turbo model
+      if (language) {
+        formData.append('language', language);
+      }
+      formData.append('response_format', 'verbose_json');
+      formData.append('temperature', '0');
+
+      const response = await axios.post('https://api.groq.com/openai/v1/audio/transcriptions', formData, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          ...formData.getHeaders()
+        },
+        timeout: 30000 // 30 second timeout
+      });
+
+      const result = response.data;
+      if (!result || !result.text) {
+        throw new Error('GROQ Whisper returned no transcription text');
+      }
+
+      console.log(`✅ GROQ Whisper transcribed ${result.text.length} chars`);
+
+      return {
+        text: result.text.trim(),
+        confidence: result.segments ? 
+          1 - (result.segments.reduce((sum, s) => sum + (s.no_speech_prob || 0), 0) / result.segments.length) :
+          null
+      };
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || error.response?.statusText || error.message;
+      throw new Error(`GROQ Whisper error: ${msg}`);
+    }
+  }
+
+  /**
    * OpenAI Whisper - Works with WebM, WAV, MP3, etc.
    */
   async transcribeOpenAI(audioBuffer, format, language) {
@@ -443,6 +543,11 @@ class FreeNeuralTranscriptionService {
     try {
       console.log('🦁 Grok STT processing...');
       console.log(`   Audio size: ${audioBuffer.length} bytes, format: ${format}`);
+      
+      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || process.env.GROK_STT_API_KEY;
+      if (!apiKey) {
+        throw new Error('Grok STT API key not configured. Set GROK_API_KEY or XAI_API_KEY.');
+      }
 
       // Convert unsupported formats to WAV. xAI’s STT API is expected to
       // support common audio formats like wav, mp3 and flac. We convert
@@ -484,7 +589,7 @@ class FreeNeuralTranscriptionService {
 
       const response = await axios.post(endpoint, formData, {
         headers: {
-          'Authorization': `Bearer ${process.env.GROK_API_KEY}`,
+          'Authorization': `Bearer ${apiKey}`,
           // Merge form-data headers (e.g. Content-Type with boundary)
           ...formData.getHeaders()
         },

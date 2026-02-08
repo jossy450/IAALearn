@@ -4,18 +4,51 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+// In-memory sessions for demo mode
+const demoSessions = new Map();
+const isDemoMode = process.env.DEMO_MODE === 'true';
+
 // Create new interview session
 router.post('/', authenticate, async (req, res, next) => {
   try {
-    const { title, companyName, position, sessionType, metadata } = req.body;
+    const { title, companyName, position, sessionType, metadata, aiInstructions } = req.body;
     const userId = req.user.id;
+
+    // Merge aiInstructions into metadata
+    const sessionMetadata = {
+      ...(metadata || {}),
+      aiInstructions: aiInstructions || null
+    };
+
+    if (isDemoMode) {
+      // Demo mode - in-memory storage
+      const session = {
+        id: `demo-session-${Date.now()}`,
+        user_id: userId,
+        title: title || 'Untitled Session',
+        company_name: companyName,
+        position: position,
+        session_type: sessionType || 'general',
+        metadata: sessionMetadata,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      demoSessions.set(session.id, session);
+      
+      return res.status(201).json({
+        success: true,
+        session
+      });
+    }
 
     const result = await query(
       `INSERT INTO interview_sessions 
        (user_id, title, company_name, position, session_type, metadata)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [userId, title, companyName, position, sessionType || 'general', JSON.stringify(metadata || {})]
+      [userId, title, companyName, position, sessionType || 'general', JSON.stringify(sessionMetadata)]
     );
 
     res.status(201).json({
@@ -32,6 +65,31 @@ router.get('/', authenticate, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { limit = 20, offset = 0, status } = req.query;
+
+    if (isDemoMode) {
+      // Demo mode - filter from in-memory storage
+      let sessions = Array.from(demoSessions.values())
+        .filter(s => s.user_id === userId);
+      
+      if (status) {
+        sessions = sessions.filter(s => s.status === status);
+      }
+      
+      // Sort by created_at descending
+      sessions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      
+      // Add question_count (0 for demo mode for now)
+      sessions = sessions.map(s => ({ ...s, question_count: 0 }));
+      
+      // Apply pagination
+      const paginatedSessions = sessions.slice(offset, offset + parseInt(limit));
+      
+      return res.json({
+        success: true,
+        sessions: paginatedSessions,
+        total: sessions.length
+      });
+    }
 
     let queryText = `
       SELECT s.*, COUNT(q.id) as question_count
@@ -72,6 +130,24 @@ router.get('/:id', authenticate, async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user.id;
 
+    if (isDemoMode) {
+      // Demo mode - get from in-memory storage
+      const session = demoSessions.get(id);
+      
+      if (!session || session.user_id !== userId) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      return res.json({
+        success: true,
+        session: {
+          ...session,
+          questions: [] // Empty questions array for demo mode
+        }
+      });
+    }
+
+    // Get session with questions
     const result = await query(
       `SELECT s.*, 
         json_agg(
@@ -93,8 +169,34 @@ router.get('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
+    const session = result.rows[0];
+
+    // Get user's documents (CV, job description, person specification)
+    try {
+      const docsResult = await query(
+        `SELECT document_type, content 
+         FROM user_documents 
+         WHERE user_id = $1 AND document_type IN ('cv', 'job_description', 'person_specification')`,
+        [userId]
+      );
+
+      // Attach document content to session
+      for (const doc of docsResult.rows) {
+        if (doc.document_type === 'cv') {
+          session.cv_content = doc.content || '';
+        } else if (doc.document_type === 'job_description') {
+          session.job_description = doc.content || '';
+        } else if (doc.document_type === 'person_specification') {
+          session.person_specification = doc.content || '';
+        }
+      }
+    } catch (docErr) {
+      console.warn('Could not load user documents:', docErr.message);
+      // Continue without documents
+    }
+
     res.json({
-      session: result.rows[0]
+      session: session
     });
   } catch (error) {
     next(error);

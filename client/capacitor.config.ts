@@ -5,12 +5,11 @@ const config: CapacitorConfig = {
   appName: 'Interview Assistant',
   webDir: 'dist',
   server: {
+    // Load bundled web assets from the app itself.
+    // For API calls, the React app should use an explicit base URL
+    // (e.g. http://10.152.201.17:3001) instead of relying on this.
     androidScheme: 'https',
-    hostname: 'interviewassistant.app',
     iosScheme: 'capacitor',
-    // For development, uncomment and use your local IP
-    // url: 'http://192.168.1.100:5173',
-    // cleartext: true
   },
   android: {
     buildOptions: {

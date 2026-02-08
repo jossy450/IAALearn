@@ -4,11 +4,37 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+const isDemoMode = process.env.DEMO_MODE === 'true';
+
 // Get user analytics
 router.get('/user', authenticate, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { period = '30' } = req.query;
+
+    if (isDemoMode) {
+      // Demo mode - return mock analytics data
+      return res.json({
+        success: true,
+        sessionStats: {
+          total_sessions: 5,
+          avg_duration: 1200,
+          total_questions: 25,
+          completed_sessions: 3
+        },
+        trends: [
+          { date: new Date().toISOString(), sessions: 2, avg_duration: 1200, questions: 10 },
+          { date: new Date(Date.now() - 86400000).toISOString(), sessions: 1, avg_duration: 900, questions: 5 },
+          { date: new Date(Date.now() - 172800000).toISOString(), sessions: 2, avg_duration: 1500, questions: 10 }
+        ],
+        responseStats: {
+          avg_response_time: 2500,
+          min_response_time: 500,
+          max_response_time: 8000,
+          p95_response_time: 7000
+        }
+      });
+    }
 
     // Session statistics
     const sessions = await query(`
