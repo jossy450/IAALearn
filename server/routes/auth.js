@@ -1,4 +1,44 @@
 const express = require('express');
+const router = express.Router();
+// Supabase JWT verification and exchange
+const jwksClient = require('jwks-rsa');
+const { promisify } = require('util');
+const SUPABASE_JWKS_URI = 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/keys';
+
+const supabaseJwks = jwksClient({ jwksUri: SUPABASE_JWKS_URI });
+const getSigningKey = promisify(supabaseJwks.getSigningKey);
+
+router.post('/supabase', async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'No token provided' });
+    // Decode header to get kid
+    const decodedHeader = jwt.decode(token, { complete: true });
+    if (!decodedHeader || !decodedHeader.header.kid) return res.status(400).json({ error: 'Invalid token header' });
+    const key = await getSigningKey(decodedHeader.header.kid);
+    const publicKey = key.getPublicKey();
+    const payload = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+    // Find or create user in your DB
+    let user = null;
+    const result = await query('SELECT * FROM users WHERE email = $1', [payload.email]);
+    if (result.rows.length > 0) {
+      user = result.rows[0];
+    } else {
+      // Create user if not exists
+      const insert = await query(
+        'INSERT INTO users (email, full_name) VALUES ($1, $2) RETURNING *',
+        [payload.email, payload.user_metadata?.full_name || payload.email]
+      );
+      user = insert.rows[0];
+    }
+    // Issue app JWT
+    const appToken = createToken(user.id, user.email);
+    res.json({ success: true, user: sanitizeUser(user), token: appToken });
+  } catch (error) {
+    next(error);
+  }
+});
+const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
