@@ -326,54 +326,14 @@ function Dashboard() {
             </div>
           </div>
         )}
-      </div>
-    </div>
-            <label>Payment Method:</label>
-            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-              <option value="paystack">Paystack (Cheap)</option>
-              <option value="paypal">PayPal</option>
-              <option value="stripe">Stripe</option>
-              <option value="flutterwave">Flutterwave</option>
-            </select>
-            {paymentMethod === 'paystack' && (
-              <div>
-                <label>Paystack Reference:</label>
-                <input type="text" value={paystackRef} onChange={e => setPaystackRef(e.target.value)} required />
-              </div>
-            )}
-            {paymentMethod === 'paypal' && (
-              <div>
-                <label>PayPal Payment ID:</label>
-                <input type="text" value={paypalId} onChange={e => setPaypalId(e.target.value)} required />
-                <label>PayPal Access Token:</label>
-                <input type="text" value={paypalToken} onChange={e => setPaypalToken(e.target.value)} required />
-              </div>
-            )}
-            {paymentMethod === 'stripe' && (
-              <div>
-                <label>Stripe Session ID:</label>
-                <input type="text" value={stripeSessionId} onChange={e => setStripeSessionId(e.target.value)} required />
-              </div>
-            )}
-            {paymentMethod === 'flutterwave' && (
-              <div>
-                <label>Flutterwave Transaction ID:</label>
-                <input type="text" value={flutterwaveTxId} onChange={e => setFlutterwaveTxId(e.target.value)} required />
-              </div>
-            )}
-            <button type="submit" className="btn btn-primary" disabled={subLoading}>Submit Payment</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowPayment(false)}>Cancel</button>
-          </form>
-        )}
-            {/* Payment History Section */}
-            <div className="payment-history card">
-              <h3 className="card-title">Payment History</h3>
-              {paymentHistory.length === 0 ? (
-                <p>No payments yet.</p>
-              ) : (
-                <table className="payment-table">
-                  <thead>
-                    <tr>
+        <div className="payment-history card">
+          <h3 className="card-title">Payment History</h3>
+          {paymentHistory.length === 0 ? (
+            <p>No payments yet.</p>
+          ) : (
+            <table className="payment-table">
+              <thead>
+                <tr>
                       <th>Date</th>
                       <th>Method</th>
                       <th>Amount</th>

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Copy, ChevronDown, ChevronUp, Maximize2, Minimize2 } from 'lucide-react';
 import '../styles/FloatingAnswer.css';
+import useStealthStore from '../store/stealthStore';
 
 const FloatingAnswer = ({ 
   answer, 
@@ -9,6 +10,7 @@ const FloatingAnswer = ({
   isStreaming,
   formatAnswer 
 }) => {
+  const { stealthMode } = useStealthStore ? useStealthStore() : { stealthMode: false };
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [position, setPosition] = useState(() => {
@@ -82,7 +84,7 @@ const FloatingAnswer = ({
   return (
     <div
       ref={containerRef}
-      className="floating-answer-container"
+      className={`floating-answer-container${stealthMode ? ' stealth' : ''}`}
       style={{
         position: 'fixed',
         left: `${position.x}px`,

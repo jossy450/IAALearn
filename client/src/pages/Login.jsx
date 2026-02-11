@@ -3,9 +3,81 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, documentsAPI } from '../services/api';
 import { Upload, FileText, Briefcase, X, Eye, EyeOff, Lock, Mail, AlertCircle, CheckCircle, KeyRound, Send } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
+import axios from 'axios';
 import './Auth.css';
 
 function Login() {
+      // Exchange Supabase JWT for app JWT
+      const exchangeSupabaseToken = async (supabaseSession) => {
+        try {
+          const supaToken = supabaseSession?.access_token || supabaseSession?.provider_token;
+          if (!supaToken) throw new Error('No Supabase token');
+          const res = await axios.post('/api/auth/supabase', { token: supaToken });
+          if (res.data?.token) {
+            setAuth(res.data.token, res.data.user);
+            return true;
+          }
+          setError('Failed to exchange Supabase token');
+          return false;
+        } catch (err) {
+          setError(err.message || 'Supabase token exchange failed');
+          return false;
+        }
+      };
+    // Social login loading state
+    const [socialLoading, setSocialLoading] = useState(false);
+
+    // Supabase email/password login
+    const handleSupabaseLogin = async (e) => {
+      e.preventDefault();
+      setError('');
+      setSocialLoading(true);
+      try {
+        const { data, error: supaError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+        if (supaError) throw supaError;
+        // Exchange Supabase JWT for app JWT
+        const ok = await exchangeSupabaseToken(data.session);
+        if (ok) navigate('/');
+      } catch (err) {
+        setError(err.message || 'Supabase login failed');
+      } finally {
+        setSocialLoading(false);
+      }
+    };
+
+    // Google login
+    const handleGoogleLogin = async () => {
+      setError('');
+      setSocialLoading(true);
+      try {
+        const { error: supaError } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/oauth-callback' } });
+        if (supaError) throw supaError;
+        // After redirect, handle exchange in /oauth-callback page
+      } catch (err) {
+        setError(err.message || 'Google login failed');
+      } finally {
+        setSocialLoading(false);
+      }
+    };
+
+    // GitHub login
+    const handleGithubLogin = async () => {
+      setError('');
+      setSocialLoading(true);
+      try {
+        const { error: supaError } = await supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: window.location.origin + '/oauth-callback' } });
+        if (supaError) throw supaError;
+        // After redirect, handle exchange in /oauth-callback page
+      } catch (err) {
+        setError(err.message || 'GitHub login failed');
+      } finally {
+        setSocialLoading(false);
+      }
+    };
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -360,10 +432,11 @@ function Login() {
 
         <div className="oauth-buttons">
           <button 
-            onClick={() => window.location.href = '/api/auth/google'}
+            onClick={handleGoogleLogin}
             className="btn btn-outline btn-block oauth-btn"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
             type="button"
+            disabled={socialLoading}
           >
             <svg className="oauth-icon" viewBox="0 0 24 24" width="20" height="20">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -375,10 +448,11 @@ function Login() {
           </button>
           
           <button 
-            onClick={() => window.location.href = '/api/auth/github'}
+            onClick={handleGithubLogin}
             className="btn btn-outline btn-block oauth-btn"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
             type="button"
+            disabled={socialLoading}
           >
             <svg className="oauth-icon" viewBox="0 0 24 24" width="20" height="20">
               <path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>

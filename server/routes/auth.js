@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+
 // Supabase JWT verification and exchange
 const jwksClient = require('jwks-rsa');
 const { promisify } = require('util');
@@ -38,14 +39,11 @@ router.post('/supabase', async (req, res, next) => {
     next(error);
   }
 });
-const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const passport = require('passport');
 const { query } = require('../database/connection');
-
-const router = express.Router();
 
 const DEFAULT_GOOGLE_CLIENT_ID = '1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com';
 

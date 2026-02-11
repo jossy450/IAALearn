@@ -1,3 +1,11 @@
+.floating-answer-container.stealth .floating-answer-content .answer-text {
+  color: #fff !important;
+  background: #111 !important;
+  text-shadow: 0 0 2px #fff, 0 0 8px #000, 0 0 16px #000;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  -webkit-text-stroke: 0.5px #000;
+}
 .floating-answer-container {
   z-index: 9999;
   background: linear-gradient(135deg, #0a0f1a 0%, #0d1420 100%);
