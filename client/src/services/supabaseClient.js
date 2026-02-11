@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+let supabase;
+
 if (!supabaseUrl) {
 	console.warn('[supabaseClient] VITE_SUPABASE_URL not set — using demo stub client');
 
@@ -21,7 +23,9 @@ if (!supabaseUrl) {
 		storage: { from: () => ({ getPublicUrl: () => ({ publicURL: '' }) }) },
 	};
 
-	export const supabase = stub;
+	supabase = stub;
 } else {
-	export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+	supabase = createClient(supabaseUrl, supabaseAnonKey);
 }
+
+export { supabase };
