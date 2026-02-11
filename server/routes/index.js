@@ -1,5 +1,5 @@
 const express = require('express');
-const authRoutes = require('./auth');
+const authRoutes = require('./auth_stub');
 const sessionRoutes = require('./sessions');
 const transcriptionRoutes = require('./transcription');
 const answersRoutes = require('./answers');
