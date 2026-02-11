@@ -1,3 +1,40 @@
+/* Payment History Section */
+.payment-history {
+  margin-bottom: 2rem;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e0e7ef 100%);
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(30, 144, 255, 0.05);
+}
+.payment-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+.payment-table th, .payment-table td {
+  padding: 0.7em 1em;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  font-size: 1rem;
+}
+.payment-table th {
+  background: #e0f2fe;
+  color: #2563eb;
+  font-weight: 700;
+}
+.payment-table tr:last-child td {
+  border-bottom: none;
+}
+.payment-table td {
+  color: #374151;
+}
+/* Payment provider select tweaks */
+.payment-form select {
+  background: #e0f2fe;
+  color: #2563eb;
+  font-weight: 600;
+}
 .dashboard {
   max-width: 1400px;
   margin: 0 auto;
@@ -11,13 +48,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 3.5rem;
+  /* ...existing code... */
   padding: 2.5rem 3rem;
   background: linear-gradient(135deg, rgba(30, 144, 255, 0.1) 0%, rgba(0, 200, 150, 0.05) 100%);
   border: 1px solid rgba(30, 144, 255, 0.2);
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(30, 144, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: white;
+  color: rgba(5, 2, 2, 0.245);
   backdrop-filter: blur(10px);
 }
 

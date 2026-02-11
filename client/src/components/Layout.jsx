@@ -103,6 +103,7 @@ function Layout() {
 
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/subscription', icon: Monitor, label: 'Subscription & Trial' },
     { path: '/analytics', icon: BarChart3, label: 'Analytics' },
     { path: '/stealth', icon: Shield, label: 'Stealth' },
     { path: '/mobile', icon: Smartphone, label: 'Mobile' },

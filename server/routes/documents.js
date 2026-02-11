@@ -4,7 +4,14 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-const pdfParse = require('pdf-parse');
+let pdfjsLib;
+
+async function getPdfjsLib() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  }
+  return pdfjsLib;
+}
 const mammoth = require('mammoth');
 const { query } = require('../database/connection');
 const { authenticate } = require('../middleware/auth');
@@ -72,9 +79,17 @@ const extractTextFromFile = async (filePath, mimeType) => {
       return content.substring(0, 50000);
     }
     if (mimeType === 'application/pdf') {
-      const data = await fs.readFile(filePath);
-      const pdfData = await pdfParse(data);
-      return pdfData.text.substring(0, 50000);
+      const data = new Uint8Array(await fs.readFile(filePath));
+      const pdfjsLib = await getPdfjsLib();
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item => item.str).join(' ');
+        if (text.length > 50000) break;
+      }
+      return text.substring(0, 50000);
     }
     if (
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||

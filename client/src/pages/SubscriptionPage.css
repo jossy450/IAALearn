@@ -1,0 +1,55 @@
+.subscription-page {
+  padding: 2rem;
+  background: #f9f9fb;
+  min-height: 100vh;
+}
+.plans-list {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+.plan-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 300px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  transition: border 0.2s;
+}
+.plan-card.selected {
+  border: 2px solid #007bff;
+}
+.plan-card h2 {
+  margin-top: 0;
+  color: #007bff;
+}
+.plan-card button {
+  margin-top: 1rem;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.compare-section {
+  background: #eef6ff;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+.current-subscription {
+  background: #e6ffe6;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+.alert-error {
+  color: #d8000c;
+  background: #ffbaba;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+}

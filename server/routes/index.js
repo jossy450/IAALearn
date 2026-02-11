@@ -14,6 +14,7 @@ const documentsRoutes = require('./documents');
 const adminRoutes = require('./admin');
 const aiProviderRoutes = require('./aiProvider');
 const pushRoutes = require('./push');
+const subscriptionsRoutes = require('./subscriptions');
 
 const router = express.Router();
 
@@ -32,7 +33,9 @@ router.use('/smart-ai', smartAIRoutes);
 router.use('/documents', documentsRoutes); // Document upload/management routes
 router.use('/admin', adminRoutes); // Admin dashboard routes
 router.use('/ai-provider', aiProviderRoutes); // AI provider management and switching
+
 router.use('/push', pushRoutes); // Push notifications
+router.use('/subscriptions', subscriptionsRoutes); // Subscription management endpoints
 
 // API info endpoint
 router.get('/', (req, res) => {
