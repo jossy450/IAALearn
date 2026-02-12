@@ -3,6 +3,11 @@ const db = require('../database/connection');
 // Get subscription status for user
 async function getSubscriptionStatus(req, res) {
   const userId = req.user.id;
+  // In demo mode the seeded user id may be a non-UUID string (eg. 'demo-user-1').
+  // Short-circuit DB queries in demo mode to avoid UUID cast errors.
+  if (process.env.DEMO_MODE === 'true') {
+    return res.json(null);
+  }
   try {
     const result = await db.query(
       'SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY end_date DESC LIMIT 1',
@@ -20,6 +25,10 @@ async function startTrial(req, res) {
   const now = new Date();
   const endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h trial
   try {
+    if (process.env.DEMO_MODE === 'true') {
+      // Don't persist in demo mode; return a fake trial end date.
+      return res.json({ success: true, trialEnds: endDate });
+    }
     await db.query(
       `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
        VALUES ($1, 'trial', 'active', $2, $3, 'trial', true)`,
@@ -68,6 +77,10 @@ async function createSubscription(req, res) {
     if (!paymentVerified) {
       return res.status(400).json({ error: 'Payment not verified.' });
     }
+    if (process.env.DEMO_MODE === 'true') {
+      // Skip persisting payments in demo mode.
+      return res.json({ success: true, subscriptionEnds: endDate });
+    }
     await db.query(
       `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
        VALUES ($1, $2, 'active', $3, $4, $5, false)`,
@@ -83,6 +96,9 @@ async function createSubscription(req, res) {
 async function cancelSubscription(req, res) {
   const userId = req.user.id;
   try {
+    if (process.env.DEMO_MODE === 'true') {
+      return res.json({ success: true });
+    }
     await db.query(
       `UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
       [userId]
