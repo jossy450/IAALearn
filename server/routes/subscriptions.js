@@ -17,6 +17,13 @@ router.post('/cancel', authenticate, cancelSubscription);
 
 // Payment history endpoint
 router.get('/history', authenticate, async (req, res) => {
+	// In demo mode the user id may be a non-UUID string (eg. 'demo-user-1').
+	// Avoid DB queries in demo mode to prevent UUID cast errors and return
+	// an empty history or a small mocked response.
+	if (process.env.DEMO_MODE === 'true') {
+		return res.json([]);
+	}
+
 	const db = require('../database/connection');
 	const userId = req.user.id;
 	try {
