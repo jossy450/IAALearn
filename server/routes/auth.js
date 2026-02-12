@@ -1,5 +1,7 @@
 const express = require('express');
-const router = express.Router();
+const authRouter = express.Router();
+// Backwards-compat alias: some handlers below use `router` variable.
+const router = authRouter;
 
 // Supabase JWT verification and exchange
 const jwksClient = require('jwks-rsa');
@@ -9,7 +11,7 @@ const SUPABASE_JWKS_URI = 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/
 const supabaseJwks = jwksClient({ jwksUri: SUPABASE_JWKS_URI });
 const getSigningKey = promisify(supabaseJwks.getSigningKey);
 
-router.post('/supabase', async (req, res, next) => {
+authRouter.post('/supabase', async (req, res, next) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'No token provided' });
@@ -880,4 +882,4 @@ router.post('/reset-password', async (req, res, next) => {
   }
 });
 
-module.exports = router;
+module.exports = authRouter;
