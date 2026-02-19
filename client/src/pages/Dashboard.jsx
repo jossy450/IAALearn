@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Calendar, Clock, TrendingUp, FileText, Briefcase, X, User, MessageSquare } from 'lucide-react';
+import { Plus, Calendar, Clock, TrendingUp, FileText, Briefcase, X, User, MessageSquare, Trash, RotateCw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import api, { sessionAPI, analyticsAPI, documentsAPI } from '../services/api';
 import './Dashboard.css';
@@ -261,6 +261,37 @@ function Dashboard() {
     }
   };
 
+  const handleEndSession = async (sessionId) => {
+    const ok = window.confirm('Close this session? This will mark it completed and hide it from Recent Sessions.');
+    if (!ok) return;
+    try {
+      await sessionAPI.end(sessionId);
+      // Mark session as archived/hidden locally so it can be restored or viewed later if needed
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, archived: true } : s)));
+    } catch (err) {
+      console.error('Failed to end session:', err);
+      alert('Failed to close session. Please try again.');
+    }
+  };
+
+  const handleUnarchive = (sessionId) => {
+    setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, archived: false } : s)));
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    const ok = window.confirm('Permanently delete this session? This cannot be undone.');
+    if (!ok) return;
+    try {
+      await sessionAPI.delete(sessionId);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+      alert('Failed to delete session. Please try again.');
+    }
+  };
+
+  const [showArchived, setShowArchived] = useState(false);
+
   const handleCvChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -327,18 +358,23 @@ function Dashboard() {
       </div>
       <div className="dashboard-content">
         <div className="sessions-section card">
-          <h2 className="card-title">Recent Sessions</h2>
-          {sessions.length === 0 ? <p>No sessions yet.</p> : (
-            <ul className="sessions-list">
-              {sessions.map((s) => (
-                <li key={s.id} className="session-item">
-                  <span>{s.title}</span>
-                  <span>{s.companyName}</span>
-                  <span>{formatDuration(s.duration)}</span>
-                  <button className="btn btn-secondary" onClick={() => navigate(`/session/${s.id}`)}>Open</button>
-                </li>
-              ))}
-            </ul>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2 className="card-title">Recent Sessions</h2>
+            <div className="sessions-header-actions">
+              <button
+                className="btn btn-ghost"
+                onClick={() => setShowArchived((v) => !v)}
+                aria-pressed={showArchived}
+              >
+                {showArchived ? 'Show active' : `Show archived (${sessions.filter(s => s.archived).length})`}
+              </button>
+            </div>
+          </div>
+
+          {showArchived ? (
+            archivedView()
+          ) : (
+            activeView()
           )}
         </div>
         <div className="analytics-section card">
@@ -682,6 +718,76 @@ function Dashboard() {
         </div>
       , document.body)}
     </div>
+  );
+}
+
+// Helper render functions placed after component return to keep JSX concise
+function activeView() {
+  const items = sessions.filter(s => !s.archived);
+  if (items.length === 0) return <p>No sessions yet.</p>;
+  return (
+    <ul className="sessions-list">
+      {items.map((s) => (
+        <li key={s.id} className="session-item">
+          <div className="session-row">
+            <div className="session-info-inline">
+              <span className="session-title">{s.title}</span>
+              <span className="session-company">{s.companyName}</span>
+              <span className="session-duration">{formatDuration(s.duration)}</span>
+            </div>
+            <div className="session-actions">
+              <button
+                className="btn btn-ghost close-btn"
+                onClick={(e) => { e.stopPropagation(); handleEndSession(s.id); }}
+                title="Close session"
+                aria-label={`Close session ${s.title}`}
+              >
+                <X size={14} />
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigate(`/session/${s.id}`)}>Open</button>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function archivedView() {
+  const items = sessions.filter(s => s.archived);
+  if (items.length === 0) return <p>No archived sessions.</p>;
+  return (
+    <ul className="sessions-list archived-list">
+      {items.map((s) => (
+        <li key={s.id} className="session-item">
+          <div className="session-row">
+            <div className="session-info-inline">
+              <span className="session-title">{s.title}</span>
+              <span className="session-company">{s.companyName}</span>
+              <span className="session-duration">{formatDuration(s.duration)}</span>
+            </div>
+            <div className="session-actions">
+              <button
+                className="btn btn-ghost"
+                onClick={(e) => { e.stopPropagation(); handleUnarchive(s.id); }}
+                title="Unarchive"
+                aria-label={`Unarchive ${s.title}`}
+              >
+                <RotateCw size={14} />
+              </button>
+              <button
+                className="btn btn-destructive"
+                onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }}
+                title="Delete permanently"
+                aria-label={`Delete ${s.title}`}
+              >
+                <Trash size={14} />
+              </button>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
