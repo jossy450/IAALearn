@@ -46,6 +46,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const passport = require('passport');
 const { query } = require('../database/connection');
+const { getJwtSecret } = require('../middleware/auth');
 
 const DEFAULT_GOOGLE_CLIENT_ID = '859557481151-cdno2ivnlr7trpn61vpndubstl2mfnr3.apps.googleusercontent.com';
 
@@ -83,11 +84,11 @@ const buildGoogleAuthUrl = (req) => {
   return authUrl.toString();
 };
 
-// Helper: Create JWT token
+// Helper: Create JWT token  
 const createToken = (userId, email, expiresIn = '7d') => {
   return jwt.sign(
     { id: userId, email },
-    process.env.JWT_SECRET || 'demo-secret',
+    getJwtSecret(),
     { expiresIn }
   );
 };

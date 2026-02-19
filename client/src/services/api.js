@@ -47,6 +47,32 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Handle 401 errors by suggesting re-login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      console.error('[API] 401 Unauthorized:', error.response.data);
+      
+      // Check if token exists but is invalid
+      const authStorage = localStorage.getItem("auth-storage");
+      if (authStorage) {
+        try {
+          const parsed = JSON.parse(authStorage);
+          if (parsed?.state?.token) {
+            console.warn('[API] Token exists but was rejected. User should re-login.');
+            // Token is stale/invalid - show user a message
+            // (actual notification handled by component catching the error)
+          }
+        } catch (err) {
+          console.error('[API] Error parsing auth-storage on 401:', err);
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 /**
  * Named API wrappers (these must exist because your pages import them)
  */

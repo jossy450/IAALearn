@@ -237,13 +237,26 @@ function Dashboard() {
     } catch (error) {
       // Try to extract a useful error message
       let errorMsg = 'Failed to create session. Please try again.';
-      if (error?.response?.data?.error) {
+      
+      // Check for 401 unauthorized (stale token)
+      if (error?.response?.status === 401) {
+        errorMsg = '❌ Session expired. Please re-login and try again.';
+        console.warn('[Dashboard] 401 Unauthorized on session creation. User should re-login.');
+        // Optionally navigate to login after a delay
+        setTimeout(() => {
+          navigate('/login');
+        }, 3000);
+      } else if (error?.response?.data?.error) {
         errorMsg = error.response.data.error;
       } else if (error?.message) {
         errorMsg = error.message;
       }
       // Log the full error object for debugging
-      console.error('Failed to create session:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      console.error('Failed to create session:', {
+        status: error?.response?.status,
+        error: error?.response?.data,
+        message: error?.message
+      });
       setUploadError(errorMsg);
     }
   };
