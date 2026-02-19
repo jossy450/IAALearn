@@ -691,6 +691,7 @@ function InterviewSession() {
         interviewerQuestion: question,
         position: session?.position,
         company: session?.company_name,
+        sessionType: session?.session_type || 'general',
         cv: session?.cv_content || '',
         jobDescription: session?.job_description || '',
         personSpecification: session?.person_specification || '',

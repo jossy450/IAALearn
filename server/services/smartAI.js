@@ -478,7 +478,8 @@ Questions covered: ${session.questions?.length || 0}`
         personSpecification = '',
         aiInstructions = '',
         position = '', 
-        company = '' 
+        company = '',
+        sessionType = 'general'
       } = context;
 
       const normalizedCv = (cv || '').trim();
@@ -488,6 +489,7 @@ Questions covered: ${session.questions?.length || 0}`
       const normalizedPosition = (position || '').trim();
       const normalizedCompany = (company || '').trim();
       const normalizedQuestion = (question || '').trim();
+      const normalizedSessionType = (sessionType || 'general').toLowerCase();
 
       // Extract technical keywords for role-specific terminology
       const technicalKeywords = this.extractTechnicalKeywords(normalizedCv, normalizedJobDescription).slice(0, 10);
@@ -721,11 +723,59 @@ Person Specification (required competencies/criteria):
 ${normalizedPersonSpecification}`;
       }
 
+      // Session type-specific guidance
+      let sessionTypeGuidance = '';
+      switch (normalizedSessionType) {
+        case 'technical':
+          sessionTypeGuidance = `
+SESSION TYPE GUIDANCE - TECHNICAL INTERVIEW:
+- Prioritize technical depth and specific technologies/systems
+- Explain architectural decisions and technical reasoning
+- Include specific tools, languages, frameworks, or methodologies used
+- Show problem-solving approach and technical expertise
+- When answering "Tell me about yourself": Lead with strongest technical achievement and relevant tech stack
+- For behavioral questions: Focus on technical ownership and technical decision-making`;
+          break;
+        case 'behavioral':
+          sessionTypeGuidance = `
+SESSION TYPE GUIDANCE - BEHAVIORAL INTERVIEW:
+- Prioritize STAR format strictly (Situation → Task → Action → Result)
+- Focus on soft skills: communication, teamwork, conflict resolution, leadership
+- Emphasize personal growth, learning from mistakes, and adaptability
+- Show clear ownership and initiative
+- Include emotional intelligence and people management insights
+- End each answer with a lesson learned or skill developed`;
+          break;
+        case 'case-study':
+          sessionTypeGuidance = `
+SESSION TYPE GUIDANCE - CASE STUDY INTERVIEW:
+- Use structured problem-solving approach (define problem → analyze → propose solution → discuss trade-offs)
+- Show logical thinking and quantitative reasoning
+- Include data-driven insights and realistic numbers
+- Discuss assumptions upfront and explain reasoning clearly
+- Consider multiple approaches and weigh pros/cons
+- Be prepared to defend or adapt your solution based on feedback
+- Structure answer for clarity: Start with high-level framework, then dive into details`;
+          break;
+        case 'general':
+        default:
+          sessionTypeGuidance = `
+SESSION TYPE GUIDANCE - GENERAL INTERVIEW:
+- Provide balanced answers covering technical, behavioral, and practical aspects
+- Be concise but comprehensive
+- Show both expertise and interpersonal skills
+- Adapt to the specific question type (use STAR for behavioral, depth for technical)`;
+          break;
+      }
+
       const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, concise, and tailored.
 
 TECHNICAL CONTEXT FOR ROLE:
 Position: ${normalizedPosition || 'General'}
-Company: ${normalizedCompany || 'Unknown'}${technicalKeywordsText}
+Company: ${normalizedCompany || 'Unknown'}
+Session Type: ${normalizedSessionType.toUpperCase()}${technicalKeywordsText}
+
+${sessionTypeGuidance}
 
 ${tailoringPolicy}
 
