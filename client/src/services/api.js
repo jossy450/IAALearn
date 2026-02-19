@@ -28,11 +28,19 @@ api.interceptors.request.use(
     try {
       const authStorage = localStorage.getItem("auth-storage");
       if (authStorage) {
-        const { state } = JSON.parse(authStorage);
-        if (state?.token) config.headers.Authorization = `Bearer ${state.token}`;
+        const parsed = JSON.parse(authStorage);
+        const token = parsed?.state?.token;
+        if (token) {
+          console.log(`[API] Attaching token to ${config.method?.toUpperCase()} ${config.url}`);
+          config.headers.Authorization = `Bearer ${token}`;
+        } else {
+          console.warn(`[API] No token found in auth-storage for ${config.method?.toUpperCase()} ${config.url}`);
+        }
+      } else {
+        console.warn(`[API] No auth-storage found for ${config.method?.toUpperCase()} ${config.url}`);
       }
-    } catch {
-      // ignore bad storage
+    } catch (err) {
+      console.error('[API] Error reading auth-storage:', err);
     }
     return config;
   },
