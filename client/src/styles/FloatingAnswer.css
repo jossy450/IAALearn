@@ -1,17 +1,9 @@
-.floating-answer-container.stealth .floating-answer-content .answer-text {
-  color: #fff !important;
-  background: #111 !important;
-  text-shadow: 0 0 2px #fff, 0 0 8px #000, 0 0 16px #000;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  -webkit-text-stroke: 0.5px #000;
-}
 .floating-answer-container {
   z-index: 9999;
   background: linear-gradient(135deg, #0a0f1a 0%, #0d1420 100%);
   border: 2.5px solid rgba(31, 182, 255, 0.5);
   border-radius: 12px;
-  box-shadow: 
+  box-shadow:
     0 0 30px rgba(31, 182, 255, 0.4),
     0 20px 80px rgba(31, 182, 255, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
@@ -23,7 +15,7 @@
 }
 
 .floating-answer-container:hover {
-  box-shadow: 
+  box-shadow:
     0 0 40px rgba(31, 182, 255, 0.5),
     0 24px 100px rgba(31, 182, 255, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -157,15 +149,14 @@
 .floating-answer-content .answer-text {
   word-wrap: break-word;
   white-space: pre-wrap;
-  font-weight: 900;
-  color: #ffffff;
-  text-shadow: 
-    0 0 4px rgba(31, 182, 255, 0.8),
-    0 0 8px rgba(31, 182, 255, 0.6),
-    0 0 16px rgba(31, 182, 255, 0.4),
-    0 0 24px rgba(0, 0, 0, 0.7);
-  letter-spacing: 0.3px;
-  -webkit-text-stroke: 0.3px rgba(31, 182, 255, 0.3);
+  font-weight: 700;
+  color: #f8fafc !important;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.5),
+    0 0 20px rgba(200, 240, 255, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.2px;
+  line-height: 1.8;
 }
 
 .floating-answer-content .answer-text p {
@@ -187,12 +178,11 @@
 }
 
 .floating-answer-content .answer-text strong {
-  color: #00d4ff;
+  color: #00d4ff !important;
   font-weight: 900;
-  text-shadow: 
+  text-shadow:
     0 0 4px rgba(0, 212, 255, 0.8),
-    0 0 8px rgba(0, 212, 255, 0.6),
-    0 0 16px rgba(0, 212, 255, 0.4);
+    0 0 8px rgba(0, 212, 255, 0.5);
 }
 
 .floating-answer-content .answer-text em {

@@ -1,12 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import pushNotifications from '../services/pushNotifications';
 
 export const useAuthStore = create(
   persist(
     (set) => ({
       token: null,
       user: null,
-      setAuth: (token, user) => set({ token, user }),
+      setAuth: (token, user) => {
+        set({ token, user });
+        // Attempt to flush any pending push token now that auth exists
+        try { pushNotifications.flushPendingPushToken(); } catch (_) {}
+      },
       logout: () => {
         // Clear Zustand state
         set({ token: null, user: null });

@@ -31,7 +31,15 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         imgSrc: ["'self'", 'data:', 'https:'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
-        connectSrc: ["'self'"],
+        // Keep self as primary, but allow legacy Fly host during service-worker/cache rollout
+        // so older cached bundles still function instead of being blocked by CSP.
+        connectSrc: [
+          "'self'",
+          'https://iaalearn-cloud.fly.dev',
+          'https://iaalearn-1.fly.dev',
+          'wss://iaalearn-cloud.fly.dev',
+          'wss://iaalearn-1.fly.dev',
+        ],
         frameSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
@@ -52,8 +60,21 @@ app.use(
 
 // CORS configuration
 const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:5173',
+  process.env.CLIENT_URL || 'https://iaalearn-1.fly.dev',
+  // Always allow common local dev origins so developers can run the frontend
+  // locally (Vite dev server) while targeting the deployed API.
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+  // Vite preview uses port 4173 by default; allow it for local preview testing
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+  // Server serving built client
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
   'https://iaalearn-cloud.fly.dev',
+  'https://iaalearn-1.fly.dev',
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',

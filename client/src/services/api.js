@@ -1,13 +1,16 @@
 import axios from "axios";
 import { Capacitor } from "@capacitor/core";
 
-// Prefer same-origin in web. For native (Android/iOS), always use an explicit API base
-// so packaged apps do not rely on an unavailable /api relative path.
+// IMPORTANT:
+// - Web should ALWAYS use same-origin (/api) to avoid stale cross-domain build env values.
+// - Native (Android/iOS) needs an absolute host because there is no same-origin /api.
 const rawBaseEnv = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
 const isNative = (Capacitor.isNativePlatform?.() ?? false) || Capacitor.getPlatform() !== "web";
-const fallbackBase = "https://iaalearn-cloud.fly.dev"; // matches .env
+const fallbackBase = "https://iaalearn-cloud.fly.dev";
 
-const effectiveRoot = rawBaseEnv || (isNative ? fallbackBase : "");
+export const getApiRoot = () => (isNative ? (rawBaseEnv || fallbackBase) : "");
+
+const effectiveRoot = getApiRoot();
 const API_BASE_URL = effectiveRoot
   ? effectiveRoot.endsWith("/api")
     ? effectiveRoot
@@ -50,10 +53,11 @@ export const authAPI = {
 };
 
 export const sessionAPI = {
-  getAll: () => api.get("/sessions"),
+  getAll: (params) => api.get("/sessions", { params }),
   create: (data) => api.post("/sessions", data),
   getOne: (id) => api.get(`/sessions/${id}`),
-  end: (id) => api.delete(`/sessions/${id}`),
+  end: (id) => api.patch(`/sessions/${id}/end`),
+  delete: (id) => api.delete(`/sessions/${id}`),
 
   // transfer routes are mounted under /sessions
   generateTransferCode: (sessionId) =>

@@ -21,6 +21,7 @@ import DecoyScreen from './pages/DecoyScreen';
 import MobileScanner from './pages/MobileScanner';
 import MobileSession from './pages/MobileSession';
 import StealthManager from './components/StealthManager';
+import SubscriptionPage from './pages/SubscriptionPage';
 
 // Wrapper component to check auth status
 function ProtectedRoute({ children }) {
@@ -108,6 +109,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="stealth" element={<StealthSettings />} />
           <Route path="mobile" element={<Mobile />} />
+          <Route path="subscription" element={<SubscriptionPage />} />
         </Route>
       </Routes>
     </Router>

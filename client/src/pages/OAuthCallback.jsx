@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import pushNotifications from '../services/pushNotifications';
 import { Capacitor } from '@capacitor/core';
 
 // Add cache-busting to component
@@ -18,8 +19,20 @@ function OAuthCallback() {
     const processOAuthCallback = async () => {
       try {
         const platform = Capacitor.getPlatform();
-        const token = searchParams.get('token');
-        const userStr = searchParams.get('user');
+        // Prefer query params but also support hash fragment (some flows use #token=...)
+        let token = searchParams.get('token');
+        let userStr = searchParams.get('user');
+
+        if ((!token || !userStr) && typeof window !== 'undefined' && window.location.hash) {
+          try {
+            const hash = window.location.hash.replace(/^#/, '');
+            const hashParams = new URLSearchParams(hash);
+            token = token || hashParams.get('token');
+            userStr = userStr || hashParams.get('user');
+          } catch (e) {
+            console.warn('Failed to parse hash params on OAuth callback', e);
+          }
+        }
         const errorParam = searchParams.get('error');
         const errorDesc = searchParams.get('error_description');
 
@@ -44,10 +57,17 @@ function OAuthCallback() {
         }
 
         // Parse user data
-        const user = JSON.parse(decodeURIComponent(userStr));
+        let user = null;
+        try {
+          user = JSON.parse(decodeURIComponent(userStr));
+        } catch (e) {
+          // Fallback: try parsing raw string
+          try { user = JSON.parse(userStr); } catch (_) { throw new Error('Failed to parse user data'); }
+        }
         
         // Store auth in state and localStorage
         setAuth(token, user);
+        try { pushNotifications.flushPendingPushToken(); } catch (_) {}
         
         // Wait briefly for persist middleware to write, then route without hard reload
         const maxAttempts = 50; // 5 seconds max

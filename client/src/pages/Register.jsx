@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import pushNotifications from '../services/pushNotifications';
 import { authAPI } from '../services/api';
 import { Eye, EyeOff, User, Mail, Lock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import './Auth.css';
@@ -75,6 +76,7 @@ function Register() {
       const response = await authAPI.register(registrationData);
       const { token, user } = response.data;
       setAuth(token, user);
+      try { pushNotifications.flushPendingPushToken(); } catch (_) {}
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed. Please try again.');

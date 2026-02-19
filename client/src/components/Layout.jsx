@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePrivacyStore } from '../store/privacyStore';
+import { getApiRoot } from '../services/api';
 import { 
   LayoutDashboard, 
   BarChart3, 
@@ -76,8 +77,7 @@ function Layout() {
       const token = authData ? JSON.parse(authData).state?.token : null;
       
       if (token) {
-        // Use full Fly.io URL so it works on mobile WebView (not relative /api)
-        const apiBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+        const apiBase = (getApiRoot() || '').trim().replace(/\/$/, '');
         const logoutUrl = apiBase ? `${apiBase}/api/auth/logout` : '/api/auth/logout';
         
         await fetch(logoutUrl, {
@@ -241,6 +241,7 @@ function Layout() {
         </header>
         <Outlet />
       </main>
+      {renderMobileBottomNav()}
     </div>
   );
 }

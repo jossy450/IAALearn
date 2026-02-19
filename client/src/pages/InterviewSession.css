@@ -16,8 +16,8 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
-  background: #ffffff;
-  color: #0f172a;
+  background: linear-gradient(135deg, #0a0f1a 0%, #0d1420 100%);
+  color: #e5e7eb;
 }
 
 .session-header {
@@ -26,23 +26,24 @@
   align-items: center;
   margin-bottom: 2rem;
   padding: 1.5rem 2rem;
-  background: #f8fafc;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(31, 182, 255, 0.04) 100%);
   border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border: 1.5px solid rgba(31, 182, 255, 0.25);
+  box-shadow: 0 8px 32px rgba(31, 182, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
 }
 
 .session-header h1 {
   font-size: 1.75rem;
   font-weight: 800;
-  color: #0f172a;
+  color: #ffffff;
   margin-bottom: 0.5rem;
   letter-spacing: -0.5px;
 }
 
 .session-meta {
   font-size: 0.875rem;
-  color: #475569;
+  color: rgba(255, 255, 255, 0.65);
   font-weight: 600;
 }
 
@@ -72,26 +73,28 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #1fb6ff 0%, #6fd6ff 100%);
-  color: #04101e;
+  background: linear-gradient(120deg, #2563EB 0%, #60a5fa 60%);
+  color: #ffffff;
   font-weight: 700;
-  box-shadow: 0 8px 24px rgba(31, 182, 255, 0.35);
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.25);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 14px 36px rgba(37, 99, 235, 0.35);
+  background: linear-gradient(120deg, #1e40af 0%, #2563EB 60%);
 }
 
 .btn-secondary {
-  background: #f3f4f6;
-  color: #1f2937;
-  border: 2px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  border: 1px solid rgba(37, 99, 235, 0.3);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #e5e7eb;
-  border-color: #d1d5db;
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgb(37, 99, 235);
+  transform: translateY(-2px);
 }
 
 .btn-success {
@@ -204,7 +207,7 @@
 }
 
 .recording-status-card h2 {
-  color: #0284c7;
+  color: #ffffff;
   margin-bottom: 1rem;
   font-size: 1.35rem;
   font-weight: 800;
@@ -212,7 +215,7 @@
 }
 
 .recording-status-card p {
-  color: #0369a1;
+  color: #a0d8ff;
   margin-bottom: 1.5rem;
   font-weight: 600;
 }
@@ -227,6 +230,7 @@
 .status-text {
   font-size: 0.95rem;
   font-weight: 500;
+  color: #c0e7ff;
 }
 
 .record-btn {
@@ -268,6 +272,7 @@
   align-items: center;
   gap: 0.5rem;
   animation: blink 1s infinite;
+  color: #f0f9ff;
 }
 
 .pulse-ring {
@@ -308,7 +313,7 @@
 }
 
 .question-header h3 {
-  color: #0369a1;
+  color: #7dd3fc;
   margin: 0;
   font-size: 1.1rem;
   font-weight: 800;
@@ -324,14 +329,15 @@
 }
 
 .question-box {
-  background: #f0f9ff;
+  background: rgba(14, 165, 233, 0.1);
   padding: 1.5rem;
   border-radius: 8px;
   border-left: 4px solid #0284c7;
   line-height: 1.8;
   font-size: 1rem;
-  color: #0f172a;
+  color: #e0f2fe;
   margin-bottom: 1rem;
+  font-weight: 500;
 }
 
 .question-controls {
@@ -357,31 +363,31 @@
 }
 
 .perfect-answer-card .answer-header h3 {
-  color: #059669;
+  color: #86efac;
   margin: 0;
   font-size: 1.25rem;
   font-weight: 800;
 }
 
 .answer-badge {
-  background: rgba(16, 185, 129, 0.15);
-  color: #047857;
+  background: rgba(16, 185, 129, 0.2);
+  color: #86efac;
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-size: 0.85rem;
   white-space: nowrap;
   font-weight: 700;
-  border: 1px solid rgba(16, 185, 129, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .answer-box {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(236, 253, 245, 0.95) 100%);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%);
   padding: 1.5rem;
   border-radius: 10px;
   border-left: 4px solid #16a34a;
   line-height: 1.8;
   font-size: 1rem;
-  color: #0f172a;
+  color: #e0f2fe;
   margin-bottom: 1.5rem;
   position: relative;
   overflow: hidden;
@@ -397,14 +403,28 @@
 .answer-text {
   white-space: pre-wrap;
   word-break: break-word;
-  color: #000000 !important;
-  font-weight: 500;
+  color: #f8fafc !important;
+  font-weight: 600;
   font-size: 1.05rem;
+  line-height: 1.75;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.35),
+    0 0 16px rgba(134, 239, 172, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.answer-text strong {
+  color: #bbf7d0 !important;
+  font-weight: 800;
+  text-shadow:
+    0 0 6px rgba(134, 239, 172, 0.5),
+    0 0 12px rgba(134, 239, 172, 0.3);
 }
 
 .streaming-cursor {
   animation: blink 1s infinite;
   margin-left: 2px;
+  color: #4ade80;
 }
 
 @keyframes blink {
@@ -512,6 +532,11 @@
   font-weight: 600;
 }
 
+/* Utility: margin-left spacing used in button labels */
+.ml-2 {
+  margin-left: 0.5rem;
+}
+
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -538,7 +563,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: #6b7280;
+  color: #a0d8ff;
 }
 
 .loading-indicator .spinner {

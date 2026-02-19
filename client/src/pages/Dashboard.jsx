@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Calendar, Clock, TrendingUp, FileText, Briefcase, X, User, MessageSquare } from 'lucide-react';
-import { sessionAPI, analyticsAPI, documentsAPI } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import api, { sessionAPI, analyticsAPI, documentsAPI } from '../services/api';
 import './Dashboard.css';
 import './DashboardModern.css';
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [sessions, setSessions] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,10 +44,36 @@ function Dashboard() {
   const [stripeSessionId, setStripeSessionId] = useState('');
   const [flutterwaveTxId, setFlutterwaveTxId] = useState('');
   const [paymentHistory, setPaymentHistory] = useState([]);
+
+  const createSessionWithFallback = async (sessionData) => {
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      const token = authStorage ? JSON.parse(authStorage)?.state?.token : null;
+
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(sessionData),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
+      }
+
+      return { data };
+    } catch (fallbackError) {
+      throw fallbackError;
+    }
+  };
+
   // Load payment history
   const loadPaymentHistory = async () => {
     try {
-      const res = await axios.get('/api/subscriptions/history');
+      const res = await api.get('/subscriptions/history');
       setPaymentHistory(res.data || []);
     } catch (err) {
       setPaymentHistory([]);
@@ -64,7 +92,7 @@ function Dashboard() {
     setSubLoading(true);
     setSubError('');
     try {
-      const res = await axios.get('/api/subscriptions/status');
+      const res = await api.get('/subscriptions/status');
       setSubscription(res.data);
     } catch (err) {
       setSubError('Failed to load subscription status');
@@ -78,7 +106,7 @@ function Dashboard() {
     setSubLoading(true);
     setSubError('');
     try {
-      const res = await axios.post('/api/subscriptions/trial');
+      const res = await api.post('/subscriptions/trial');
       setSubscription(res.data);
     } catch (err) {
       setSubError('Failed to start trial');
@@ -103,7 +131,7 @@ function Dashboard() {
       } else if (paymentMethod === 'flutterwave') {
         body.flutterwave_tx_id = flutterwaveTxId;
       }
-      const res = await axios.post('/api/subscriptions/create', body);
+      const res = await api.post('/subscriptions/create', body);
       setSubscription(res.data);
       setShowPayment(false);
       setPaystackRef('');
@@ -134,7 +162,7 @@ function Dashboard() {
 
       // Try to load analytics
       try {
-        const analyticsRes = await analyticsAPI.getUserAnalytics({ period: 30 });
+        const analyticsRes = await analyticsAPI.getUserAnalytics();
         setAnalytics(analyticsRes.data);
       } catch (analyticsErr) {
         console.warn('Failed to load analytics:', analyticsErr);
@@ -160,7 +188,21 @@ function Dashboard() {
         ...newSession,
         aiInstructions: aiInstructions.trim() || null
       };
-      const response = await sessionAPI.create(sessionData);
+
+      let response;
+      try {
+        response = await sessionAPI.create(sessionData);
+      } catch (requestError) {
+        const isNetworkError =
+          requestError?.code === 'ERR_NETWORK' ||
+          /network error/i.test(requestError?.message || '');
+
+        if (!isNetworkError) throw requestError;
+
+        console.warn('Session create request hit network error. Retrying via same-origin fallback...');
+        response = await createSessionWithFallback(sessionData);
+      }
+
       const sessionId = response.data.session.id;
       
       // Upload documents if provided
@@ -297,35 +339,7 @@ function Dashboard() {
             </div>
           ) : <p>No analytics data.</p>}
         </div>
-        {showNewSession && (
-          <div className="modal">
-            <div className="modal-content">
-              <h2>Start New Session</h2>
-              <form onSubmit={handleCreateSession}>
-                <input type="text" placeholder="Session Title" value={newSession.title} onChange={e => setNewSession({ ...newSession, title: e.target.value })} required />
-                <input type="text" placeholder="Company Name" value={newSession.companyName} onChange={e => setNewSession({ ...newSession, companyName: e.target.value })} required />
-                <input type="text" placeholder="Position" value={newSession.position} onChange={e => setNewSession({ ...newSession, position: e.target.value })} required />
-                <select value={newSession.sessionType} onChange={e => setNewSession({ ...newSession, sessionType: e.target.value })}>
-                  <option value="general">General</option>
-                  <option value="interview">Interview</option>
-                  <option value="practice">Practice</option>
-                </select>
-                <textarea placeholder="AI Instructions (optional)" value={aiInstructions} onChange={e => setAiInstructions(e.target.value)} />
-                <div className="file-upload">
-                  <label>Upload CV:</label>
-                  <input type="file" ref={cvFileRef} onChange={handleCvChange} />
-                  <label>Upload Job Description:</label>
-                  <input type="file" ref={jobDescFileRef} onChange={handleJobDescChange} />
-                  <label>Upload Person Spec:</label>
-                  <input type="file" ref={personSpecFileRef} onChange={handlePersonSpecChange} />
-                </div>
-                {uploadError && <div className="alert-error">{uploadError}</div>}
-                <button type="submit" className="btn btn-primary" disabled={uploading}>Create Session</button>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowNewSession(false)}>Cancel</button>
-              </form>
-            </div>
-          </div>
-        )}
+        {/* modal removed: rendering overlay modal via portal below to avoid clipping */}
         <div className="payment-history card">
           <h3 className="card-title">Payment History</h3>
           {paymentHistory.length === 0 ? (
@@ -353,19 +367,6 @@ function Dashboard() {
                 </table>
               )}
             </div>
-      </div>
-      <div className="dashboard-header">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="subtitle">Manage your interview sessions</p>
-        </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowNewSession(true)}
-        >
-          <Plus size={20} />
-          New Session
-        </button>
       </div>
 
       {/* Analytics Cards */}
@@ -452,7 +453,7 @@ function Dashboard() {
       </div>
 
       {/* New Session Modal */}
-      {showNewSession && (
+      {showNewSession && ReactDOM.createPortal(
         <div className="modal-overlay" onClick={() => setShowNewSession(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -666,7 +667,7 @@ function Dashboard() {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

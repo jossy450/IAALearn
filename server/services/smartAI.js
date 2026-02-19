@@ -449,55 +449,286 @@ Questions covered: ${session.questions?.length || 0}`
         company = '' 
       } = context;
 
-      // Build custom instruction section
-      let instructionSection = '';
-      if (aiInstructions) {
-        instructionSection = `
+      const normalizedCv = (cv || '').trim();
+      const normalizedJobDescription = (jobDescription || '').trim();
+      const normalizedPersonSpecification = (personSpecification || '').trim();
+      const normalizedAiInstructions = (aiInstructions || '').trim();
+      const normalizedPosition = (position || '').trim();
+      const normalizedCompany = (company || '').trim();
+      const normalizedQuestion = (question || '').trim();
 
-IMPORTANT - Follow these specific instructions from the candidate:
-${aiInstructions}`;
+      const extractEmployerAnchors = (text = '') => {
+        const anchors = new Set();
+        const source = text.replace(/\r/g, '\n');
+
+        // Explicit company-style names (Ltd, Limited, Inc, etc.)
+        const companySuffixPattern = /\b([A-Z][A-Za-z0-9&',.\- ]{1,70}\s(?:Limited|Ltd|LLC|Inc|Corp|Corporation|PLC|Group|Consulting|Technologies|Technology|Solutions|Systems|Services))\b/g;
+        let match;
+        while ((match = companySuffixPattern.exec(source)) !== null) {
+          const candidate = match[1].replace(/\s+/g, ' ').trim();
+          if (candidate.split(' ').length <= 9) anchors.add(candidate);
+          if (anchors.size >= 4) break;
+        }
+
+        // "at <Company>" fallback pattern
+        if (anchors.size < 4) {
+          const atPattern = /\b(?:at|with|for)\s+([A-Z][A-Za-z0-9&',.\- ]{2,60})/g;
+          while ((match = atPattern.exec(source)) !== null) {
+            const candidate = match[1]
+              .replace(/[,:;].*$/, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            const lower = candidate.toLowerCase();
+            const looksGeneric = [
+              'the',
+              'a',
+              'an',
+              'team',
+              'company',
+              'organization',
+              'business',
+              'role',
+              'position',
+            ].includes(lower);
+
+            if (!looksGeneric && candidate.split(' ').length <= 9) {
+              anchors.add(candidate);
+            }
+            if (anchors.size >= 4) break;
+          }
+        }
+
+        return Array.from(anchors).slice(0, 4);
+      };
+
+      const employerAnchors = extractEmployerAnchors(normalizedCv);
+      const primaryEmployerAnchor = employerAnchors[0] || '';
+
+      const allowedNumericTokens = Array.from(new Set(
+        `${normalizedCv}\n${normalizedJobDescription}\n${normalizedPersonSpecification}`
+          .match(/\b\d+(?:\.\d+)?%?\b/g) || []
+      )).slice(0, 20);
+
+      const isTellMeAboutYourself = /tell me about yourself|introduce yourself|walk me through your background|overview of your background/i
+        .test(normalizedQuestion.toLowerCase());
+
+      const isBehavioralStoryQuestion = /tell me about a time|difficult situation|challenge|conflict|wasn't your task|was not your task|not your task|went wrong|problem you faced|handle(?:d)?\s+a\s+difficult\s+situation|resolve(?:d)?\s+the\s+issue|under pressure|decision|short.?time|tight deadline|prioriti|disagree|failure|mistake|learn|feedback|persuade|influence|ambiguous|unclear|ownership|initiative|beyond your role/i
+        .test(normalizedQuestion.toLowerCase());
+
+      const isAmazon = /amazon|aws|amazon web services/i.test(normalizedCompany);
+
+      const targetCompanyProvided = Boolean(normalizedCompany);
+
+      const hasAiInstructions = normalizedAiInstructions.length > 0;
+      const hasContextData = [
+        normalizedCv,
+        normalizedJobDescription,
+        normalizedPersonSpecification,
+        normalizedPosition,
+        normalizedCompany,
+      ].some(Boolean);
+
+      const standardWriteupInstructions = `
+Standard write-up instructions:
+- Keep it tight (2 short paragraphs max, or bullets if clearer).
+- Be factual and specific; avoid fluff and hype.
+- Bold 3-6 key skills/technologies/achievements for quick skimming (use **like this**).
+- Include 1-2 concrete examples or metrics only when they are supported by provided information.
+- Sound like a confident candidate, not a generic AI.
+- If STAR/STARR method is requested, structure the answer accordingly.
+- Answer directly without preamble. Make it actionable for the candidate to speak aloud.`;
+
+      const questionSpecificBlueprint = isTellMeAboutYourself
+        ? `
+Question blueprint ("Tell me about yourself"):
+- Use PRESENT → PAST → FUTURE structure.
+- Present (1-2 sentences): current professional identity and strongest relevant capability.
+- Past (2-4 sentences): 2-3 concrete, context-grounded highlights from CV/job/person-spec data.
+- Future fit (1-2 sentences): why this role/company is the right next step.
+- Mention provided company and role explicitly when available.
+- Avoid generic opener phrases like "I am highly motivated".
+- Target 110-170 words unless custom instructions override this.`
+        : `
+Question blueprint:
+- Answer the exact interviewer question directly.
+- Use a clear logical structure with context-grounded points.
+- Target 90-160 words unless custom instructions override this.`;
+
+      const amazonLPSection = isAmazon && isBehavioralStoryQuestion ? `
+Amazon Leadership Principles (MANDATORY for Amazon interviews):
+- Identify the single most relevant Amazon LP for this question and name it explicitly at the end.
+- Common LPs for decision/time-pressure questions: "Bias for Action", "Deliver Results", "Ownership", "Are Right, A Lot".
+- Common LPs for conflict/difficult situation: "Earn Trust", "Have Backbone; Disagree and Commit", "Ownership".
+- Common LPs for initiative/beyond role: "Ownership", "Invent and Simplify", "Think Big".
+- Structure: Use full STAR (Situation → Task → Action → Result) with clear section labels or natural flow.
+- Result MUST include measurable impact (time saved, uptime restored, cost reduced, team unblocked, etc.).
+- If no metric is in the CV/context, use a realistic qualitative outcome (e.g., "restored service within 2 hours", "zero further incidents").
+- End with: "This reflects my commitment to [LP name] — [one sentence on why it matters at Amazon]."
+- Target 180-250 words for Amazon behavioral answers.` : '';
+
+      const behavioralBlueprint = isBehavioralStoryQuestion
+        ? `
+Behavioral-story blueprint (STAR format — MANDATORY):
+Structure the answer with these four clear parts:
+
+**SITUATION** (1-2 sentences): Set the scene. Name the employer/team/project from CV if available. Be specific — what was happening, what was at stake.
+
+**TASK** (1 sentence): What was YOUR specific responsibility or the challenge you personally owned? If it was outside your assigned role, say so explicitly.
+
+**ACTION** (2-3 sentences): What did YOU specifically do? Use "I" not "we". Show decision-making, technical expertise, and clear ownership. Include the reasoning behind your choice.
+
+**RESULT** (1-2 sentences): What was the measurable outcome? Include impact: time restored, downtime avoided, team unblocked, cost saved, reliability improved. If no metric is available from context, use a realistic qualitative outcome.
+
+Additional rules:
+- If employer names are available from CV, name one explicitly (e.g., "At ${primaryEmployerAnchor || 'my previous employer'}...").
+- If the question says it was not your task, explicitly state it was outside your assigned responsibility and that you took ownership anyway.
+- End with 1 sentence connecting this experience to the target role at ${normalizedCompany || 'the target company'}.
+- Avoid vague phrases like "I worked with the team" — be specific about YOUR actions.
+- Target 150-220 words.
+
+${amazonLPSection}`
+        : '';
+
+      const personalizationRules = employerAnchors.length
+        ? `
+Personalization requirements:
+- Use at least one CV employer/work-history anchor by name: ${employerAnchors.join(', ')}.
+- Avoid generic phrasing like "In my previous role" without naming context.
+- Make wording sound natural and first-person, not template-like.`
+        : `
+Personalization requirements:
+- Use the most specific role/project/team context available from CV.
+- Keep wording natural and first-person, not template-like.`;
+
+      const companyRoleUsageRules = `
+Company/role usage rules:
+- The target company (${normalizedCompany || 'the recruiting company'}) is the interviewing/recruiting company, not automatically the past employer.
+- Do NOT frame past experience as if it happened at the target company unless the CV explicitly says so.
+- For experience examples, prefer candidate's previous employer(s) from CV${employerAnchors.length ? `: ${employerAnchors.join(', ')}` : ''}.
+- Use target company/role in a forward-looking fit sentence (e.g., why this experience is relevant to ${normalizedCompany || 'the target company'} ${normalizedPosition || ''}).`;
+
+      const behavioralHardRule = isBehavioralStoryQuestion
+        ? `
+Behavioral hard rule:
+- Start the situation with a real prior employer/team context from CV${primaryEmployerAnchor ? ` (prefer: ${primaryEmployerAnchor})` : ''}.
+- If prior employer is available, never start with "At ${normalizedCompany || 'the target company'}" for past events.
+- If the question states it was not your task, explicitly state that it was outside your assigned responsibility and that you took ownership.`
+        : '';
+
+      const numericGuardrail = allowedNumericTokens.length
+        ? `
+Numeric guardrail:
+- You may only use numeric values that appear in provided context.
+- Allowed numeric tokens: ${allowedNumericTokens.join(', ')}.
+- Do not introduce new percentages or numbers.`
+        : `
+Numeric guardrail:
+- No numeric evidence was provided.
+- Do NOT invent or use any percentages/figures.`;
+
+      const groundingChecklist = hasContextData
+        ? `
+Grounding checklist (required):
+1. Include at least one explicit CV-grounded detail.
+2. Include at least one explicit job/person-spec/role-grounded detail.
+3. Include company and role if provided.
+4. If a metric exists in provided data, include it naturally.
+5. Remove vague filler statements before finalizing.`
+        : `
+Grounding checklist (required):
+1. No context provided: generate strongest general professional answer.
+2. Keep claims realistic and adaptable.
+3. Do not invent personal metrics or specific achievements.`;
+
+      // Behavior policy requested by user:
+      // 1) Candidate instructions first (if provided)
+      // 2) Tailor to provided context
+      // 3) If no instructions, use standard write-up rules
+      // 4) If no context either, still generate best possible answer with general professional framing
+      let tailoringPolicy = '';
+      if (hasAiInstructions) {
+        tailoringPolicy = `
+Priority policy:
+1. Candidate custom instructions are MANDATORY and highest priority.
+2. Tailor the answer strictly to provided candidate/context information.
+3. If some context is missing, keep missing parts general and adaptable (do not invent facts).
+4. Still keep the final output concise and interview-ready.`;
+      } else if (hasContextData) {
+        tailoringPolicy = `
+Priority policy:
+1. No custom candidate instructions were provided.
+2. Follow the standard write-up instructions.
+3. Tailor strictly to provided candidate/context information.
+4. Do not invent candidate-specific facts that are not in the provided data.`;
+      } else {
+        tailoringPolicy = `
+Priority policy:
+1. No custom candidate instructions were provided.
+2. Limited/no candidate context was provided.
+3. Follow the standard write-up instructions and generate the best possible interview answer.
+4. Keep claims general and adaptable; do not fabricate personal achievements/metrics.`;
       }
 
       // Build person specification section
       let personSpecSection = '';
-      if (personSpecification) {
+      if (normalizedPersonSpecification) {
         personSpecSection = `
 
 Person Specification (required competencies/criteria):
-${personSpecification}`;
+${normalizedPersonSpecification}`;
       }
 
-      const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, and concise.
+      const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, concise, and tailored.
 
-You will consider:
-1. The candidate's CV/Resume
-2. The job description
-3. The person specification (if provided) - match your answer to the required competencies
-4. The company and position
-5. Best interview practices
-6. Any specific instructions from the candidate (e.g., STAR method, answer style)${instructionSection}
+${tailoringPolicy}
 
-Formatting & style:
-- Keep it tight (2 short paragraphs max, or bullets if clearer).
-- Be factual and specific; avoid fluff and hype.
-- Bold 3-6 key skills/technologies/achievements for quick skimming (use **like this**).
-- Include 1-2 concrete examples or metrics when possible.
-- Sound like a confident candidate, not a generic AI.
-- If STAR/STARR method is requested, structure the answer accordingly.
+Hard constraints:
+- Never contradict provided instructions/context.
+- Never invent candidate-specific facts, experience, tools, or metrics that were not provided.
+- If details are missing, use clear professional wording that is still useful and realistic.
 
-Answer directly without preamble. Make it actionable for the candidate to speak aloud.`;
+${questionSpecificBlueprint}
+
+${behavioralBlueprint}
+
+${groundingChecklist}
+
+${personalizationRules}
+
+${companyRoleUsageRules}
+
+${behavioralHardRule}
+
+${numericGuardrail}
+
+${standardWriteupInstructions}`;
 
       const userPrompt = `
 Interview Question: "${question}"
 
-Company: ${company || 'Unknown'}
-Position: ${position || 'Unknown'}
+Company: ${normalizedCompany || 'Unknown'}
+Position: ${normalizedPosition || 'Unknown'}
+
+Candidate Custom Instructions:
+${hasAiInstructions ? normalizedAiInstructions : 'None provided'}
 
 Candidate's CV/Resume:
-${cv || 'No CV provided'}
+${normalizedCv || 'No CV provided'}
 
 Job Description:
-${jobDescription || 'No job description provided'}${personSpecSection}
+${normalizedJobDescription || 'No job description provided'}${personSpecSection}
+
+Grounding facts that can be used:
+- Role target: ${normalizedPosition || 'Not provided'}
+- Company target: ${normalizedCompany || 'Not provided'}
+- CV facts: ${normalizedCv || 'Not provided'}
+- Job facts: ${normalizedJobDescription || 'Not provided'}
+- Person-spec facts: ${normalizedPersonSpecification || 'Not provided'}
+- Employer/work-history anchors from CV: ${employerAnchors.length ? employerAnchors.join(', ') : 'None detected'}
+- Preferred anchor to humanize answer: ${primaryEmployerAnchor || 'Use the most specific valid work-history detail available'}
+- Target company should be used as future fit only (unless CV confirms it as past employer): ${targetCompanyProvided ? normalizedCompany : 'Not provided'}
+- Allowed numeric tokens: ${allowedNumericTokens.length ? allowedNumericTokens.join(', ') : 'None'}
 
 Provide the perfect answer the candidate should give:`;
 
@@ -508,7 +739,7 @@ Provide the perfect answer the candidate should give:`;
           { role: 'user', content: userPrompt }
         ],
         stream: true,
-        temperature: 0.7,
+        temperature: hasContextData || hasAiInstructions ? 0.35 : 0.55,
         max_tokens: 1000
       });
 

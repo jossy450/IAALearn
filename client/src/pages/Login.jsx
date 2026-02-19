@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, documentsAPI } from '../services/api';
 import { Upload, FileText, Briefcase, X, Eye, EyeOff, Lock, Mail, AlertCircle, CheckCircle, KeyRound, Send } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import pushNotifications from '../services/pushNotifications';
 import axios from 'axios';
 import './Auth.css';
 
@@ -16,6 +17,7 @@ function Login() {
           const res = await axios.post('/api/auth/supabase', { token: supaToken });
           if (res.data?.token) {
             setAuth(res.data.token, res.data.user);
+            try { pushNotifications.flushPendingPushToken(); } catch (_) {}
             return true;
           }
           setError('Failed to exchange Supabase token');
@@ -53,10 +55,11 @@ function Login() {
     const handleGoogleLogin = async () => {
       setError('');
       setSocialLoading(true);
-      try {
-        const { error: supaError } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/oauth-callback' } });
-        if (supaError) throw supaError;
-        // After redirect, handle exchange in /oauth-callback page
+          try {
+            // Always use server-driven OAuth initiation to keep Supabase configuration optional.
+            // The server will redirect to Google and return to /auth/callback with app token.
+            window.location.href = '/api/auth/google';
+            return;
       } catch (err) {
         setError(err.message || 'Google login failed');
       } finally {
@@ -69,9 +72,9 @@ function Login() {
       setError('');
       setSocialLoading(true);
       try {
-        const { error: supaError } = await supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: window.location.origin + '/oauth-callback' } });
-        if (supaError) throw supaError;
-        // After redirect, handle exchange in /oauth-callback page
+          // Always use server-driven GitHub OAuth initiation.
+          window.location.href = '/api/auth/github';
+          return;
       } catch (err) {
         setError(err.message || 'GitHub login failed');
       } finally {
@@ -79,9 +82,16 @@ function Login() {
       }
     };
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { setAuth } = useAuthStore();
   const [formData, setFormData] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    // Show OAuth error if redirected back from server with ?error=
+    const oauthError = searchParams.get('error');
+    if (oauthError === 'oauth_failed') return 'Google sign-in failed. Please check your Google credentials or try again.';
+    if (oauthError) return decodeURIComponent(oauthError);
+    return '';
+  });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -166,6 +176,10 @@ function Login() {
       }
       
       setAuth(token, user);
+      try { pushNotifications.flushPendingPushToken(); } catch (_) {}
+
+      // Flush any pending push token that was queued before auth
+      try { pushNotifications.flushPendingPushToken(); } catch (_) {}
       
       // Show upload modal after successful login
       setShowUploadModal(true);
@@ -196,7 +210,7 @@ function Login() {
       }
       
       setAuth(token, user);
-      
+      try { pushNotifications.flushPendingPushToken(); } catch (_) {}
       // Show upload modal after successful login
       setShowUploadModal(true);
       setUploadError('');

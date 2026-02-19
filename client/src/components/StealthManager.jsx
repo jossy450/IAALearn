@@ -13,6 +13,10 @@ const StealthManager = () => {
     hideApp
   } = useStealthStore();
 
+  // Allow disabling stealth detection in non-production via Vite env
+  const disableStealth = (import.meta.env.VITE_DISABLE_STEALTH === 'true');
+  if (disableStealth) return null;
+
   // Panic button handler
   const handleKeyPress = useCallback((e) => {
     const { key, modifiers } = panicKey;

@@ -1,14 +1,18 @@
 .subscription-page.modern-ui {
   padding: 2rem;
-  background: #f9f9fb;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(96, 165, 250, 0.18), transparent 36%),
+    radial-gradient(circle at 88% 18%, rgba(34, 211, 238, 0.14), transparent 34%),
+    linear-gradient(160deg, var(--bg-900), var(--bg-800));
   min-height: 100vh;
+  color: #ffffff;
 }
 .subscription-header {
   margin-bottom: 2rem;
 }
 .subscription-header h1 {
   font-size: 2rem;
-  color: #222;
+  color: var(--text-primary);
 }
 .plans-list {
   display: flex;
@@ -17,30 +21,31 @@
   margin-bottom: 2rem;
 }
 .plan-card {
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid var(--border-weak);
+  border-radius: 14px;
   padding: 1.5rem;
   width: 320px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  box-shadow: 0 12px 40px rgba(3, 9, 18, 0.5);
+  backdrop-filter: blur(10px);
   transition: border 0.2s;
 }
 .plan-card.selected {
-  border: 2px solid #007bff;
+  border: 2px solid var(--primary);
 }
 .plan-card h2 {
   margin-top: 0;
-  color: #007bff;
+  color: var(--primary);
 }
 .plan-features {
   margin: 1rem 0;
   padding-left: 1rem;
 }
 .plan-features li {
-  color: #222;
+  color: var(--text-secondary);
   font-size: 0.95rem;
 }
-.btn {
+.subscription-page.modern-ui .btn {
   padding: 0.5rem 1.2rem;
   border-radius: 4px;
   border: none;
@@ -48,40 +53,61 @@
   cursor: pointer;
   margin-right: 0.5rem;
 }
-.btn-primary {
-  background: #007bff;
-  color: #fff;
+.subscription-page.modern-ui .btn-primary,
+.subscription-page.modern-ui .btn-secondary {
+  background: linear-gradient(120deg, var(--primary) 0%, var(--primary-light) 60%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.25);
 }
-.btn-secondary {
-  background: #e0e0e0;
-  color: #222;
+
+.subscription-page.modern-ui .btn {
+  color: #ffffff !important;
+}
+
+.subscription-page.modern-ui .btn-primary:hover,
+.subscription-page.modern-ui .btn-secondary:hover {
+  background: linear-gradient(120deg, var(--primary-dark) 0%, var(--primary) 60%);
+  box-shadow: 0 14px 36px rgba(37, 99, 235, 0.35);
+}
+
+.subscription-page.modern-ui .trial-icon,
+.subscription-page.modern-ui .feature-item svg,
+.subscription-page.modern-ui .plan-features li svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 .compare-section {
-  background: #eef6ff;
+  background: rgba(37, 99, 235, 0.1);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 2rem;
+  border: 1px solid var(--border-weak);
 }
 .payment-section {
-  background: #fffbe6;
+  background: rgba(245, 158, 11, 0.1);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 2rem;
+  border: 1px solid var(--border-weak);
 }
 .payment-section label {
   display: block;
   margin-top: 1rem;
+  color: var(--text-secondary);
 }
 .current-subscription {
-  background: #e6ffe6;
+  background: rgba(22, 163, 74, 0.1);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 2rem;
+  border: 1px solid var(--border-weak);
 }
 .alert-error {
-  color: #d8000c;
-  background: #ffbaba;
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
   padding: 0.5rem 1rem;
   border-radius: 4px;
   margin-top: 1rem;
+  border: 1px solid var(--border-weak);
 }

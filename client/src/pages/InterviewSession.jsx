@@ -5,7 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
-import { sessionAPI, transcriptionAPI } from '../services/api';
+import { sessionAPI, transcriptionAPI, getApiRoot } from '../services/api';
 import { startNativeRecording, stopNativeRecording } from '../services/nativeAudioRecorder';
 import QRTransferModal from '../components/QRTransferModal';
 import FloatingAnswer from '../components/FloatingAnswer';
@@ -42,6 +42,36 @@ function InterviewSession() {
   const { setScreenRecording, stealthMode } = useStealthStore();
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
+
+  const parseSSEChunk = (chunkText = '') => {
+    // Handle text/event-stream payloads like:
+    // data: {"type":"chunk","content":"..."}\n\n
+    // or plain text payloads
+    const parts = chunkText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('data:'));
+
+    if (parts.length === 0) {
+      return chunkText;
+    }
+
+    let extracted = '';
+    for (const line of parts) {
+      const payload = line.replace(/^data:\s*/, '');
+      try {
+        const parsed = JSON.parse(payload);
+        if (parsed?.type === 'chunk' && typeof parsed.content === 'string') {
+          extracted += parsed.content;
+        }
+      } catch {
+        // Not JSON -> treat as raw text data frame
+        extracted += payload;
+      }
+    }
+
+    return extracted;
+  };
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -148,6 +178,7 @@ function InterviewSession() {
       
       const isAndroid = Capacitor.getPlatform() === 'android' || /android/i.test(navigator.userAgent);
       const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const useAutoListenSpeechToText = !!autoListen && !!WebSpeechRecognition;
       
       // On Android native, use the Capacitor AudioRecorder plugin instead of web getUserMedia
       if (Capacitor.isNativePlatform() && isAndroid) {
@@ -159,52 +190,54 @@ function InterviewSession() {
           console.log('📁 Start result:', JSON.stringify(result));
           setIsRecording(true);
           setLoadingStep('recording');
-          
-          // Start native Speech Recognition plugin for real-time transcription
-          // This runs in parallel with native recording for live preview
-          try {
-            console.log('🎤 Starting native Speech Recognition for live transcription...');
-            
-            // Check and request permissions
-            const permStatus = await SpeechRecognition.checkPermissions();
-            if (permStatus.speechRecognition !== 'granted') {
-              const reqStatus = await SpeechRecognition.requestPermissions();
-              if (reqStatus.speechRecognition !== 'granted') {
-                console.warn('Speech recognition permission not granted');
+
+          // Auto-listen toggle controls live speech-to-text preview.
+          // Recording still works even when this is disabled.
+          if (autoListen) {
+            try {
+              console.log('🎤 Starting native Speech Recognition for live transcription...');
+              
+              // Check and request permissions
+              const permStatus = await SpeechRecognition.checkPermissions();
+              if (permStatus.speechRecognition !== 'granted') {
+                const reqStatus = await SpeechRecognition.requestPermissions();
+                if (reqStatus.speechRecognition !== 'granted') {
+                  console.warn('Speech recognition permission not granted');
+                }
               }
-            }
-            
-            // Check availability
-            const available = await SpeechRecognition.available();
-            if (!available.available) {
-              console.warn('Native speech recognition not available on this device');
-              return; // Still continue with recording, just no live preview
-            }
-            
-            // Set up listener for partial results
-            let liveTranscript = '';
-            await SpeechRecognition.addListener('partialResults', (data) => {
-              if (data.matches && data.matches.length > 0) {
-                // Show the best match as interim result
-                setRecordedQuestion(liveTranscript + data.matches[0]);
+              
+              // Check availability
+              const available = await SpeechRecognition.available();
+              if (!available.available) {
+                console.warn('Native speech recognition not available on this device');
+                return; // Still continue with recording, just no live preview
               }
-            });
-            
-            // Start listening with continuous mode
-            await SpeechRecognition.start({
-              language: 'en-US',
-              maxResults: 3,
-              partialResults: true,
-              popup: false // Don't show Google's popup
-            });
-            
-            // Store reference for cleanup
-            speechRecognitionRef.current = { native: true };
-            console.log('✅ Native speech recognition started');
-            
-          } catch (speechErr) {
-            console.warn('Could not start native speech recognition (non-fatal):', speechErr);
-            // Continue without live preview - server transcription will still work
+              
+              // Set up listener for partial results
+              let liveTranscript = '';
+              await SpeechRecognition.addListener('partialResults', (data) => {
+                if (data.matches && data.matches.length > 0) {
+                  // Show the best match as interim result
+                  setRecordedQuestion(liveTranscript + data.matches[0]);
+                }
+              });
+              
+              // Start listening with continuous mode
+              await SpeechRecognition.start({
+                language: 'en-US',
+                maxResults: 3,
+                partialResults: true,
+                popup: false // Don't show Google's popup
+              });
+              
+              // Store reference for cleanup
+              speechRecognitionRef.current = { native: true };
+              console.log('✅ Native speech recognition started');
+              
+            } catch (speechErr) {
+              console.warn('Could not start native speech recognition (non-fatal):', speechErr);
+              // Continue without live preview - server transcription will still work
+            }
           }
           
           return;
@@ -219,7 +252,7 @@ function InterviewSession() {
       }
       
       // Fallback: use MediaRecorder via getUserMedia (web / non-native)
-      if (isAndroid || !WebSpeechRecognition) {
+      if (isAndroid || !useAutoListenSpeechToText) {
         console.log('🎤 Using MediaRecorder (web)...');
         
         // Check if mediaDevices is available
@@ -361,7 +394,7 @@ function InterviewSession() {
       }
       
       // Web Speech API for desktop (faster, no transcription needed)
-      if (WebSpeechRecognition) {
+      if (useAutoListenSpeechToText) {
         console.log('🎤 Using Web Speech API (desktop)...');
         // Use Web Speech API to record interviewer's question
         const recognition = new WebSpeechRecognition();
@@ -617,7 +650,8 @@ function InterviewSession() {
     try {
       // Get auth token from persisted auth store
       const token = getAuthToken();
-      const base = (import.meta.env.VITE_API_URL || window.location.origin || '').replace(/\/$/, '');
+      const apiRoot = getApiRoot();
+      const base = (apiRoot || window.location.origin || '').replace(/\/$/, '');
       const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
       
       // Send question with CV, job description, person spec, and AI instructions
@@ -651,14 +685,19 @@ function InterviewSession() {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value);
-        fullAnswer += chunk;
+        const chunk = decoder.decode(value, { stream: true });
+        fullAnswer += parseSSEChunk(chunk);
         setPerfectAnswer(fullAnswer);
         
         // Show floating answer in stealth mode
         if (stealthMode && !showFloatingAnswer) {
           setShowFloatingAnswer(true);
         }
+      }
+
+      fullAnswer = fullAnswer.trim();
+      if (!fullAnswer) {
+        throw new Error('Empty AI response');
       }
 
       const endTime = Date.now();
@@ -675,7 +714,8 @@ function InterviewSession() {
       }]);
     } catch (error) {
       console.error('Error generating perfect answer:', error);
-      showToast('Error generating perfect answer. Please try again.', 'error');
+      const responseError = error?.response?.data?.error;
+      showToast(responseError || error?.message || 'Error generating perfect answer. Please try again.', 'error');
     } finally {
       setLoading(false);
       setLoadingStep(null);
@@ -715,8 +755,7 @@ function InterviewSession() {
       const token = getAuthToken();
       
       // Build API URL - use native fetch to bypass Capacitor HTTP plugin issues
-      const isNative = Capacitor.isNativePlatform();
-      const apiBase = isNative ? 'https://iaalearn-cloud.fly.dev' : (import.meta.env.VITE_API_URL || '');
+      const apiBase = (getApiRoot() || '').replace(/\/$/, '');
       const url = `${apiBase}/api/transcription/transcribe`;
       
       console.log('Sending FormData to:', url);
@@ -918,7 +957,7 @@ function InterviewSession() {
                     <Square size={18} />
                     <span className="ml-2">Stop Recording</span>
                   </button>
-                  <label className="flex items-center gap-2 text-sm text-gray-800 bg-white bg-opacity-40 px-3 py-2 rounded-md border border-white/40">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#c0e7ff', background: 'rgba(255,255,255,0.12)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={autoListen}

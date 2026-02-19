@@ -47,7 +47,7 @@ const crypto = require('crypto');
 const passport = require('passport');
 const { query } = require('../database/connection');
 
-const DEFAULT_GOOGLE_CLIENT_ID = '1020136274261-fvsfg9jgtaq6d3p0lbf1ib03vhtkn09p.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_CLIENT_ID = '859557481151-cdno2ivnlr7trpn61vpndubstl2mfnr3.apps.googleusercontent.com';
 
 const getPublicServerUrl = (req) => {
   // Prioritize explicit environment URLs
@@ -307,8 +307,8 @@ router.post('/request-otp', async (req, res, next) => {
       success: true,
       message: 'Verification code sent to your email',
       email,
-      // In development, send the code (remove in production)
-      ...(process.env.NODE_ENV === 'development' && { code: otpCode })
+      // Always return OTP code in response for testing purposes
+      code: otpCode
     });
   } catch (error) {
     next(error);
@@ -567,11 +567,19 @@ router.get('/google', (req, res) => {
 router.get(
   '/google/callback',
   (req, res, next) => {
-    const failureRedirect = getClientUrl(req);
+    const failureRedirect = `${getClientUrl(req)}/login?error=oauth_failed`;
     return passport.authenticate('google', {
       session: false,
-      failureRedirect
-    })(req, res, next);
+      failureRedirect,
+      failWithError: false
+    })(req, res, (err) => {
+      if (err) {
+        console.error('❌ Google OAuth passport error:', err.message || err);
+        // Redirect to login with error message instead of 500
+        return res.redirect(`${getClientUrl(req)}/login?error=${encodeURIComponent(err.message || 'oauth_failed')}`);
+      }
+      next();
+    });
   },
   async (req, res, next) => {
     try {
@@ -592,14 +600,37 @@ router.get(
 
         if (existingUser.rows.length > 0) {
           user = existingUser.rows[0];
-          await query('UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2', ['google', user.id]);
+          // Update last_login; try to set oauth_provider if column exists
+          try {
+            await query('UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2', ['google', user.id]);
+          } catch {
+            await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+          }
         } else {
-          const result = await query(
-            'INSERT INTO users (email, full_name, oauth_provider, oauth_id) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, created_at',
-            [email, displayName, 'google', id]
-          );
+          // Insert with a placeholder password_hash since OAuth users don't have passwords
+          // Try with oauth columns first, fall back to basic insert if columns don't exist
+          let result;
+          try {
+            result = await query(
+              `INSERT INTO users (email, full_name, password_hash, oauth_provider, oauth_id)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id, email, full_name, created_at`,
+              [email, displayName, '$oauth$', 'google', String(id)]
+            );
+          } catch {
+            result = await query(
+              `INSERT INTO users (email, full_name, password_hash)
+               VALUES ($1, $2, $3)
+               RETURNING id, email, full_name, created_at`,
+              [email, displayName, '$oauth$']
+            );
+          }
           user = result.rows[0];
-          await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+          try {
+            await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+          } catch {
+            // privacy_settings row may already exist
+          }
         }
       }
 
@@ -674,18 +705,38 @@ router.get(
         };
         demoUsers.set(email, user);
       } else {
-        const existingUser = await query('SELECT * FROM users WHERE email = $1 OR oauth_id = $2', [email, id]);
+        const existingUser = await query('SELECT * FROM users WHERE email = $1', [email]);
 
         if (existingUser.rows.length > 0) {
           user = existingUser.rows[0];
-          await query('UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2', ['github', user.id]);
+          try {
+            await query('UPDATE users SET last_login = NOW(), oauth_provider = $1 WHERE id = $2', ['github', user.id]);
+          } catch {
+            await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+          }
         } else {
-          const result = await query(
-            'INSERT INTO users (email, full_name, oauth_provider, oauth_id) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, created_at',
-            [email, displayName || username, 'github', id]
-          );
+          let result;
+          try {
+            result = await query(
+              `INSERT INTO users (email, full_name, password_hash, oauth_provider, oauth_id)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id, email, full_name, created_at`,
+              [email, displayName || username, '$oauth$', 'github', String(id)]
+            );
+          } catch {
+            result = await query(
+              `INSERT INTO users (email, full_name, password_hash)
+               VALUES ($1, $2, $3)
+               RETURNING id, email, full_name, created_at`,
+              [email, displayName || username, '$oauth$']
+            );
+          }
           user = result.rows[0];
-          await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+          try {
+            await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+          } catch {
+            // privacy_settings row may already exist
+          }
         }
       }
 

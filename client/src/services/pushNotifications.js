@@ -59,10 +59,46 @@ export const initializePushNotifications = async () => {
  */
 const sendTokenToBackend = async (token) => {
   try {
+    // If no auth token is present, queue the push token for later to avoid 401s
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (!authStorage) {
+        console.log('[pushNotifications] No auth token present; queuing push token');
+        localStorage.setItem('pendingPushToken', token);
+        return;
+      }
+    } catch (e) {
+      // ignore localStorage issues
+    }
+
     await api.post('/push/register-token', { token });
     console.log('Push token registered with backend');
+    // Clear any pending token if it matches
+    try {
+      const pending = localStorage.getItem('pendingPushToken');
+      if (pending === token) localStorage.removeItem('pendingPushToken');
+    } catch (_) {}
   } catch (error) {
-    console.error('Failed to register push token with backend:', error);
+    console.error('Failed to register push token with backend:', error?.response?.data || error.message || error);
+    // If server responded 401 (not authenticated), queue token for later
+    if (error?.response?.status === 401) {
+      try {
+        localStorage.setItem('pendingPushToken', token);
+      } catch (_) {}
+    }
+  }
+};
+
+// Attempt to flush any pending push token (call after successful auth)
+const flushPendingPushToken = async () => {
+  try {
+    const pending = localStorage.getItem('pendingPushToken');
+    if (pending) {
+      console.log('[pushNotifications] Flushing pending push token');
+      await sendTokenToBackend(pending);
+    }
+  } catch (err) {
+    console.error('[pushNotifications] Failed to flush pending push token:', err);
   }
 };
 
@@ -87,4 +123,5 @@ const handlePushNotificationAction = (notification) => {
 export default {
   initializePushNotifications,
   sendTokenToBackend,
+  flushPendingPushToken,
 };

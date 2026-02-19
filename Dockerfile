@@ -1,10 +1,21 @@
 # Build stage for client
 FROM node:18-alpine AS client-builder
 
+# Accept Vite build args so we can inject client-side envs at build time
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_DISABLE_STEALTH
+
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm install
 COPY client/ ./
+
+# Provide Vite-compatible envs for the build step
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+ENV VITE_DISABLE_STEALTH=${VITE_DISABLE_STEALTH}
+
 RUN npm run build
 
 # Production stage
