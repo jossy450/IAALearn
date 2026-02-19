@@ -14,13 +14,37 @@ function configurePassport() {
     'http://localhost:3000'
   ).replace(/\/$/, '');
 
+  const mask = (s = '') => {
+    if (!s) return '';
+    const keep = 6;
+    return s.length > keep * 2 ? `${s.slice(0, keep)}...${s.slice(-keep)}` : `${s.slice(0, 4)}...`;
+  };
+
+  // Helpful startup logs for debugging OAuth configuration
+  console.log('📍 Passport base server URL:', baseServerUrl);
+  const configuredClient = process.env.GOOGLE_CLIENT_ID || null;
+  if (configuredClient) console.log('🔐 GOOGLE_CLIENT_ID configured:', mask(configuredClient));
+
   // Google OAuth Strategy
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const googleId = process.env.GOOGLE_CLIENT_ID;
+  const googleSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!googleId || !googleSecret) {
+    console.warn('⚠️  Google OAuth not configured - missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET');
+    // In production we want to fail fast so misconfiguration is caught early
+    if (process.env.NODE_ENV === 'production') {
+      console.error('🚨 Fatal: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in production. Exiting.');
+      // Allow a short delay for logs to flush in some environments then exit
+      setTimeout(() => process.exit(1), 200);
+      return;
+    }
+  }
+
+  if (googleId && googleSecret) {
     passport.use(
       new GoogleStrategy(
         {
-          clientID: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          clientID: googleId,
+          clientSecret: googleSecret,
           callbackURL: `${baseServerUrl}/api/auth/google/callback`,
           proxy: true
         },
@@ -31,8 +55,8 @@ function configurePassport() {
       )
     );
     console.log('✅ Google OAuth strategy configured');
+    console.log('🔗 Google callback URL:', `${baseServerUrl}/api/auth/google/callback`);
   } else {
-    console.log('⚠️  Google OAuth not configured - missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET');
   }
 
   // GitHub OAuth Strategy
