@@ -401,7 +401,7 @@ function InterviewSession() {
           const recognition = new WebSpeechRecognition();
           speechRecognitionRef.current = recognition;
           recognition.lang = 'en-US';
-          recognition.continuous = false;  // Single question, not continuous
+          recognition.continuous = true;  // Allow continuous listening for longer questions
           recognition.interimResults = true;
           recognition.maxAlternatives = 1;
           
@@ -412,18 +412,20 @@ function InterviewSession() {
             console.log('🎤 Recording interviewer question...');
             setIsRecording(true);
             setLoadingStep('recording');
-            // Set a timeout for recording (30 seconds max)
+            // Set a timeout for recording (60 seconds max for longer questions)
             recordingTimeout = setTimeout(() => {
               console.log('Recording timeout - stopping');
               recognition.stop();
-            }, 30000);
+            }, 60000);
           };
           
           recognition.onresult = (event) => {
+            console.log('onresult event:', { resultIndex: event.resultIndex, resultsLength: event.results.length });
             let interimTranscript = '';
             
             for (let i = event.resultIndex; i < event.results.length; i++) {
               const transcript = event.results[i][0].transcript;
+              console.log(`Result ${i}: isFinal=${event.results[i].isFinal}, transcript="${transcript}"`);
               
               if (event.results[i].isFinal) {
                 finalTranscript += transcript + ' ';
@@ -433,21 +435,27 @@ function InterviewSession() {
             }
             
             // Show real-time transcription of interviewer's question
-            setRecordedQuestion(finalTranscript + interimTranscript);
+            const currentText = finalTranscript + interimTranscript;
+            console.log('Updating question display:', currentText);
+            setRecordedQuestion(currentText);
           };
           
           recognition.onerror = (event) => {
-            clearTimeout(recordingTimeout);
             console.error('Web Speech API error:', event.error);
+            clearTimeout(recordingTimeout);
             setIsRecording(false);
             setLoadingStep(null);
             
             // Handle specific errors gracefully
-            if (event.error === 'network' || event.error === 'no-speech') {
-              showToast(`⚠️ ${event.error === 'network' ? 'Network issue' : 'No speech detected'}. Try again.`, 'warning');
+            if (event.error === 'network') {
+              showToast(`⚠️ Network issue. Try again.`, 'warning');
+            } else if (event.error === 'no-speech') {
+              showToast(`⚠️ No speech detected. Try again.`, 'warning');
             } else {
               showToast(`⚠️ Recording failed: ${event.error}. Please try again.`, 'error');
             }
+            
+            // Don't return - let function continue
           };
           
           recognition.onend = () => {
@@ -457,6 +465,8 @@ function InterviewSession() {
             setLoadingStep(null);
             
             const trimmedQuestion = finalTranscript.trim();
+            console.log('Final transcript:', { trimmedQuestion, finalTranscript });
+            
             if (trimmedQuestion) {
               console.log('Auto-analyzing question:', trimmedQuestion);
               setRecordedQuestion(trimmedQuestion);
@@ -477,8 +487,8 @@ function InterviewSession() {
           setIsRecording(false);
           setLoadingStep(null);
           showToast('❌ Speech recognition not supported. Trying alternative method...', 'warning');
-          // Fallback to MediaRecorder below - remove the return so we continue
-          // We'll fall through to the normal error handling
+          // Fallback: continue to try MediaRecorder as alternative
+          // Don't return - let code continue to next condition
         }
       }
       
