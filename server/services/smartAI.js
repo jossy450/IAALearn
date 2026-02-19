@@ -31,6 +31,38 @@ class SmartAIService {
   constructor() {
     this.learningEnabled = true;
     this.contextWindow = 10; // Number of previous Q&A to consider
+    this.technicalTerms = [
+      // Cloud platforms
+      'AWS', 'Azure', 'GCP', 'Google Cloud', 'cloud computing', 'serverless',
+      // Data center & infrastructure
+      'kubernetes', 'docker', 'containerization', 'virtualization', 'vmware', 'hypervisor',
+      'data center', 'infrastructure', 'networking', 'TCP/IP', 'DNS', 'load balancer',
+      'datacenter operations', 'facility management', 'HVAC', 'power distribution', 'UPS',
+      'rack management', 'cooling systems', 'fiber optics', 'cabling',
+      // Databases
+      'SQL', 'NoSQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'DynamoDB', 'Cassandra',
+      'database', 'elasticsearch', 'redis', 'cache',
+      // Development & frameworks  
+      'python', 'java', 'golang', 'node.js', 'rust', 'typescript', 'javascript',
+      'react', 'vue', 'angular', 'spring', 'django', 'fastapi', 'microservices',
+      // DevOps & monitoring
+      'CI/CD', 'jenkins', 'gitlab', 'github', 'docker', 'terraform', 'ansible',
+      'prometheus', 'grafana', 'datadog', 'elk stack', 'observability', 'logging',
+      // IT & networking
+      'active directory', 'LDAP', 'VPN', 'firewall', 'security', 'encryption', 'SSL/TLS',
+      'network management', 'systems administration', 'linux', 'windows', 'unix',
+      // Agile & processes
+      'agile', 'scrum', 'kanban', 'jira', 'confluence', 'git', 'version control',
+      // Data science & analytics
+      'machine learning', 'tensorflow', 'pytorch', 'data analysis', 'statistics',
+      'big data', 'spark', 'hadoop', 'data pipeline'
+    ];
+  }
+
+  // Extract technical keywords from CV and job description
+  extractTechnicalKeywords(cvContent = '', jobDescription = '') {
+    const combined = (cvContent + ' ' + jobDescription).toLowerCase();
+    return this.technicalTerms.filter(term => combined.includes(term.toLowerCase()));
   }
 
   // Analyze question category using AI
@@ -457,6 +489,12 @@ Questions covered: ${session.questions?.length || 0}`
       const normalizedCompany = (company || '').trim();
       const normalizedQuestion = (question || '').trim();
 
+      // Extract technical keywords for role-specific terminology
+      const technicalKeywords = this.extractTechnicalKeywords(normalizedCv, normalizedJobDescription).slice(0, 10);
+      const technicalKeywordsText = technicalKeywords.length > 0 
+        ? `\nRELEVANT TECHNOLOGIES & SYSTEMS: ${technicalKeywords.join(', ')}\nUse these technologies/systems in the answer where relevant and authentic.`
+        : '';
+
       const extractEmployerAnchors = (text = '') => {
         const anchors = new Set();
         const source = text.replace(/\r/g, '\n');
@@ -534,6 +572,7 @@ Standard write-up instructions:
 - Keep it tight (2 short paragraphs max, or bullets if clearer).
 - Be factual and specific; avoid fluff and hype.
 - Bold 3-6 key skills/technologies/achievements for quick skimming (use **like this**).
+${technicalKeywords.length > 0 ? `- Use specific technologies/systems mentioned in the role (${technicalKeywords.slice(0, 5).join(', ')}) where relevant and authentic.` : '- Use specific technical terminology, tools, and systems relevant to the role.'}
 - Include 1-2 concrete examples or metrics only when they are supported by provided information.
 - Sound like a confident candidate, not a generic AI.
 - If STAR/STARR method is requested, structure the answer accordingly.
@@ -576,7 +615,9 @@ Structure the answer with these four clear parts:
 
 **TASK** (1 sentence): What was YOUR specific responsibility or the challenge you personally owned? If it was outside your assigned role, say so explicitly.
 
-**ACTION** (2-3 sentences): What did YOU specifically do? Use "I" not "we". Show decision-making, technical expertise, and clear ownership. Include the reasoning behind your choice.
+**ACTION** (2-3 sentences): What did YOU specifically do? Use "I" not "we". Show decision-making, technical expertise, and clear ownership. 
+${technicalKeywords.length > 0 ? `Include specific technologies/systems used (e.g., ${technicalKeywords.slice(0, 3).join(', ')} if relevant).` : 'Include specific technologies, tools, or methodologies where relevant.'}
+Include the reasoning behind your choice.
 
 **RESULT** (1-2 sentences): What was the measurable outcome? Include impact: time restored, downtime avoided, team unblocked, cost saved, reliability improved. If no metric is available from context, use a realistic qualitative outcome.
 
@@ -585,6 +626,7 @@ Additional rules:
 - If the question says it was not your task, explicitly state it was outside your assigned responsibility and that you took ownership anyway.
 - End with 1 sentence connecting this experience to the target role at ${normalizedCompany || 'the target company'}.
 - Avoid vague phrases like "I worked with the team" — be specific about YOUR actions.
+- For technical roles at ${normalizedCompany || 'the target company'}: emphasize specific technologies, systems, tools, or methodologies you used and how they contributed to the result.
 - Target 150-220 words.
 
 ${amazonLPSection}`
@@ -680,6 +722,10 @@ ${normalizedPersonSpecification}`;
       }
 
       const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, concise, and tailored.
+
+TECHNICAL CONTEXT FOR ROLE:
+Position: ${normalizedPosition || 'General'}
+Company: ${normalizedCompany || 'Unknown'}${technicalKeywordsText}
 
 ${tailoringPolicy}
 

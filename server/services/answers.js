@@ -125,29 +125,48 @@ class AnswerService {
     }
     
     try {
-      const systemPrompt = `You are an expert executive interview coach specializing in major tech companies (Amazon, Google, Microsoft, etc.).
+      // Extract technical keywords from CV and job description
+      const cvContent = context.cvContent || '';
+      const jobDescription = context.jobDescription || '';
+      const technicalKeywords = this.extractTechnicalKeywords(cvContent, jobDescription);
+      
+      const systemPrompt = `You are an expert executive interview coach specializing in major tech companies (Amazon, Google, Microsoft, etc.) and technical roles.
 
 Your task is to generate PERFECT STAR-formatted answers for behavioral/competency interview questions.
 
+TECHNICAL CONTEXT:
+${technicalKeywords.length > 0 ? `Relevant Technologies & Systems: ${technicalKeywords.join(', ')}` : ''}
+Position: ${context.position || 'General'}
+Company: ${context.company || 'Not specified'}
+${jobDescription ? `Job Requirements: Key technical areas and skills needed` : ''}
+
 STAR Format Requirements:
-1. **Situation**: Set clear context (2-3 sentences). Include company/domain specifics.
+1. **Situation**: Set clear context (2-3 sentences). Include specific company/domain/technical details relevant to ${context.company || 'the company'}.
 2. **Task**: Define your specific responsibility and ownership (1-2 sentences).
-3. **Action**: Detail YOUR specific decisions and actions - not the team's (3-4 sentences). Show leadership, technical expertise, and decision-making.
+3. **Action**: Detail YOUR specific decisions and actions - not the team's (3-4 sentences). 
+   - For TECHNICAL roles: Mention specific technologies, tools, systems, or methodologies you used (e.g., database engines, cloud platforms, programming languages, infrastructure systems, protocols, frameworks).
+   - Show technical decision-making and problem-solving approach.
+   - Include specific technical challenges you overcame.
 4. **Result**: Quantify impact with specific metrics (reduced X%, improved Y, saved Z hours, achieved W). Show short-term wins AND long-term gains (2-3 sentences).
+
+CRITICAL FOR TECHNICAL ROLES:
+- Use actual technical terminology relevant to the role and company
+- Reference specific tools, frameworks, systems, or methodologies by name
+- If asking about systems/data center tech: mention specific datacenter systems (e.g., virtualization platforms, network architecture, cooling systems, power management)
+- If asking about IT/infrastructure: reference specific technologies (cloud platforms, containerization, infrastructure-as-code, monitoring systems)
+- If asking about development: mention specific languages, frameworks, databases, architectures used
+- Demonstrate technical depth and expertise
+- Show how your technical background benefits the company
 
 Guidelines:
 - Use clear labeled sections: **Situation:** **Task:** **Action:** **Result:**
-- Include specific metrics and measurable outcomes (percentages, time saved, cost reduction, ROI)
-- Demonstrate clear ownership ("I decided", "I implemented", "I led")
-- Show relevant technical or leadership expertise
+- Include specific metrics and measurable outcomes (percentages, time saved, cost reduction, ROI, performance improvements)
+- Demonstrate clear ownership ("I decided", "I implemented", "I led", "I designed")
 - Keep total answer 4-5 minutes when spoken (5-7 paragraphs)
-- End with relevance to the role: "This experience demonstrates... [relevant skills for the position]"
-- Be confident, specific, and authentic
+- End with relevance to the role: "This experience demonstrates... [relevant technical skills for ${context.company || 'the position'}]"
+- Be confident, specific, authentic, and TECHNICAL
 
-Context:
-- Position: ${context.position || 'General'}
-- Company: ${context.company || 'Not specified'}
-- Industry: ${context.industry || 'General'}`;
+${technicalKeywords.length > 0 ? `Use these technologies/systems where relevant in your answer: ${technicalKeywords.slice(0, 5).join(', ')}` : ''}`;
 
       const response = await client.chat.completions.create({
         model: 'gpt-4o',
@@ -166,6 +185,39 @@ Context:
     }
   }
 
+  // Extract technical keywords from CV and job description
+  extractTechnicalKeywords(cvContent = '', jobDescription = '') {
+    const technicalTerms = [
+      // Cloud platforms
+      'AWS', 'Azure', 'GCP', 'Google Cloud', 'cloud computing', 'serverless',
+      // Data center & infrastructure
+      'kubernetes', 'docker', 'containerization', 'virtualization', 'vmware', 'hypervisor',
+      'data center', 'infrastructure', 'networking', 'TCP/IP', 'DNS', 'load balancer',
+      'datacenter operations', 'facility management', 'HVAC', 'power distribution', 'UPS',
+      'rack management', 'cooling systems', 'fiber optics', 'cabling',
+      // Databases
+      'SQL', 'NoSQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'DynamoDB', 'Cassandra',
+      'database', 'elasticsearch', 'redis', 'cache',
+      // Development & frameworks  
+      'python', 'java', 'golang', 'node.js', 'rust', 'typescript', 'javascript',
+      'react', 'vue', 'angular', 'spring', 'django', 'fastapi', 'microservices',
+      // DevOps & monitoring
+      'CI/CD', 'jenkins', 'gitlab', 'github', 'docker', 'terraform', 'ansible',
+      'prometheus', 'grafana', 'datadog', 'elk stack', 'observability', 'logging',
+      // IT & networking
+      'active directory', 'LDAP', 'VPN', 'firewall', 'security', 'encryption', 'SSL/TLS',
+      'network management', 'systems administration', 'linux', 'windows', 'unix',
+      // Agile & processes
+      'agile', 'scrum', 'kanban', 'jira', 'confluence', 'git', 'version control',
+      // Data science & analytics
+      'machine learning', 'tensorflow', 'pytorch', 'data analysis', 'statistics',
+      'big data', 'spark', 'hadoop', 'data pipeline'
+    ];
+
+    const combined = (cvContent + ' ' + jobDescription).toLowerCase();
+    return technicalTerms.filter(term => combined.includes(term.toLowerCase()));
+  }
+
   // Fast answer generation using GPT-4
   async generateFastAnswer(question, context = {}) {
     const client = getOpenAI();
@@ -173,13 +225,26 @@ Context:
       throw new Error('OPENAI_API_KEY is not configured');
     }
     try {
-      const systemPrompt = `You are an expert interview coach. Provide concise, professional answers to interview questions. 
-Consider the following context:
-- Position: ${context.position || 'General'}
-- Company: ${context.company || 'Not specified'}
-- Industry: ${context.industry || 'General'}
+      // Extract technical keywords for this role
+      const cvContent = context.cvContent || '';
+      const jobDescription = context.jobDescription || '';
+      const technicalKeywords = this.extractTechnicalKeywords(cvContent, jobDescription).slice(0, 8);
 
-Keep answers clear, confident, and around 2-3 sentences unless more detail is needed.`;
+      const systemPrompt = `You are a technical interview coach providing concise, expert answers for interview questions.
+
+Your answers should:
+1. Be specific and technical - use actual technical terminology, tools, frameworks, or systems names
+2. Include relevant experience with specific technologies: ${technicalKeywords.length > 0 ? technicalKeywords.join(', ') : 'technologies relevant to ' + (context.position || 'the role')}
+3. Show expertise: demonstrate deep understanding of ${context.position || 'the role'}
+4. For technical questions: mention specific tools, systems, languages, or methodologies used
+5. Include a tangible result or metric when possible (e.g., "improved performance by 35%", "reduced latency from 400ms to 50ms")
+6. Keep conversational but authoritative (2-3 sentences)
+7. Be authentic and specific to ${context.company || 'the company'} tech stack where relevant
+
+Context:
+- Role: ${context.position || 'General'}
+- Company: ${context.company || 'Not specified'}  
+- Industry: ${context.industry || 'General'}`;
 
       const response = await client.chat.completions.create({
         model: 'gpt-4o',
@@ -204,6 +269,11 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
       // Determine if STAR format is needed
       const useSTAR = this.isSTARQuestion(question);
       
+      // Extract technical keywords for better context
+      const cvContent = options.cvContent || '';
+      const jobDescription = options.jobDescription || '';
+      const technicalKeywords = this.extractTechnicalKeywords(cvContent, jobDescription);
+      
       // First, try Perplexity for research
       let researchContext = '';
       
@@ -216,11 +286,11 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a research assistant. Provide relevant industry insights, best practices, and relevant examples for interview context.'
+                  content: 'You are a research assistant. Provide relevant industry insights, best practices, technical requirements, and relevant examples for interview context. Be specific about technologies and systems used in this role.'
                 },
                 {
                   role: 'user',
-                  content: `Provide industry context and best practices for this interview question: ${question}`
+                  content: `For a ${options.position || 'General'} role at ${options.company || 'a major tech company'}, provide industry context, best practices, and technical depth for this interview question: ${question}`
                 }
               ]
             },
@@ -240,21 +310,29 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
 
       // Generate STAR answer if applicable
       if (useSTAR) {
-        return await this.generateSTARAnswer(question, context);
+        return await this.generateSTARAnswer(question, options);
       }
 
-      // Generate standard research answer
-      const systemPrompt = `You are an expert interview coach with access to current information. 
-Provide professional, well-researched answers to interview questions.
+      // Generate standard research answer with technical focus
+      const systemPrompt = `You are an expert interview coach with deep technical knowledge across multiple industries. 
+Provide professional, well-researched answers to interview questions that demonstrate technical expertise and specific knowledge.
 
-Context:
-- Position: ${context.position || 'General'}
-- Company: ${context.company || 'Not specified'}
-- Industry: ${context.industry || 'General'}
+TECHNICAL CONTEXT:
+${technicalKeywords.length > 0 ? `Key Technologies & Systems For This Role: ${technicalKeywords.join(', ')}` : ''}
+Position: ${options.position || 'General'}
+Company: ${options.company || 'Not specified'}
+Industry: ${options.industry || 'General'}
 
-${researchContext ? `Industry Context:\n${researchContext}` : ''}
+${researchContext ? `Industry Research:\n${researchContext}` : ''}
 
-Provide a comprehensive, confident answer that demonstrates expertise.`;
+ANSWER REQUIREMENTS:
+1. Be specific and technical - use actual terminology relevant to ${options.position || 'the role'}
+2. Demonstrate deep expertise and industry knowledge
+3. Include specific technologies, tools, or methodologies where relevant
+4. Use technical terminology and best practices
+5. Show quantifiable impact and results when applicable
+6. Be comprehensive, confident, and authentic
+7. Reference specific ${options.company || 'company'} context when relevant`;
 
       const client = getOpenAI();
       if (!client) {

@@ -132,13 +132,26 @@ class OptimizedAnswerService {
     const startTime = Date.now();
     
     try {
-      const systemPrompt = `You are an expert interview coach. Provide concise, professional answers to interview questions. 
-Consider the following context:
-- Position: ${context.position || 'General'}
-- Company: ${context.company || 'Not specified'}
-- Industry: ${context.industry || 'General'}
+      // Extract technical keywords for better context
+      const cvContent = context.cvContent || '';
+      const jobDescription = context.jobDescription || '';
+      const technicalKeywords = this.extractTechnicalKeywords(cvContent, jobDescription).slice(0, 8);
 
-Keep answers clear, confident, and around 2-3 sentences unless more detail is needed.`;
+      const systemPrompt = `You are a technical interview coach providing concise, expert answers for interview questions.
+
+Your answers should:
+1. Be specific and technical - use actual technical terminology, tools, frameworks, or systems names
+2. Include relevant experience with specific technologies: ${technicalKeywords.length > 0 ? technicalKeywords.join(', ') : 'technologies relevant to ' + (context.position || 'the role')}
+3. Show expertise: demonstrate deep understanding of ${context.position || 'the role'}
+4. For technical questions: mention specific tools, systems, languages, or methodologies used
+5. Include a tangible result or metric when possible (e.g., "improved performance by 35%", "reduced latency from 400ms to 50ms")
+6. Keep conversational but authoritative (2-3 sentences)
+7. Be authentic and specific to ${context.company || 'the company'} tech stack where relevant
+
+Context:
+- Role: ${context.position || 'General'}
+- Company: ${context.company || 'Not specified'}  
+- Industry: ${context.industry || 'General'}`;
 
       // Use streaming if callback provided
       if (streamCallback && typeof streamCallback === 'function') {
@@ -184,6 +197,11 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
     const aiProvider = getAIProvider();
     
     try {
+      // Extract technical keywords for better context
+      const cvContent = context.cvContent || '';
+      const jobDescription = context.jobDescription || '';
+      const technicalKeywords = this.extractTechnicalKeywords(cvContent, jobDescription);
+      
       // First, try Perplexity for research (if available)
       let researchContext = '';
       
@@ -196,11 +214,11 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a research assistant. Provide relevant facts and insights for interview questions.'
+                  content: 'You are a research assistant. Provide relevant facts, industry insights, technical requirements, and best practices for interview context. Be specific about technologies and systems used in this role.'
                 },
                 {
                   role: 'user',
-                  content: `Research context for interview question: ${question}`
+                  content: `For a ${context.position || 'General'} role at ${context.company || 'a major tech company'}, provide industry context, technical depth, and best practices for this interview question: ${question}`
                 }
               ]
             },
@@ -219,17 +237,25 @@ Keep answers clear, confident, and around 2-3 sentences unless more detail is ne
       }
 
       // Generate answer with research context using multi-provider
-      const systemPrompt = `You are an expert interview coach with access to current information. 
-Provide professional, well-researched answers to interview questions.
+      const systemPrompt = `You are an expert interview coach with deep technical knowledge across multiple industries.
+Provide professional, well-researched answers to interview questions that demonstrate technical expertise and specific knowledge.
 
-Context:
-- Position: ${context.position || 'General'}
-- Company: ${context.company || 'Not specified'}
-- Industry: ${context.industry || 'General'}
+TECHNICAL CONTEXT:
+${technicalKeywords.length > 0 ? `Key Technologies & Systems For This Role: ${technicalKeywords.join(', ')}` : ''}
+Position: ${context.position || 'General'}
+Company: ${context.company || 'Not specified'}
+Industry: ${context.industry || 'General'}
 
-${researchContext ? `Research Context:\n${researchContext}` : ''}
+${researchContext ? `Industry Research:\n${researchContext}` : ''}
 
-Provide a comprehensive, confident answer that demonstrates expertise.`;
+ANSWER REQUIREMENTS:
+1. Be specific and technical - use actual terminology relevant to ${context.position || 'the role'}
+2. Demonstrate deep expertise and industry knowledge
+3. Include specific technologies, tools, or methodologies where relevant
+4. Use technical terminology and best practices
+5. Show quantifiable impact and results when applicable
+6. Be comprehensive, confident, and authentic
+7. Reference specific ${context.company || 'company'} context when relevant`;
 
       const result = await aiProvider.generate(
         question,
@@ -249,6 +275,39 @@ Provide a comprehensive, confident answer that demonstrates expertise.`;
       console.error('Research answer generation error:', error);
       throw error;
     }
+  }
+
+  // Extract technical keywords from CV and job description
+  extractTechnicalKeywords(cvContent = '', jobDescription = '') {
+    const technicalTerms = [
+      // Cloud platforms
+      'AWS', 'Azure', 'GCP', 'Google Cloud', 'cloud computing', 'serverless',
+      // Data center & infrastructure
+      'kubernetes', 'docker', 'containerization', 'virtualization', 'vmware', 'hypervisor',
+      'data center', 'infrastructure', 'networking', 'TCP/IP', 'DNS', 'load balancer',
+      'datacenter operations', 'facility management', 'HVAC', 'power distribution', 'UPS',
+      'rack management', 'cooling systems', 'fiber optics', 'cabling',
+      // Databases
+      'SQL', 'NoSQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'DynamoDB', 'Cassandra',
+      'database', 'elasticsearch', 'redis', 'cache',
+      // Development & frameworks  
+      'python', 'java', 'golang', 'node.js', 'rust', 'typescript', 'javascript',
+      'react', 'vue', 'angular', 'spring', 'django', 'fastapi', 'microservices',
+      // DevOps & monitoring
+      'CI/CD', 'jenkins', 'gitlab', 'github', 'docker', 'terraform', 'ansible',
+      'prometheus', 'grafana', 'datadog', 'elk stack', 'observability', 'logging',
+      // IT & networking
+      'active directory', 'LDAP', 'VPN', 'firewall', 'security', 'encryption', 'SSL/TLS',
+      'network management', 'systems administration', 'linux', 'windows', 'unix',
+      // Agile & processes
+      'agile', 'scrum', 'kanban', 'jira', 'confluence', 'git', 'version control',
+      // Data science & analytics
+      'machine learning', 'tensorflow', 'pytorch', 'data analysis', 'statistics',
+      'big data', 'spark', 'hadoop', 'data pipeline'
+    ];
+
+    const combined = (cvContent + ' ' + jobDescription).toLowerCase();
+    return technicalTerms.filter(term => combined.includes(term.toLowerCase()));
   }
 
   // Main answer generation with optimized caching and performance tracking
