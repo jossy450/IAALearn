@@ -481,7 +481,6 @@ function InterviewSession() {
           // We'll fall through to the normal error handling
         }
       }
-      }
       
     } catch (error) {
       console.error('Failed to start recording:', error);
