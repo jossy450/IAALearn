@@ -3,6 +3,19 @@ require('dotenv').config();
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'production';
 }
+
+// Ensure JWT_SECRET is set for token generation/verification
+if (!process.env.JWT_SECRET) {
+  // In production, this should be provided via environment variables
+  // In development/demo, use a safe default
+  process.env.JWT_SECRET = process.env.DEMO_MODE === 'true' 
+    ? 'demo-secret' 
+    : 'insecure-dev-secret-change-in-production';
+  console.warn('⚠️ JWT_SECRET not set in environment, using default. Set JWT_SECRET env var in production!');
+} else {
+  console.log('✓ JWT_SECRET configured from environment');
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
