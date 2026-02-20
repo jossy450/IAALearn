@@ -464,6 +464,54 @@ Questions covered: ${session.questions?.length || 0}`
     }
   }
 
+  // ─── Auto-detect session type from position / job description ───────────────
+  detectSessionType(position = '', jobDescription = '') {
+    const text = `${position} ${jobDescription}`.toLowerCase();
+
+    // Technical role signals
+    const technicalRolePatterns = [
+      /\b(software|developer|engineer|devops|sre|data\s*scientist|data\s*engineer|ml\s*engineer|machine\s*learning|ai\s*engineer|backend|frontend|full.?stack|cloud|platform|infrastructure|network|systems?\s*admin|database|dba|security\s*engineer|qa\s*engineer|test\s*engineer|firmware|embedded|mobile\s*developer|android|ios\s*developer|architect)\b/,
+      /\b(python|java|golang|node\.?js|react|angular|vue|kubernetes|docker|terraform|aws|azure|gcp|sql|nosql|api|microservices|ci\/cd|devops|linux|unix)\b/
+    ];
+
+    // Behavioral / leadership role signals
+    const behavioralRolePatterns = [
+      /\b(manager|director|head\s*of|vp|vice\s*president|chief|cto|ceo|coo|team\s*lead|people\s*manager|hr|human\s*resources|talent|recruitment|account\s*manager|project\s*manager|programme\s*manager|scrum\s*master|agile\s*coach|product\s*manager|product\s*owner)\b/
+    ];
+
+    // Case study / analytical role signals
+    const caseStudyRolePatterns = [
+      /\b(consultant|strategy|analyst|business\s*analyst|management\s*consultant|mckinsey|bain|bcg|deloitte|accenture|pwc|kpmg|ey\b|ernst|investment\s*bank|private\s*equity|venture\s*capital|finance|financial\s*analyst|market\s*research|data\s*analyst)\b/
+    ];
+
+    if (caseStudyRolePatterns.some(p => p.test(text))) return 'case-study';
+    if (technicalRolePatterns.some(p => p.test(text))) return 'technical';
+    if (behavioralRolePatterns.some(p => p.test(text))) return 'behavioral';
+    return 'general';
+  }
+
+  // ─── Auto-detect session type from the question itself ──────────────────────
+  detectSessionTypeFromQuestion(question = '') {
+    const q = question.toLowerCase();
+
+    // Case study / analytical
+    if (/\b(estimate|how many|market size|revenue|profit|cost|trade.?off|framework|structure|approach|strategy|analyse|analyze|recommend|advise|what would you do if|how would you solve|walk me through|break down|prioriti[sz]e)\b/.test(q)) {
+      return 'case-study';
+    }
+
+    // Technical
+    if (/\b(code|algorithm|complexity|big.?o|implement|design\s+a\s+system|system\s+design|database\s+schema|api\s+design|architecture|debug|refactor|optimize|sql|query|data\s+structure|class\s+diagram|oop|rest|graphql|microservice|deploy|ci\/cd|docker|kubernetes|terraform|aws|azure|gcp|linux|shell|script|regex|recursion|thread|concurrency|async|cache|index|shard|partition|load\s+balanc)\b/.test(q)) {
+      return 'technical';
+    }
+
+    // Behavioral
+    if (/\b(tell me about a time|describe a situation|give me an example|how did you handle|what did you do when|walk me through a time|have you ever|conflict|challenge|difficult|mistake|failure|learn|feedback|disagree|persuade|influence|initiative|ownership|beyond your role|under pressure|tight deadline|prioriti[sz])\b/.test(q)) {
+      return 'behavioral';
+    }
+
+    return null; // no strong signal from question alone
+  }
+
   // Generate perfect answer based on interviewer question + CV + Job Description + Person Spec + AI Instructions
   async generatePerfectAnswer(question, userId, context, onChunk) {
     const client = getLLMClient();
@@ -489,7 +537,27 @@ Questions covered: ${session.questions?.length || 0}`
       const normalizedPosition = (position || '').trim();
       const normalizedCompany = (company || '').trim();
       const normalizedQuestion = (question || '').trim();
-      const normalizedSessionType = (sessionType || 'general').toLowerCase();
+
+      // ── Session type resolution ──────────────────────────────────────────────
+      // Priority: explicit user selection > question-level detection > role-level detection
+      let normalizedSessionType = (sessionType || 'general').toLowerCase();
+      const isAutoDetect = normalizedSessionType === 'general' || !normalizedSessionType;
+
+      if (isAutoDetect) {
+        // 1. Try to infer from the question itself (strongest signal)
+        const fromQuestion = this.detectSessionTypeFromQuestion(normalizedQuestion);
+        if (fromQuestion) {
+          normalizedSessionType = fromQuestion;
+          console.log(`[SmartAI] Auto-detected session type from question: ${normalizedSessionType}`);
+        } else {
+          // 2. Fall back to role/job description inference
+          const fromRole = this.detectSessionType(normalizedPosition, normalizedJobDescription);
+          normalizedSessionType = fromRole;
+          console.log(`[SmartAI] Auto-detected session type from role: ${normalizedSessionType}`);
+        }
+      } else {
+        console.log(`[SmartAI] Using user-selected session type: ${normalizedSessionType}`);
+      }
 
       // Extract technical keywords for role-specific terminology
       const technicalKeywords = this.extractTechnicalKeywords(normalizedCv, normalizedJobDescription).slice(0, 10);
@@ -723,48 +791,137 @@ Person Specification (required competencies/criteria):
 ${normalizedPersonSpecification}`;
       }
 
-      // Session type-specific guidance
+      // ── Session type-specific guidance (rich, expert-level) ─────────────────
       let sessionTypeGuidance = '';
       switch (normalizedSessionType) {
         case 'technical':
           sessionTypeGuidance = `
-SESSION TYPE GUIDANCE - TECHNICAL INTERVIEW:
-- Prioritize technical depth and specific technologies/systems
-- Explain architectural decisions and technical reasoning
-- Include specific tools, languages, frameworks, or methodologies used
-- Show problem-solving approach and technical expertise
-- When answering "Tell me about yourself": Lead with strongest technical achievement and relevant tech stack
-- For behavioral questions: Focus on technical ownership and technical decision-making`;
+SESSION TYPE: TECHNICAL INTERVIEW — Expert guidance
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANSWER STYLE:
+- Lead with the technical solution or approach, not background story.
+- Use precise technical vocabulary: name specific tools, languages, frameworks, protocols, patterns.
+- Show depth of understanding: explain WHY a technology/approach was chosen, not just WHAT was used.
+- Demonstrate engineering judgment: discuss trade-offs, scalability, reliability, security implications.
+- For system design questions: use a top-down approach (requirements → high-level design → components → data flow → trade-offs).
+- For coding/algorithm questions: state time/space complexity, edge cases, and alternative approaches.
+- For debugging/troubleshooting questions: show systematic diagnostic thinking (observe → hypothesize → test → fix → verify).
+
+STRUCTURE BY QUESTION TYPE:
+• "How does X work?" → Explain mechanism, use analogy if helpful, then give real-world application.
+• "Design a system" → Clarify requirements → Estimate scale → High-level architecture → Deep-dive components → Trade-offs.
+• "Tell me about a technical challenge" → Use STAR but emphasise the technical decision-making and outcome.
+• "What's your experience with X?" → Specific project/context → What you built/solved → Technical depth → Outcome.
+• "Why did you choose X over Y?" → Requirements context → Evaluation criteria → Decision rationale → Lessons learned.
+
+TECHNICAL DEPTH RULES:
+${technicalKeywords.length > 0 ? `- Prioritise these role-relevant technologies: ${technicalKeywords.join(', ')}.` : '- Use the most relevant technical stack from the CV and job description.'}
+- Include at least one specific technical detail (e.g., a specific API, pattern, config, or metric).
+- Avoid vague statements like "I used best practices" — name the practice.
+- Show awareness of production concerns: monitoring, alerting, rollback, SLAs, incident response.
+- For senior/architect roles: emphasise cross-team impact, architectural decisions, and mentoring.
+
+TONE: Confident, precise, peer-to-peer technical conversation. Not a textbook definition.
+TARGET LENGTH: 120-200 words (longer for system design: up to 280 words).`;
           break;
+
         case 'behavioral':
           sessionTypeGuidance = `
-SESSION TYPE GUIDANCE - BEHAVIORAL INTERVIEW:
-- Prioritize STAR format strictly (Situation → Task → Action → Result)
-- Focus on soft skills: communication, teamwork, conflict resolution, leadership
-- Emphasize personal growth, learning from mistakes, and adaptability
-- Show clear ownership and initiative
-- Include emotional intelligence and people management insights
-- End each answer with a lesson learned or skill developed`;
+SESSION TYPE: BEHAVIORAL INTERVIEW — Expert guidance
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANSWER STYLE:
+- ALWAYS use STAR format: Situation → Task → Action → Result.
+- Every answer must be a specific, real story — not a hypothetical or generic statement.
+- Use "I" not "we" — the interviewer wants to know YOUR contribution, not the team's.
+- Show emotional intelligence: acknowledge feelings, perspectives of others, and your self-awareness.
+- Demonstrate growth mindset: what you learned, how you adapted, what you'd do differently.
+
+STAR EXECUTION RULES:
+• SITUATION (15% of answer): Set the scene briefly. Name the employer/team/project. State what was at stake.
+• TASK (10% of answer): Your specific responsibility. If it was outside your role, say so — it shows initiative.
+• ACTION (55% of answer): This is the heart. Be specific about YOUR decisions and actions. Show:
+  - How you assessed the situation
+  - What options you considered
+  - Why you chose your approach
+  - How you communicated/collaborated
+  - What obstacles you overcame
+• RESULT (20% of answer): Concrete outcome. Quantify if possible. Include impact on team/business/relationship.
+  Then add: what you learned or how it changed your approach going forward.
+
+COMPETENCY MAPPING (match answer to likely competency being assessed):
+• Conflict/difficult person → "Earn Trust", "Stakeholder Management", "Influencing without authority"
+• Tight deadline/pressure → "Prioritisation", "Resilience", "Bias for Action"
+• Mistake/failure → "Growth mindset", "Accountability", "Learning agility"
+• Initiative/beyond role → "Ownership", "Proactivity", "Self-starter"
+• Disagreement with manager → "Courage", "Constructive challenge", "Professionalism"
+• Team success → "Collaboration", "Communication", "Empathy"
+
+TONE: Reflective, honest, confident. Show self-awareness without being self-deprecating.
+TARGET LENGTH: 150-220 words.`;
           break;
+
         case 'case-study':
           sessionTypeGuidance = `
-SESSION TYPE GUIDANCE - CASE STUDY INTERVIEW:
-- Use structured problem-solving approach (define problem → analyze → propose solution → discuss trade-offs)
-- Show logical thinking and quantitative reasoning
-- Include data-driven insights and realistic numbers
-- Discuss assumptions upfront and explain reasoning clearly
-- Consider multiple approaches and weigh pros/cons
-- Be prepared to defend or adapt your solution based on feedback
-- Structure answer for clarity: Start with high-level framework, then dive into details`;
+SESSION TYPE: CASE STUDY / ANALYTICAL INTERVIEW — Expert guidance
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANSWER STYLE:
+- Structure your answer like a consultant: framework first, then analysis, then recommendation.
+- Think out loud — show your reasoning process, not just the conclusion.
+- State your assumptions upfront and be explicit about them.
+- Use a top-down approach: start with the big picture, then drill into specifics.
+- Be comfortable with ambiguity — acknowledge what you don't know and how you'd find out.
+
+CASE STUDY FRAMEWORK (adapt to question type):
+• MARKET SIZING: Segment → Estimate each segment → Sum → Sanity check → State answer with confidence interval.
+• BUSINESS PROBLEM: Clarify the problem → Identify root causes → Generate options → Evaluate trade-offs → Recommend with rationale.
+• STRATEGY QUESTION: Understand context → Analyse internal/external factors → Identify strategic options → Recommend with implementation steps.
+• FINANCIAL/REVENUE: Revenue = Volume × Price → Break down each driver → Identify levers → Prioritise by impact.
+• OPERATIONAL PROBLEM: Map the process → Identify bottlenecks → Root cause analysis → Solutions → Quick wins vs long-term fixes.
+
+ANALYTICAL RULES:
+- Use round numbers for estimates — precision is less important than logical structure.
+- Show sensitivity: "If my assumption about X is wrong, the answer changes to Y."
+- Prioritise: not all factors are equal — identify the 2-3 most important drivers.
+- Recommend clearly: don't hedge excessively. State your recommendation and defend it.
+- Consider stakeholders: who is affected, who needs to buy in, what are the risks.
+
+TONE: Structured, logical, collaborative. Treat it as a conversation, not a monologue.
+TARGET LENGTH: 180-280 words (longer for complex multi-part cases).`;
           break;
+
         case 'general':
         default:
           sessionTypeGuidance = `
-SESSION TYPE GUIDANCE - GENERAL INTERVIEW:
-- Provide balanced answers covering technical, behavioral, and practical aspects
-- Be concise but comprehensive
-- Show both expertise and interpersonal skills
-- Adapt to the specific question type (use STAR for behavioral, depth for technical)`;
+SESSION TYPE: GENERAL INTERVIEW — Expert guidance
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANSWER STYLE:
+- Adapt dynamically to the question type:
+  • Competency/behavioral questions → Use STAR format.
+  • Technical questions → Show depth and specific examples.
+  • Motivational questions ("Why this role?") → Be genuine, specific, forward-looking.
+  • Situational questions ("What would you do if...") → Show structured thinking and values.
+  • Background questions ("Tell me about yourself") → PRESENT → PAST → FUTURE structure.
+
+UNIVERSAL RULES FOR GREAT ANSWERS:
+- Be specific: name companies, projects, technologies, outcomes — not vague generalities.
+- Be concise: 90-160 words per answer unless the question demands more depth.
+- Show value: every answer should implicitly answer "why should we hire you?"
+- Be authentic: sound like a real person, not a rehearsed script.
+- End strong: close with a forward-looking statement connecting your experience to this role.
+
+QUESTION-TYPE DETECTION (apply automatically):
+- "Tell me about yourself" → PRESENT → PAST → FUTURE (110-170 words).
+- "Why do you want this role/company?" → Specific reasons tied to role + company + your goals.
+- "What are your strengths/weaknesses?" → Strength: specific + evidence. Weakness: real + what you're doing about it.
+- "Where do you see yourself in 5 years?" → Ambitious but realistic, aligned with this role's growth path.
+- "Why are you leaving your current role?" → Positive framing, growth-focused, never badmouth.
+
+TONE: Professional, warm, confident. Conversational but polished.
+TARGET LENGTH: 90-160 words (adjust per question complexity).`;
           break;
       }
 
