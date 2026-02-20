@@ -1,52 +1,162 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const passport = require('passport');
+const jwksClient = require('jwks-rsa');
+const { promisify } = require('util');
+const { query } = require('../database/connection');
+const { getJwtSecret } = require('../middleware/auth');
+
 const authRouter = express.Router();
 // Backwards-compat alias: some handlers below use `router` variable.
 const router = authRouter;
 
-// Supabase JWT verification and exchange
-const jwksClient = require('jwks-rsa');
-const { promisify } = require('util');
-const SUPABASE_JWKS_URI = 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co/auth/v1/keys';
+const normalizeEmail = (email = '') => String(email || '').trim().toLowerCase();
 
-const supabaseJwks = jwksClient({ jwksUri: SUPABASE_JWKS_URI });
-const getSigningKey = promisify(supabaseJwks.getSigningKey);
+const resolveSupabaseProjectUrl = () => {
+  const configured =
+    process.env.SUPABASE_PROJECT_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL;
+
+  if (!configured) return null;
+
+  try {
+    const parsed = new URL(configured);
+
+    // Pooler URL cannot be used for JWT key discovery.
+    if (parsed.hostname.includes('pooler.supabase.com')) {
+      return null;
+    }
+
+    if (!parsed.hostname.endsWith('supabase.co')) {
+      return null;
+    }
+
+    const projectRef = parsed.hostname.split('.')[0];
+    if (!projectRef) {
+      return null;
+    }
+
+    return `https://${projectRef}.supabase.co`;
+  } catch {
+    return null;
+  }
+};
+
+const SUPABASE_JWKS_URI = process.env.SUPABASE_JWKS_URI || (() => {
+  const projectUrl = resolveSupabaseProjectUrl();
+  return projectUrl ? `${projectUrl}/auth/v1/keys` : null;
+})();
+
+const supabaseJwks = SUPABASE_JWKS_URI ? jwksClient({ jwksUri: SUPABASE_JWKS_URI }) : null;
+const getSigningKey = supabaseJwks
+  ? promisify(supabaseJwks.getSigningKey).bind(supabaseJwks)
+  : null;
+
+if (!SUPABASE_JWKS_URI) {
+  console.warn('⚠️ Supabase JWT exchange disabled: set SUPABASE_JWKS_URI or SUPABASE_PROJECT_URL/VITE_SUPABASE_URL');
+}
+
+const verifySupabaseToken = async (token) => {
+  const decodedHeader = jwt.decode(token, { complete: true });
+  const alg = decodedHeader?.header?.alg;
+
+  if (!alg) {
+    throw new Error('Invalid token header');
+  }
+
+  // Handle projects using symmetric Supabase JWT signing.
+  if (alg.startsWith('HS')) {
+    const supabaseJwtSecret = process.env.SUPABASE_JWT_SECRET;
+    if (!supabaseJwtSecret) {
+      throw new Error('SUPABASE_JWT_SECRET is required for HS* Supabase tokens');
+    }
+    return jwt.verify(token, supabaseJwtSecret, { algorithms: [alg] });
+  }
+
+  if (!getSigningKey) {
+    throw new Error('Supabase JWKS is not configured');
+  }
+
+  const kid = decodedHeader?.header?.kid;
+  if (!kid) {
+    throw new Error('Invalid token header');
+  }
+
+  const key = await getSigningKey(kid);
+  const publicKey = key.getPublicKey();
+
+  return jwt.verify(token, publicKey, { algorithms: [alg] });
+};
 
 authRouter.post('/supabase', async (req, res, next) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'No token provided' });
-    // Decode header to get kid
-    const decodedHeader = jwt.decode(token, { complete: true });
-    if (!decodedHeader || !decodedHeader.header.kid) return res.status(400).json({ error: 'Invalid token header' });
-    const key = await getSigningKey(decodedHeader.header.kid);
-    const publicKey = key.getPublicKey();
-    const payload = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+
+    const payload = await verifySupabaseToken(token);
+    const email = normalizeEmail(payload?.email);
+
+    if (!email) {
+      return res.status(400).json({ error: 'Supabase token missing email claim' });
+    }
+
     // Find or create user in your DB
     let user = null;
-    const result = await query('SELECT * FROM users WHERE email = $1', [payload.email]);
+    const result = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+
     if (result.rows.length > 0) {
       user = result.rows[0];
+      await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
     } else {
-      // Create user if not exists
-      const insert = await query(
-        'INSERT INTO users (email, full_name) VALUES ($1, $2) RETURNING *',
-        [payload.email, payload.user_metadata?.full_name || payload.email]
-      );
+      // Create user if not exists. Keep password_hash non-null for schemas requiring it.
+      let insert;
+      try {
+        insert = await query(
+          `INSERT INTO users (email, full_name, password_hash, oauth_provider)
+           VALUES ($1, $2, $3, $4)
+           RETURNING *`,
+          [email, payload.user_metadata?.full_name || payload.user_metadata?.name || email, '$oauth$', 'supabase']
+        );
+      } catch {
+        insert = await query(
+          `INSERT INTO users (email, full_name, password_hash)
+           VALUES ($1, $2, $3)
+           RETURNING *`,
+          [email, payload.user_metadata?.full_name || payload.user_metadata?.name || email, '$oauth$']
+        );
+      }
+
       user = insert.rows[0];
+
+      try {
+        await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+      } catch {
+        // Ignore if privacy_settings already exists or table not available.
+      }
     }
+
     // Issue app JWT
     const appToken = createToken(user.id, user.email);
+
     res.json({ success: true, user: sanitizeUser(user), token: appToken });
   } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Invalid Supabase token', details: error.message });
+    }
+
+    if (/Supabase JWKS is not configured|SUPABASE_JWT_SECRET/.test(error.message || '')) {
+      return res.status(503).json({
+        error: 'Supabase auth not configured',
+        details: 'Set SUPABASE_JWKS_URI (or SUPABASE_PROJECT_URL/VITE_SUPABASE_URL) or SUPABASE_JWT_SECRET'
+      });
+    }
+
     next(error);
   }
 });
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const passport = require('passport');
-const { query } = require('../database/connection');
-const { getJwtSecret } = require('../middleware/auth');
 
 const DEFAULT_GOOGLE_CLIENT_ID = '859557481151-cdno2ivnlr7trpn61vpndubstl2mfnr3.apps.googleusercontent.com';
 
@@ -169,13 +279,14 @@ const validatePassword = (password) => {
 router.post('/register', async (req, res, next) => {
   try {
     const { email, password, fullName } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
     // Validate input
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    if (!validateEmail(email)) {
+    if (!validateEmail(normalizedEmail)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
@@ -189,19 +300,19 @@ router.post('/register', async (req, res, next) => {
 
     if (isDemoMode) {
       // Demo mode - in-memory storage
-      if (demoUsers.has(email.toLowerCase())) {
+      if (demoUsers.has(normalizedEmail)) {
         return res.status(409).json({ error: 'User already exists' });
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
       const user = {
         id: `demo-${Date.now()}`,
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         full_name: fullName || 'Demo User',
         created_at: new Date().toISOString()
       };
 
-      demoUsers.set(email.toLowerCase(), { ...user, password_hash: passwordHash });
+      demoUsers.set(normalizedEmail, { ...user, password_hash: passwordHash });
 
       const token = createToken(user.id, user.email);
 
@@ -214,8 +325,8 @@ router.post('/register', async (req, res, next) => {
 
     // Database mode
     const existingUser = await query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [normalizedEmail]
     );
 
     if (existingUser.rows.length > 0) {
@@ -227,7 +338,7 @@ router.post('/register', async (req, res, next) => {
       `INSERT INTO users (email, password_hash, full_name)
        VALUES ($1, $2, $3)
        RETURNING id, email, full_name, created_at`,
-      [email, passwordHash, fullName]
+      [normalizedEmail, passwordHash, fullName]
     );
 
     const user = result.rows[0];
@@ -253,21 +364,22 @@ router.post('/register', async (req, res, next) => {
 router.post('/request-otp', async (req, res, next) => {
   try {
     const { email } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email || !validateEmail(email)) {
+    if (!normalizedEmail || !validateEmail(normalizedEmail)) {
       return res.status(400).json({ error: 'Valid email is required' });
     }
 
     // Check if user exists
     if (isDemoMode) {
-      const user = demoUsers.get(email);
+      const user = demoUsers.get(normalizedEmail);
       if (!user) {
         return res.status(404).json({ error: 'No account found with this email' });
       }
     } else {
       const result = await query(
-        'SELECT id, email, full_name FROM users WHERE email = $1 AND is_active = true',
-        [email]
+        'SELECT id, email, full_name FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
+        [normalizedEmail]
       );
 
       if (result.rows.length === 0) {
@@ -282,19 +394,19 @@ router.post('/request-otp', async (req, res, next) => {
     if (!isDemoMode) {
       // Delete any existing OTPs for this email
       await query(
-        'DELETE FROM login_otp WHERE email = $1',
-        [email]
+        'DELETE FROM login_otp WHERE LOWER(email) = LOWER($1)',
+        [normalizedEmail]
       );
 
       // Store OTP in database
       await query(
         `INSERT INTO login_otp (email, otp_code, expires_at, delivery_method)
          VALUES ($1, $2, $3, $4)`,
-        [email, otpCode, expiresAt, 'email']
+        [normalizedEmail, otpCode, expiresAt, 'email']
       );
     } else {
       // Store in memory for demo mode
-      demoUsers.get(email).otp = {
+      demoUsers.get(normalizedEmail).otp = {
         code: otpCode,
         expiresAt: expiresAt.getTime()
       };
@@ -302,12 +414,12 @@ router.post('/request-otp', async (req, res, next) => {
 
     // TODO: Send email/SMS with OTP
     // For now, log it (in production, integrate with email service)
-    console.log(`🔐 OTP for ${email}: ${otpCode} (expires in 10 minutes)`);
+    console.log(`🔐 OTP for ${normalizedEmail}: ${otpCode} (expires in 10 minutes)`);
 
     res.json({
       success: true,
       message: 'Verification code sent to your email',
-      email,
+      email: normalizedEmail,
       // Always return OTP code in response for testing purposes
       code: otpCode
     });
@@ -320,13 +432,14 @@ router.post('/request-otp', async (req, res, next) => {
 router.post('/verify-otp', async (req, res, next) => {
   try {
     const { email, code } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email || !code) {
+    if (!normalizedEmail || !code) {
       return res.status(400).json({ error: 'Email and verification code are required' });
     }
 
     if (isDemoMode) {
-      const user = demoUsers.get(email);
+      const user = demoUsers.get(normalizedEmail);
       
       if (!user || !user.otp) {
         return res.status(401).json({ error: 'Invalid or expired verification code' });
@@ -356,16 +469,16 @@ router.post('/verify-otp', async (req, res, next) => {
     // Database mode
     const otpResult = await query(
       `SELECT * FROM login_otp 
-       WHERE email = $1 AND otp_code = $2 AND is_verified = false
+       WHERE LOWER(email) = LOWER($1) AND otp_code = $2 AND is_verified = false
        ORDER BY created_at DESC LIMIT 1`,
-      [email, code]
+      [normalizedEmail, code]
     );
 
     if (otpResult.rows.length === 0) {
       // Increment attempts
       await query(
-        'UPDATE login_otp SET attempts = attempts + 1 WHERE email = $1 AND is_verified = false',
-        [email]
+        'UPDATE login_otp SET attempts = attempts + 1 WHERE LOWER(email) = LOWER($1) AND is_verified = false',
+        [normalizedEmail]
       );
       return res.status(401).json({ error: 'Invalid verification code' });
     }
@@ -375,8 +488,8 @@ router.post('/verify-otp', async (req, res, next) => {
     // Check if expired
     if (new Date(otp.expires_at) < new Date()) {
       await query(
-        'DELETE FROM login_otp WHERE email = $1',
-        [email]
+        'DELETE FROM login_otp WHERE LOWER(email) = LOWER($1)',
+        [normalizedEmail]
       );
       return res.status(410).json({ error: 'Verification code expired. Please request a new one.' });
     }
@@ -384,8 +497,8 @@ router.post('/verify-otp', async (req, res, next) => {
     // Check attempts
     if (otp.attempts >= 5) {
       await query(
-        'DELETE FROM login_otp WHERE email = $1',
-        [email]
+        'DELETE FROM login_otp WHERE LOWER(email) = LOWER($1)',
+        [normalizedEmail]
       );
       return res.status(429).json({ error: 'Too many failed attempts. Please request a new code.' });
     }
@@ -398,8 +511,8 @@ router.post('/verify-otp', async (req, res, next) => {
 
     // Get user
     const userResult = await query(
-      'SELECT * FROM users WHERE email = $1 AND is_active = true',
-      [email]
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
+      [normalizedEmail]
     );
 
     if (userResult.rows.length === 0) {
@@ -435,14 +548,15 @@ router.post('/verify-otp', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     if (isDemoMode) {
       // Demo mode - check in-memory users
-      const user = demoUsers.get(email);
+      const user = demoUsers.get(normalizedEmail);
       
       if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
@@ -465,8 +579,8 @@ router.post('/login', async (req, res, next) => {
 
     // Database mode
     const result = await query(
-      'SELECT * FROM users WHERE email = $1 AND is_active = true',
-      [email]
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
+      [normalizedEmail]
     );
 
     if (result.rows.length === 0) {
@@ -507,7 +621,7 @@ router.get('/me', async (req, res, next) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'demo-secret');
+    const decoded = jwt.verify(token, getJwtSecret());
 
     const result = await query(
       'SELECT id, email, full_name, created_at, last_login FROM users WHERE id = $1',
@@ -585,7 +699,11 @@ router.get(
   async (req, res, next) => {
     try {
       const { id, emails, displayName } = req.user;
-      const email = emails[0].value;
+      const email = normalizeEmail(emails[0]?.value);
+
+      if (!email) {
+        return res.redirect(`${getClientUrl(req)}/login?error=${encodeURIComponent('OAuth provider did not return an email')}`);
+      }
 
       let user;
       if (isDemoMode) {
@@ -597,7 +715,7 @@ router.get(
         };
         demoUsers.set(email, user);
       } else {
-        const existingUser = await query('SELECT * FROM users WHERE email = $1', [email]);
+        const existingUser = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
 
         if (existingUser.rows.length > 0) {
           user = existingUser.rows[0];
@@ -694,7 +812,7 @@ router.get(
   async (req, res, next) => {
     try {
       const { id, username, emails, displayName } = req.user;
-      const email = emails && emails[0] ? emails[0].value : `${username}@github.com`;
+      const email = normalizeEmail(emails && emails[0] ? emails[0].value : `${username}@github.com`);
 
       let user;
       if (isDemoMode) {
@@ -706,7 +824,7 @@ router.get(
         };
         demoUsers.set(email, user);
       } else {
-        const existingUser = await query('SELECT * FROM users WHERE email = $1', [email]);
+        const existingUser = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
 
         if (existingUser.rows.length > 0) {
           user = existingUser.rows[0];
@@ -778,12 +896,13 @@ router.post('/logout', (req, res) => {
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const { email } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email) {
+    if (!normalizedEmail) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    if (!validateEmail(email)) {
+    if (!validateEmail(normalizedEmail)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
@@ -794,7 +913,7 @@ router.post('/forgot-password', async (req, res, next) => {
 
     if (isDemoMode) {
       // Demo mode - store in memory
-      const user = Array.from(demoUsers.values()).find(u => u.email === email);
+      const user = demoUsers.get(normalizedEmail);
       
       if (user) {
         resetTokens.set(resetTokenHash, {
@@ -803,7 +922,7 @@ router.post('/forgot-password', async (req, res, next) => {
           expiry: resetTokenExpiry
         });
         
-        console.log(`[DEMO] Password reset token for ${email}: ${resetToken}`);
+        console.log(`[DEMO] Password reset token for ${normalizedEmail}: ${resetToken}`);
       }
       
       // Always return success to prevent email enumeration
@@ -817,8 +936,8 @@ router.post('/forgot-password', async (req, res, next) => {
 
     // Database mode
     const result = await query(
-      'SELECT id, email FROM users WHERE email = $1 AND is_active = true',
-      [email]
+      'SELECT id, email FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
+      [normalizedEmail]
     );
 
     if (result.rows.length > 0) {
@@ -834,7 +953,7 @@ router.post('/forgot-password', async (req, res, next) => {
 
       // In production, send email here
       // For now, log the token (remove in production)
-      console.log(`Password reset token for ${email}: ${resetToken}`);
+      console.log(`Password reset token for ${normalizedEmail}: ${resetToken}`);
       
       // TODO: Send email with reset link
       // const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
