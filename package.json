@@ -50,6 +50,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pdfjs-dist": "^5.4.624",
     "pg": "^8.11.3",
+    "stripe": "^20.3.1",
     "update": "^0.7.4"
   },
   "devDependencies": {

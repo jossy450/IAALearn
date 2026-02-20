@@ -33,12 +33,21 @@ function InterviewSession() {
   const [autoListen, setAutoListen] = useState(false); // default manual; user can opt-in to auto listening
   const [isAnswerHidden, setIsAnswerHidden] = useState(false); // default reveal; user can hide
   const [showFloatingAnswer, setShowFloatingAnswer] = useState(false); // floating answer visibility
+  const [liveTranscript, setLiveTranscript] = useState(''); // real-time interim transcript shown while listening
+  const [isAutoListening, setIsAutoListening] = useState(false); // auto-listen mode currently active
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const debounceTimerRef = useRef(null);
   const recordingMimeTypeRef = useRef('audio/webm');
   const conversationEndRef = useRef(null);
   const speechRecognitionRef = useRef(null);
+  const autoListenRecognitionRef = useRef(null); // dedicated ref for auto-listen continuous recognition
+  const finalTranscriptRef = useRef(''); // accumulates confirmed final transcript segments
+  const manualSpeechRecognitionRef = useRef(null); // live preview during manual MediaRecorder recording
+  const silenceTimerRef = useRef(null);       // fires when speech pauses long enough to submit
+  const isProcessingRef = useRef(false);      // true while AI is generating an answer
+  const pendingWhileProcessingRef = useRef(''); // speech captured while AI was busy
+  const SILENCE_DELAY = 2500;                 // ms of silence before auto-submitting question
   const { setScreenRecording, stealthMode } = useStealthStore();
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
@@ -104,6 +113,318 @@ function InterviewSession() {
     loadSession();
   }, [id]);
 
+  // ─── Auto-listen: start/stop continuous speech recognition when checkbox toggled ───
+  useEffect(() => {
+    if (autoListen) {
+      startAutoListen();
+    } else {
+      stopAutoListen();
+    }
+    // Cleanup on unmount
+    return () => {
+      stopAutoListen();
+    };
+  }, [autoListen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  // ─── startAutoListen: intelligent continuous recognition with silence detection ───
+  const startAutoListen = async () => {
+    const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!WebSpeechRecognition) {
+      showToast('⚠️ Auto-listen requires Chrome or Edge browser.', 'warning');
+      setAutoListen(false);
+      return;
+    }
+
+    // Clean up any existing session
+    if (autoListenRecognitionRef.current) {
+      try { autoListenRecognitionRef.current.stop(); } catch (_) {}
+      autoListenRecognitionRef.current = null;
+    }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    finalTranscriptRef.current = '';
+    pendingWhileProcessingRef.current = '';
+    isProcessingRef.current = false;
+    setLiveTranscript('');
+
+    const launchRecognition = () => {
+      const recognition = new WebSpeechRecognition();
+      autoListenRecognitionRef.current = recognition;
+      recognition.lang = 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        console.log('🎤 Auto-listen session started');
+        setIsAutoListening(true);
+        setIsRecording(true);
+        setLoadingStep('recording');
+      };
+
+      recognition.onresult = (event) => {
+        let interim = '';
+        let gotFinal = false;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const t = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscriptRef.current += t + ' ';
+            gotFinal = true;
+          } else {
+            interim += t;
+          }
+        }
+
+        const combined = finalTranscriptRef.current + interim;
+
+        // If AI is currently processing, buffer new speech as potential next question
+        if (isProcessingRef.current) {
+          pendingWhileProcessingRef.current = combined;
+          setLiveTranscript('🎧 ' + combined); // prefix to show it's buffering
+          return;
+        }
+
+        setLiveTranscript(combined);
+
+        // ── Silence detection: reset timer on every new speech result ──
+        // Only arm the timer when we have at least a few words (avoid triggering on noise)
+        if (combined.trim().split(/\s+/).length >= 3) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            // Silence detected — question is complete, auto-submit
+            const question = finalTranscriptRef.current.trim();
+            if (question && !isProcessingRef.current) {
+              console.log('🔇 Silence detected — auto-submitting question:', question);
+              autoSubmitQuestion(question);
+            }
+          }, SILENCE_DELAY);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('Auto-listen error:', event.error);
+        if (event.error === 'no-speech') return; // normal silence, keep going
+        if (event.error === 'aborted') return;   // intentional stop
+        if (event.error === 'network') {
+          showToast('⚠️ Network issue with speech recognition. Retrying…', 'warning');
+        }
+      };
+
+      recognition.onend = () => {
+        console.log('🎤 Auto-listen recognition ended, autoListen=', autoListen);
+        // Restart automatically to keep continuous listening (Web Speech API stops after ~60s)
+        if (autoListenRecognitionRef.current) {
+          // Small delay to avoid rapid restart loops
+          setTimeout(() => {
+            if (autoListenRecognitionRef.current) {
+              try { recognition.start(); } catch (_) {}
+            }
+          }, 150);
+        } else {
+          setIsAutoListening(false);
+          setIsRecording(false);
+          setLoadingStep(null);
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch (err) {
+        console.error('Failed to start auto-listen:', err);
+        showToast('❌ Could not start auto-listen. Check microphone permissions.', 'error');
+        setAutoListen(false);
+      }
+    };
+
+    launchRecognition();
+  };
+
+  // ─── autoSubmitQuestion: called when silence detected — submit to AI, keep listening ───
+  const autoSubmitQuestion = (question) => {
+    if (!question.trim() || isProcessingRef.current) return;
+
+    console.log('🤖 Auto-submitting question to AI:', question);
+    isProcessingRef.current = true;
+    pendingWhileProcessingRef.current = '';
+
+    // Reset transcript for next question (keep listening)
+    finalTranscriptRef.current = '';
+    setLiveTranscript('');
+    setRecordedQuestion(question);
+
+    // Run AI analysis — do NOT stop listening
+    autoAnalyzeQuestion(question);
+  };
+
+  // ─── autoAnalyzeQuestion: like analyzQuestion but keeps auto-listen running ───
+  const autoAnalyzeQuestion = async (question) => {
+    const startTime = Date.now();
+    setLoading(true);
+    setLoadingStep('analyzing');
+    setIsStreaming(true);
+    setPerfectAnswer('');
+    setResponseTime(null);
+
+    try {
+      const token = getAuthToken();
+      const apiRoot = getApiRoot();
+      const base = (apiRoot || window.location.origin || '').replace(/\/$/, '');
+      const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+
+      const contextData = {
+        interviewerQuestion: question,
+        position: session?.position,
+        company: session?.company_name,
+        sessionType: session?.session_type || 'general',
+        cv: session?.cv_content || '',
+        jobDescription: session?.job_description || '',
+        personSpecification: session?.person_specification || '',
+        aiInstructions: session?.metadata?.aiInstructions || '',
+      };
+
+      const response = await fetch(
+        `${base}/api/smart-ai/get-perfect-answer${tokenQuery}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(contextData),
+        }
+      );
+
+      if (!response.ok) throw new Error('Failed to generate perfect answer');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullAnswer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        fullAnswer += parseSSEChunk(chunk);
+        setPerfectAnswer(fullAnswer);
+        if (stealthMode && !showFloatingAnswer) setShowFloatingAnswer(true);
+      }
+
+      fullAnswer = fullAnswer.trim();
+      if (!fullAnswer) throw new Error('Empty AI response');
+
+      const endTime = Date.now();
+      setResponseTime(endTime - startTime);
+      showToast('✅ Answer ready — still listening…', 'success');
+
+      setQuestionHistory(prev => [...prev, {
+        question,
+        perfectAnswer: fullAnswer,
+        timestamp: new Date().toISOString()
+      }]);
+
+    } catch (error) {
+      console.error('Auto-analyze error:', error);
+      showToast(error?.message || 'Error generating answer.', 'error');
+    } finally {
+      setLoading(false);
+      setLoadingStep(null);
+      setIsStreaming(false);
+      isProcessingRef.current = false;
+
+      // If new speech was captured while AI was processing, treat it as next question
+      const pending = pendingWhileProcessingRef.current.trim();
+      pendingWhileProcessingRef.current = '';
+      if (pending && pending.split(/\s+/).length >= 3) {
+        console.log('📥 Processing buffered speech as next question:', pending);
+        // Show it as live transcript and arm silence timer
+        finalTranscriptRef.current = pending + ' ';
+        setLiveTranscript(pending);
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          const q = finalTranscriptRef.current.trim();
+          if (q && !isProcessingRef.current) autoSubmitQuestion(q);
+        }, SILENCE_DELAY);
+      } else {
+        // Ready for next question
+        setLiveTranscript('');
+        setRecordedQuestion('');
+      }
+    }
+  };
+
+  // ─── stopAutoListen: fully stops auto-listen mode ───
+  const stopAutoListen = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    if (!autoListenRecognitionRef.current) return;
+    try { autoListenRecognitionRef.current.stop(); } catch (_) {}
+    autoListenRecognitionRef.current = null;
+    isProcessingRef.current = false;
+    pendingWhileProcessingRef.current = '';
+    finalTranscriptRef.current = '';
+    setIsAutoListening(false);
+    setIsRecording(false);
+    setLoadingStep(null);
+    setLiveTranscript('');
+  };
+
+  // ─── startManualLivePreview: adds Web Speech live preview alongside MediaRecorder ───
+  const startManualLivePreview = () => {
+    const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!WebSpeechRecognition) return; // silently skip if not supported
+
+    if (manualSpeechRecognitionRef.current) {
+      try { manualSpeechRecognitionRef.current.stop(); } catch (_) {}
+    }
+
+    const recognition = new WebSpeechRecognition();
+    manualSpeechRecognitionRef.current = recognition;
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    let finalText = '';
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += t + ' ';
+        } else {
+          interim += t;
+        }
+      }
+      setLiveTranscript(finalText + interim);
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+      console.warn('Manual live preview error:', event.error);
+    };
+
+    recognition.onend = () => {
+      // Restart if still recording
+      if (manualSpeechRecognitionRef.current && isRecording) {
+        try { recognition.start(); } catch (_) {}
+      }
+    };
+
+    try { recognition.start(); } catch (_) {}
+  };
+
+  // ─── stopManualLivePreview: stops the live preview recognition ───
+  const stopManualLivePreview = () => {
+    if (!manualSpeechRecognitionRef.current) return;
+    try { manualSpeechRecognitionRef.current.stop(); } catch (_) {}
+    manualSpeechRecognitionRef.current = null;
+    setLiveTranscript('');
+  };
 
   const showToast = (message, type = 'success') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -333,7 +654,10 @@ function InterviewSession() {
 
           mediaRecorder.start();
           setIsRecording(true);
+          setLiveTranscript('');
           console.log('✅ Recording started');
+          // Start live speech-to-text preview alongside MediaRecorder
+          startManualLivePreview();
           return;
         } catch (error) {
           console.error('Failed to start recording:', error.name, error.message);
@@ -650,6 +974,7 @@ function InterviewSession() {
     
     // Stop MediaRecorder if it's running (web fallback)
     if (mediaRecorderRef.current && isRecording) {
+      stopManualLivePreview(); // stop live preview alongside MediaRecorder
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
@@ -943,54 +1268,111 @@ function InterviewSession() {
             <div className="recording-status-card">
               <div className="status-content">
                 <h2>Interview Coaching Assistant</h2>
-                <p>Click the mic button to record what the interviewer is asking, then get the perfect answer.</p>
-                <button 
-                  className={`record-btn ${isRecording ? 'recording' : ''}`}
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={loading}
-                  title="Click to record interviewer question"
-                >
-                  {isRecording ? <MicOff size={48} /> : <Mic size={48} />}
-                </button>
+                <p>
+                  {autoListen
+                    ? isProcessingRef.current
+                      ? '🤖 Generating answer… still listening for next question.'
+                      : '🎤 Auto-listen is ON — speak naturally. Answer auto-generates after a pause.'
+                    : 'Click Start Recording to capture the interviewer\'s question, then get the perfect answer.'}
+                </p>
+
+                {/* Big mic button — hidden in auto-listen mode (no manual start/stop needed) */}
+                {!autoListen && (
+                  <button
+                    className={`record-btn ${isRecording ? 'recording' : ''}`}
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={loading}
+                    title="Click to record interviewer question"
+                  >
+                    {isRecording ? <MicOff size={48} /> : <Mic size={48} />}
+                  </button>
+                )}
+
+                {/* Auto-listen pulsing mic indicator */}
+                {autoListen && (
+                  <div className="auto-listen-mic-indicator">
+                    <div className={`auto-listen-pulse ${isAutoListening ? 'active' : ''} ${loading ? 'processing' : ''}`}>
+                      {loading ? <Loader size={40} className="spinner" /> : <Mic size={48} />}
+                    </div>
+                    {loading
+                      ? <span className="auto-listen-status processing">🤖 Generating answer… still listening</span>
+                      : isAutoListening
+                        ? <span className="auto-listen-status">🔴 Listening — will auto-answer after pause</span>
+                        : <span className="auto-listen-status">⏳ Starting microphone…</span>}
+                  </div>
+                )}
+
+                {/* Live transcript box — shown during both auto-listen and manual recording */}
+                {(isRecording || isAutoListening) && liveTranscript && (
+                  <div className={`live-transcript-box ${liveTranscript.startsWith('🎧') ? 'buffering' : ''}`}>
+                    <div className="live-transcript-label">
+                      <span className="live-dot" />
+                      {liveTranscript.startsWith('🎧') ? 'Buffering next question…' : 'Live transcript'}
+                    </div>
+                    <p className="live-transcript-text">
+                      {liveTranscript.startsWith('🎧') ? liveTranscript.slice(2).trim() : liveTranscript}
+                      <span className="typing-cursor">|</span>
+                    </p>
+                  </div>
+                )}
+
                 <div className="status-text">
-                  {isRecording && (
+                  {isRecording && !autoListen && (
                     <div className="recording-indicator">
                       <div className="pulse-ring"></div>
-                      <span>🎤 Recording... Listening to interviewer question</span>
+                      <span>🎤 Recording… speak clearly</span>
                     </div>
                   )}
-                  {!isRecording && !loading && <span>Ready to record</span>}
-                  {loading && (
+                  {!isRecording && !autoListen && !loading && <span>Ready to record</span>}
+                  {loading && !autoListen && (
                     <div className="loading-indicator">
                       <Loader className="spinner" size={24} />
                       <span>
-                        {loadingStep === 'recording' && 'Recording question...'}
-                        {loadingStep === 'analyzing' && 'Analyzing question and generating perfect answer...'}
+                        {loadingStep === 'transcribing' && 'Transcribing audio…'}
+                        {loadingStep === 'analyzing' && 'Generating perfect answer…'}
                       </span>
                     </div>
                   )}
                 </div>
 
                 <div className="record-control-buttons">
-                  <button
-                    className="btn btn-primary"
-                    onClick={startRecording}
-                    disabled={isRecording || loading}
-                    title="Start recording interviewer question"
+                  {/* Manual recording buttons — hidden when auto-listen is active */}
+                  {!autoListen && (
+                    <>
+                      <button
+                        className="btn btn-primary"
+                        onClick={startRecording}
+                        disabled={isRecording || loading}
+                        title="Start recording interviewer question"
+                      >
+                        <Mic size={18} />
+                        <span className="ml-2">Start Recording</span>
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={stopRecording}
+                        disabled={!isRecording || loading}
+                        title="Stop recording"
+                      >
+                        <Square size={18} />
+                        <span className="ml-2">Stop Recording</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Auto-listen checkbox — always visible */}
+                  <label
+                    className={`auto-listen-toggle ${autoListen ? 'active' : ''}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      fontSize: '0.875rem',
+                      color: autoListen ? '#7fffb2' : '#c0e7ff',
+                      background: autoListen ? 'rgba(0,200,100,0.18)' : 'rgba(255,255,255,0.12)',
+                      padding: '0.5rem 0.75rem', borderRadius: '6px',
+                      border: autoListen ? '1px solid rgba(0,200,100,0.5)' : '1px solid rgba(255,255,255,0.2)',
+                      cursor: 'pointer', transition: 'all 0.2s',
+                    }}
                   >
-                    <Mic size={18} />
-                    <span className="ml-2">Start Recording</span>
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={stopRecording}
-                    disabled={!isRecording || loading}
-                    title="Manually stop when the question ends"
-                  >
-                    <Square size={18} />
-                    <span className="ml-2">Stop Recording</span>
-                  </button>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#c0e7ff', background: 'rgba(255,255,255,0.12)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={autoListen}

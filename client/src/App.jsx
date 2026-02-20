@@ -22,6 +22,7 @@ import MobileScanner from './pages/MobileScanner';
 import MobileSession from './pages/MobileSession';
 import StealthManager from './components/StealthManager';
 import SubscriptionPage from './pages/SubscriptionPage';
+import CheckoutReturn from './pages/CheckoutReturn';
 
 // Wrapper component to check auth status
 function ProtectedRoute({ children }) {
@@ -102,6 +103,9 @@ function App() {
         <Route path="/mobile/:sessionId" element={<MobileInterviewSession />} />
         <Route path="/admin" element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />
         
+        {/* Stripe returns here after checkout — needs auth but no Layout chrome */}
+        <Route path="/checkout/return" element={token ? <CheckoutReturn /> : <Navigate to="/login" />} />
+
         <Route path="/" element={token ? <Layout /> : <Navigate to="/login" />}>
           <Route index element={<Dashboard />} />
           <Route path="session/:id" element={<InterviewSession />} />
