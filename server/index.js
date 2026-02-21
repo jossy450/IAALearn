@@ -40,20 +40,40 @@ app.use(
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          // Stripe.js must be loaded from Stripe's CDN
+          'https://js.stripe.com',
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https://fonts.googleapis.com',
+        ],
         imgSrc: ["'self'", 'data:', 'https:'],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
-        // Keep self as primary, but allow legacy Fly host during service-worker/cache rollout
-        // so older cached bundles still function instead of being blocked by CSP.
+        fontSrc: [
+          "'self'",
+          'https://fonts.gstatic.com',
+          'https://fonts.googleapis.com',
+        ],
         connectSrc: [
           "'self'",
           'https://iaalearn-cloud.fly.dev',
           'https://iaalearn-1.fly.dev',
           'wss://iaalearn-cloud.fly.dev',
           'wss://iaalearn-1.fly.dev',
+          // Stripe API endpoints
+          'https://api.stripe.com',
+          'https://r.stripe.com',
+          // Hugging Face inference API (transcription)
+          'https://api-inference.huggingface.co',
         ],
-        frameSrc: ["'none'"],
+        // Allow Stripe to embed its iframe for 3D Secure / payment elements
+        frameSrc: [
+          'https://js.stripe.com',
+          'https://hooks.stripe.com',
+        ],
         baseUri: ["'self'"],
         formAction: ["'self'"],
       },
@@ -67,7 +87,8 @@ app.use(
     noSniff: true,
     xssFilter: true,
     dnsPrefetchControl: { allow: false },
-    frameguard: { action: 'deny' },
+    // Allow Stripe iframes (3DS, payment elements) — use CSP frameSrc instead of X-Frame-Options deny
+    frameguard: false,
   })
 );
 
@@ -220,10 +241,29 @@ if (!clientDistPath) {
   });
 } else {
   console.log('✅ Serving client from:', clientDistPath);
-  app.use(express.static(clientDistPath));
 
-  // React Router fallback
-  app.get('*', (req, res) => {
+  // Serve hashed assets (JS/CSS/images in /assets/) with long-lived immutable cache
+  app.use('/assets', express.static(path.join(clientDistPath, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+    // Ensure correct MIME types are sent — never fall through to index.html
+    fallthrough: false,
+  }));
+
+  // Serve other static files (manifest, icons, sw.js, etc.) with short cache
+  app.use(express.static(clientDistPath, {
+    maxAge: '1h',
+    // Do NOT fall through unknown paths to index.html here — let the explicit
+    // catch-all below handle React Router paths
+    index: false,
+  }));
+
+  // React Router fallback — only for non-asset paths
+  app.get('*', (req, res, next) => {
+    // If the request looks like a file (has an extension), don't serve index.html
+    if (/\.\w{1,6}$/.test(req.path)) {
+      return res.status(404).json({ error: 'Asset not found', path: req.path });
+    }
     res.sendFile(path.join(clientDistPath, 'index.html'));
   });
 }
