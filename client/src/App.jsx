@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { canAccess } from './store/subscriptionStore';
 import Layout from './components/Layout';
+import api from './services/api';
 import { initializePushNotifications } from './services/pushNotifications';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -30,7 +32,6 @@ function ProtectedRoute({ children }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If user loses token (logged out), redirect to login
     if (!token) {
       navigate('/login', { replace: true });
     }
@@ -39,14 +40,37 @@ function ProtectedRoute({ children }) {
   return token ? children : null;
 }
 
+/**
+ * PlanRoute — wraps a page that requires a minimum subscription plan.
+ * If the user's plan doesn't meet the requirement, redirect to /subscription
+ * with a message explaining why.
+ */
+function PlanRoute({ children, requiredPlan }) {
+  const { subscription } = useAuthStore();
+  const plan = subscription?.plan || subscription?.status || 'trial';
+
+  if (!canAccess(plan, requiredPlan)) {
+    return <Navigate to="/subscription" replace state={{ requiredPlan }} />;
+  }
+  return children;
+}
+
 function App() {
-  const { token, user } = useAuthStore();
+  const { token, user, setSubscription } = useAuthStore();
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     // Initialize push notifications on app mount (native platforms only)
     initializePushNotifications();
   }, []);
+
+  // Fetch subscription status whenever the user logs in (token changes)
+  useEffect(() => {
+    if (!token) return;
+    api.get('/subscriptions/status')
+      .then(res => setSubscription(res.data))
+      .catch(() => setSubscription(null));
+  }, [token, setSubscription]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,8 +135,16 @@ function App() {
           <Route path="session/:id" element={<InterviewSession />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="stealth" element={<StealthSettings />} />
-          <Route path="mobile" element={<Mobile />} />
+          <Route path="stealth" element={
+            <PlanRoute requiredPlan="basic">
+              <StealthSettings />
+            </PlanRoute>
+          } />
+          <Route path="mobile" element={
+            <PlanRoute requiredPlan="basic">
+              <Mobile />
+            </PlanRoute>
+          } />
           <Route path="subscription" element={<SubscriptionPage />} />
         </Route>
       </Routes>

@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Clock, Zap, Database } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { analyticsAPI, cacheAPI } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import { canAccess } from '../store/subscriptionStore';
 import './Analytics.css';
 
 function Analytics() {
+  const navigate = useNavigate();
+  const { subscription } = useAuthStore();
+  const userPlan = subscription?.plan || subscription?.status || 'trial';
+  const hasAccess = canAccess(userPlan, 'pro');
+
   const [userAnalytics, setUserAnalytics] = useState(null);
   const [cacheStats, setCacheStats] = useState(null);
   const [period, setPeriod] = useState('30');
@@ -42,6 +50,29 @@ function Analytics() {
       <div className="loading-container">
         <div className="spinner"></div>
         <p>Loading analytics...</p>
+      </div>
+    );
+  }
+
+  // ── Upgrade wall for non-Pro users ──────────────────────────────────────────
+  if (!hasAccess) {
+    return (
+      <div className="upgrade-wall">
+        <div className="upgrade-wall-card">
+          <div className="upgrade-wall-icon">📊</div>
+          <h2 className="upgrade-wall-title">Analytics — Pro Feature</h2>
+          <p className="upgrade-wall-sub">
+            Detailed session analytics, activity trends, response-time stats and cache
+            performance are available on the <strong>Professional</strong> plan and above.
+            Upgrade to unlock full insights into your interview performance.
+          </p>
+          <button
+            className="upgrade-wall-btn"
+            onClick={() => navigate('/subscription')}
+          >
+            🚀 Upgrade to Pro
+          </button>
+        </div>
       </div>
     );
   }

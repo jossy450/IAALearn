@@ -7,14 +7,16 @@ export const useAuthStore = create(
     (set) => ({
       token: null,
       user: null,
+      subscription: null,   // { plan, status, end_date, days_remaining, … }
       setAuth: (token, user) => {
         set({ token, user });
         // Attempt to flush any pending push token now that auth exists
         try { pushNotifications.flushPendingPushToken(); } catch (_) {}
       },
+      setSubscription: (sub) => set({ subscription: sub }),
       logout: () => {
         // Clear Zustand state
-        set({ token: null, user: null });
+        set({ token: null, user: null, subscription: null });
         
         // Clear all localStorage keys
         try {

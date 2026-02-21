@@ -8,64 +8,71 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import api from '../services/api';
-import { Check, Gift, Shield, Zap, Star, X } from 'lucide-react';
+import { Check, Gift, Shield, Zap, Star, X, Video, Users, Cpu } from 'lucide-react';
 import './SubscriptionPage.css';
 
 // ── Stripe publishable key from Vite env ──────────────────────────────────────
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
+// ── Annual pricing (save ~17%) ────────────────────────────────────────────────
+const ANNUAL_PRICES = { basic: 99, pro: 199, enterprise: 499 };
+const MONTHLY_PRICES = { basic: 9.99, pro: 19.99, enterprise: 49.99 };
+
 // ── Plan definitions ──────────────────────────────────────────────────────────
 const PLANS = [
   {
     id: 'basic',
-    name: 'Basic',
-    price: 9.99,
+    name: 'Essentials',
+    monthlyPrice: 9.99,
+    annualPrice: 99,
     currency: '£',
-    period: '/month',
     description: 'Perfect for individual job seekers',
     icon: <Zap size={28} />,
     color: '#3b82f6',
     features: [
       'Unlimited AI interview sessions',
       'Priority AI responses',
-      'Advanced analytics',
       'Email support',
       '3 document uploads per session',
+      '🥷 Stealth mode access',
+      '📱 Mobile app access',
     ],
   },
   {
     id: 'pro',
     name: 'Professional',
-    price: 19.99,
+    monthlyPrice: 19.99,
+    annualPrice: 199,
     currency: '£',
-    period: '/month',
     description: 'For serious job seekers',
     icon: <Star size={28} />,
     color: '#8b5cf6',
     popular: true,
     features: [
-      'Everything in Basic',
+      'Everything in Essentials',
       'Unlimited document uploads',
-      'Priority support',
+      '📊 Advanced analytics',
+      '🎬 Session recording & playback',
       'Custom AI instructions',
       'Session history export',
-      'Team collaboration',
+      'Priority support',
     ],
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 49.99,
+    monthlyPrice: 49.99,
+    annualPrice: 499,
     currency: '£',
-    period: '/month',
     description: 'For teams and organisations',
     icon: <Shield size={28} />,
     color: '#10b981',
     features: [
       'Everything in Professional',
+      '👥 Team collaboration',
       'Team management dashboard',
       'Custom branding',
-      'API access',
+      '🔌 API access',
       'Dedicated account manager',
       'SLA guarantee',
     ],
@@ -270,6 +277,7 @@ export default function SubscriptionPage() {
   const [successPlan, setSuccessPlan] = useState(null);
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialMsg, setTrialMsg] = useState('');
+  const [annual, setAnnual] = useState(false);
 
   useEffect(() => {
     api.get('/subscriptions/status')
@@ -294,7 +302,6 @@ export default function SubscriptionPage() {
   const handlePaymentSuccess = useCallback((plan) => {
     setSelectedPlan(null);
     setSuccessPlan(plan);
-    // Refresh subscription status
     api.get('/subscriptions/status').then(res => setSubscription(res.data)).catch(() => {});
   }, []);
 
@@ -304,6 +311,14 @@ export default function SubscriptionPage() {
 
   const isActive = subscription?.status === 'active';
   const isTrial  = subscription?.status === 'trial';
+
+  // Build display plans with resolved price/period based on billing toggle
+  const displayPlans = PLANS.map(p => ({
+    ...p,
+    price:  annual ? p.annualPrice  : p.monthlyPrice,
+    period: annual ? '/year'        : '/month',
+    billingId: annual ? `${p.id}_annual` : p.id,
+  }));
 
   return (
     <div style={pageStyles.page}>
@@ -337,11 +352,7 @@ export default function SubscriptionPage() {
               ✅ Trial active · {subscription?.days_remaining || '7'} days remaining
             </div>
           ) : (
-            <button
-              onClick={handleStartTrial}
-              disabled={trialLoading}
-              style={pageStyles.trialBtn}
-            >
+            <button onClick={handleStartTrial} disabled={trialLoading} style={pageStyles.trialBtn}>
               {trialLoading ? 'Starting…' : 'Start Free Trial'}
             </button>
           )}
@@ -350,54 +361,85 @@ export default function SubscriptionPage() {
         </div>
       )}
 
+      {/* Billing toggle */}
+      <div style={pageStyles.toggleRow}>
+        <span style={{ color: !annual ? '#fff' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>Monthly</span>
+        <button
+          onClick={() => setAnnual(a => !a)}
+          style={{
+            ...pageStyles.toggleBtn,
+            background: annual ? 'linear-gradient(135deg,#8b5cf6,#6d28d9)' : 'rgba(255,255,255,0.12)',
+          }}
+          aria-label="Toggle annual billing"
+        >
+          <span style={{
+            ...pageStyles.toggleThumb,
+            transform: annual ? 'translateX(22px)' : 'translateX(2px)',
+          }} />
+        </button>
+        <span style={{ color: annual ? '#fff' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>
+          Annual <span style={pageStyles.saveBadge}>Save 17%</span>
+        </span>
+      </div>
+
       {/* Plan cards */}
       <div style={pageStyles.grid}>
-        {PLANS.map(plan => (
-          <div
-            key={plan.id}
-            style={{
-              ...pageStyles.card,
-              borderColor: plan.popular ? plan.color : 'rgba(255,255,255,0.1)',
-              boxShadow: plan.popular ? `0 0 0 2px ${plan.color}40, 0 20px 60px rgba(0,0,0,0.4)` : '0 8px 32px rgba(0,0,0,0.3)',
-            }}
-          >
-            {plan.popular && (
-              <div style={{ ...pageStyles.badge, background: plan.color }}>Most Popular</div>
-            )}
-
-            <div style={{ color: plan.color, marginBottom: '0.75rem' }}>{plan.icon}</div>
-            <h3 style={pageStyles.planName}>{plan.name}</h3>
-            <p style={pageStyles.planDesc}>{plan.description}</p>
-
-            <div style={pageStyles.priceRow}>
-              <span style={pageStyles.currency}>{plan.currency}</span>
-              <span style={pageStyles.price}>{plan.price}</span>
-              <span style={pageStyles.period}>{plan.period}</span>
-            </div>
-
-            <ul style={pageStyles.featureList}>
-              {plan.features.map((f, i) => (
-                <li key={i} style={pageStyles.featureItem}>
-                  <Check size={15} style={{ color: plan.color, flexShrink: 0 }} />
-                  <span>{f}</span>
-                </li>
-              ))}
-            </ul>
-
-            <button
-              onClick={() => setSelectedPlan(plan)}
+        {displayPlans.map(plan => {
+          const isCurrent = isActive && subscription?.plan === plan.id;
+          return (
+            <div
+              key={plan.id}
               style={{
-                ...pageStyles.subscribeBtn,
-                background: `linear-gradient(135deg, ${plan.color} 0%, ${plan.color}cc 100%)`,
-                opacity: isActive && subscription?.plan === plan.id ? 0.5 : 1,
-                cursor: isActive && subscription?.plan === plan.id ? 'default' : 'pointer',
+                ...pageStyles.card,
+                borderColor: plan.popular ? plan.color : 'rgba(255,255,255,0.1)',
+                boxShadow: plan.popular ? `0 0 0 2px ${plan.color}40, 0 20px 60px rgba(0,0,0,0.4)` : '0 8px 32px rgba(0,0,0,0.3)',
               }}
-              disabled={isActive && subscription?.plan === plan.id}
             >
-              {isActive && subscription?.plan === plan.id ? '✓ Current Plan' : `Subscribe · ${plan.currency}${plan.price}/mo`}
-            </button>
-          </div>
-        ))}
+              {plan.popular && (
+                <div style={{ ...pageStyles.badge, background: plan.color }}>Most Popular</div>
+              )}
+
+              <div style={{ color: plan.color, marginBottom: '0.75rem' }}>{plan.icon}</div>
+              <h3 style={pageStyles.planName}>{plan.name}</h3>
+              <p style={pageStyles.planDesc}>{plan.description}</p>
+
+              <div style={pageStyles.priceRow}>
+                <span style={pageStyles.currency}>{plan.currency}</span>
+                <span style={pageStyles.price}>{plan.price}</span>
+                <span style={pageStyles.period}>{plan.period}</span>
+              </div>
+              {annual && (
+                <p style={pageStyles.annualNote}>
+                  Billed as {plan.currency}{plan.price}/year · save {plan.currency}{Math.round(plan.monthlyPrice * 12 - plan.price)}
+                </p>
+              )}
+
+              <ul style={pageStyles.featureList}>
+                {plan.features.map((f, i) => (
+                  <li key={i} style={pageStyles.featureItem}>
+                    <Check size={15} style={{ color: plan.color, flexShrink: 0 }} />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => setSelectedPlan(plan)}
+                style={{
+                  ...pageStyles.subscribeBtn,
+                  background: `linear-gradient(135deg, ${plan.color} 0%, ${plan.color}cc 100%)`,
+                  opacity: isCurrent ? 0.5 : 1,
+                  cursor: isCurrent ? 'default' : 'pointer',
+                }}
+                disabled={isCurrent}
+              >
+                {isCurrent
+                  ? '✓ Current Plan'
+                  : `Subscribe · ${plan.currency}${plan.price}${annual ? '/yr' : '/mo'}`}
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <p style={pageStyles.footer}>
@@ -568,6 +610,52 @@ const pageStyles = {
     color: 'rgba(255,255,255,0.35)',
     fontSize: '0.85rem',
     marginTop: '1rem',
+  },
+  toggleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.85rem',
+    marginBottom: '2rem',
+    fontSize: '0.95rem',
+  },
+  toggleBtn: {
+    position: 'relative',
+    width: 48,
+    height: 26,
+    borderRadius: 13,
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    transition: 'background 0.25s',
+    flexShrink: 0,
+  },
+  toggleThumb: {
+    position: 'absolute',
+    top: 3,
+    width: 20,
+    height: 20,
+    borderRadius: '50%',
+    background: '#fff',
+    transition: 'transform 0.25s',
+    display: 'block',
+  },
+  saveBadge: {
+    display: 'inline-block',
+    background: 'rgba(139,92,246,0.25)',
+    color: '#c4b5fd',
+    fontSize: '0.72rem',
+    fontWeight: 800,
+    padding: '0.15rem 0.5rem',
+    borderRadius: 20,
+    marginLeft: '0.35rem',
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+  },
+  annualNote: {
+    margin: '-0.75rem 0 1rem',
+    fontSize: '0.78rem',
+    color: 'rgba(255,255,255,0.4)',
   },
 };
 

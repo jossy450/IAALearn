@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePrivacyStore } from '../store/privacyStore';
+import { canAccess } from '../store/subscriptionStore';
 import { getApiRoot } from '../services/api';
 import { 
   LayoutDashboard, 
@@ -12,15 +13,17 @@ import {
   Eye,
   EyeOff,
   Shield,
-  Monitor
+  Monitor,
+  Lock,
 } from 'lucide-react';
 import './Layout.css';
 
 function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, logout, subscription } = useAuthStore();
   const { disguiseMode, setDisguiseMode } = usePrivacyStore();
+  const userPlan = subscription?.plan || subscription?.status || 'trial';
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [forceDesktop, setForceDesktop] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 1024px)').matches);
@@ -101,13 +104,14 @@ function Layout() {
     }
   };
 
+  // requiredPlan: minimum plan needed; null = always accessible
   const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/subscription', icon: Monitor, label: 'Subscription & Trial' },
-    { path: '/analytics', icon: BarChart3, label: 'Analytics' },
-    { path: '/stealth', icon: Shield, label: 'Stealth' },
-    { path: '/mobile', icon: Smartphone, label: 'Mobile' },
-    { path: '/settings', icon: Settings, label: 'Settings' },
+    { path: '/',            icon: LayoutDashboard, label: 'Dashboard',          requiredPlan: null },
+    { path: '/subscription',icon: Monitor,         label: 'Subscription & Trial',requiredPlan: null },
+    { path: '/analytics',   icon: BarChart3,       label: 'Analytics',          requiredPlan: 'pro'   },
+    { path: '/stealth',     icon: Shield,          label: 'Stealth',            requiredPlan: 'basic' },
+    { path: '/mobile',      icon: Smartphone,      label: 'Mobile',             requiredPlan: 'basic' },
+    { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
   ];
 
   const mobileActions = [
@@ -146,15 +150,24 @@ function Layout() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
+            const locked = item.requiredPlan ? !canAccess(userPlan, item.requiredPlan) : false;
+            const planLabel = item.requiredPlan === 'pro' ? 'Pro' : item.requiredPlan === 'basic' ? 'Basic' : null;
             return (
               <button
                 key={item.path}
-                className={`nav-item ${isActive ? 'active' : ''}`}
+                className={`nav-item ${isActive ? 'active' : ''} ${locked ? 'nav-item-locked' : ''}`}
                 type="button"
                 onClick={() => handleNavClick(item.path)}
+                title={locked ? `Requires ${planLabel} plan` : item.label}
               >
                 <Icon size={20} />
                 <span>{item.label}</span>
+                {locked && (
+                  <span className="nav-plan-badge" title={`Requires ${planLabel} plan`}>
+                    <Lock size={11} style={{ marginRight: 2 }} />
+                    {planLabel}
+                  </span>
+                )}
               </button>
             );
           })}

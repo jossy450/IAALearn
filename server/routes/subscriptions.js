@@ -5,75 +5,112 @@ const { getSubscriptionStatus, startTrial, createSubscription, cancelSubscriptio
 const { createCheckoutSession, retrieveCheckoutSession, constructWebhookEvent } = require('../services/stripe');
 const db = require('../database/connection');
 
+// ── Plan limits (mirrors client/src/store/subscriptionStore.js) ───────────────
+const PLAN_LIMITS = {
+  trial:      { maxDocUploadsPerSession: 3, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: false, mobileApp: false, teamCollaboration: false, apiAccess: false },
+  basic:      { maxDocUploadsPerSession: 3, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: true,  mobileApp: true,  teamCollaboration: false, apiAccess: false },
+  pro:        { maxDocUploadsPerSession: Infinity, unlimitedDocUploads: true, advancedAnalytics: true, sessionRecording: true, customAI: true, sessionExport: true, stealthMode: true, mobileApp: true, teamCollaboration: false, apiAccess: false },
+  enterprise: { maxDocUploadsPerSession: Infinity, unlimitedDocUploads: true, advancedAnalytics: true, sessionRecording: true, customAI: true, sessionExport: true, stealthMode: true, mobileApp: true, teamCollaboration: true,  apiAccess: true  },
+};
+
 // Get available subscription plans
 router.get('/plans', authenticate, async (req, res) => {
-  // Return predefined plans
   const plans = [
     {
       id: 'trial',
       name: 'Free Trial',
-      description: 'Try all features for free',
-      price: 0,
+      description: 'Try all features for 7 days',
+      monthlyPrice: 0,
+      annualPrice: 0,
+      currency: '£',
       duration: '7 days',
       features: [
-        'Full access to all AI features',
-        'Unlimited interview sessions',
-        'Document upload support',
-        'Mobile app access',
-        'Basic analytics'
+        'Unlimited AI interview sessions',
+        'Priority AI responses',
+        'Email support',
+        '3 document uploads per session',
       ],
-      popular: true,
-      trial: true
+      trial: true,
+      limits: PLAN_LIMITS.trial,
     },
     {
       id: 'basic',
-      name: 'Basic',
-      description: 'Perfect for individual users',
-      price: 9.99,
+      name: 'Essentials',
+      description: 'Perfect for individual job seekers',
+      monthlyPrice: 9.99,
+      annualPrice: 99,
+      currency: '£',
       duration: 'month',
       features: [
-        'All trial features',
+        'Unlimited AI interview sessions',
         'Priority AI responses',
-        'Advanced analytics',
         'Email support',
-        '3 document uploads per session'
+        '3 document uploads per session',
+        'Stealth mode access',
+        'Mobile app access',
       ],
-      popular: false
+      popular: false,
+      limits: PLAN_LIMITS.basic,
     },
     {
       id: 'pro',
       name: 'Professional',
       description: 'For serious job seekers',
-      price: 19.99,
+      monthlyPrice: 19.99,
+      annualPrice: 199,
+      currency: '£',
       duration: 'month',
       features: [
-        'All basic features',
+        'Everything in Essentials',
         'Unlimited document uploads',
-        'Priority support',
+        'Advanced analytics',
+        'Session recording & playback',
         'Custom AI instructions',
         'Session history export',
-        'Team collaboration'
+        'Priority support',
       ],
-      popular: true
+      popular: true,
+      limits: PLAN_LIMITS.pro,
     },
     {
       id: 'enterprise',
       name: 'Enterprise',
-      description: 'For teams and organizations',
-      price: 49.99,
+      description: 'For teams and organisations',
+      monthlyPrice: 49.99,
+      annualPrice: 499,
+      currency: '£',
       duration: 'month',
       features: [
-        'All professional features',
+        'Everything in Professional',
+        'Team collaboration',
         'Team management dashboard',
         'Custom branding',
         'API access',
         'Dedicated account manager',
-        'SLA guarantee'
+        'SLA guarantee',
       ],
-      popular: false
-    }
+      popular: false,
+      limits: PLAN_LIMITS.enterprise,
+    },
   ];
   res.json(plans);
+});
+
+// GET /api/subscriptions/limits — returns feature limits for the current user's plan
+router.get('/limits', authenticate, async (req, res) => {
+  try {
+    let plan = 'trial';
+    if (process.env.DEMO_MODE !== 'true') {
+      const result = await db.query(
+        `SELECT plan FROM subscriptions WHERE user_id = $1 AND status IN ('active','trial') ORDER BY start_date DESC LIMIT 1`,
+        [req.user.id]
+      );
+      if (result.rows.length > 0) plan = result.rows[0].plan;
+    }
+    res.json({ plan, limits: PLAN_LIMITS[plan] || PLAN_LIMITS.trial });
+  } catch (err) {
+    res.json({ plan: 'trial', limits: PLAN_LIMITS.trial });
+  }
 });
 
 // Get current user's subscription status
