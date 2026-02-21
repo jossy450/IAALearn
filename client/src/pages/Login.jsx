@@ -95,6 +95,10 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  // ── Session conflict state ────────────────────────────────────────────────
+  const [sessionConflict, setSessionConflict] = useState(null);
+  // sessionConflict = { pendingToken, user, device, since }
   
   // OTP State
   const [useOtp, setUseOtp] = useState(true);
@@ -194,34 +198,67 @@ function Login() {
     }
   };
 
+  // ── Shared post-login success handler ────────────────────────────────────
+  const onLoginSuccess = (token, user) => {
+    if (rememberMe) localStorage.setItem('rememberMe', 'true');
+    setAuth(token, user);
+    try { pushNotifications.flushPendingPushToken(); } catch (_) {}
+    setShowUploadModal(true);
+    setUploadError('');
+    setUploadSuccess(false);
+    setCvFile(null);
+    setJobDescFile(null);
+  };
+
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
-    
     setError('');
     setLoading(true);
 
     try {
       const response = await authAPI.login(formData);
-      const { token, user } = response.data;
-      
-      // Store auth with remember me preference
-      if (rememberMe) {
-        localStorage.setItem('rememberMe', 'true');
-      }
-      
-      setAuth(token, user);
-      try { pushNotifications.flushPendingPushToken(); } catch (_) {}
-      // Show upload modal after successful login
-      setShowUploadModal(true);
-      setUploadError('');
-      setUploadSuccess(false);
-      setCvFile(null);
-      setJobDescFile(null);
+      onLoginSuccess(response.data.token, response.data.user);
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      const data = err.response?.data;
+      // ── Session conflict: another device is already logged in ──
+      if (data?.error === 'session_conflict') {
+        setSessionConflict({
+          pendingToken: data.pendingToken,
+          user:         data.user,
+          device:       data.device || 'another device',
+          since:        data.since,
+        });
+        setLoading(false);
+        return;
+      }
+      setError(data?.error || 'Login failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Switch to this device (force-logout the other) ────────────────────────
+  const handleSwitchDevice = async () => {
+    if (!sessionConflict) return;
+    setLoading(true);
+    try {
+      const res = await axios.post('/api/auth/force-logout-other', {
+        pendingToken: sessionConflict.pendingToken,
+      });
+      setSessionConflict(null);
+      onLoginSuccess(res.data.token, res.data.user);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to switch device');
+      setSessionConflict(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Stay on old device (cancel new login) ────────────────────────────────
+  const handleKeepExistingSession = () => {
+    setSessionConflict(null);
+    setError('Login cancelled — your existing session is still active.');
   };
 
   const handleCvChange = (e) => {
@@ -479,6 +516,62 @@ function Login() {
           Don't have an account? <Link to="/register">Register</Link>
         </p>
       </div>
+
+      {/* ── Session Conflict Modal ─────────────────────────────────────────── */}
+      {sessionConflict && (
+        <div className="modal-overlay">
+          <div className="modal-content session-conflict-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>⚠️ Already Logged In</h2>
+            </div>
+            <div className="modal-body">
+              <p className="modal-subtitle" style={{ marginBottom: '1rem' }}>
+                Your account is currently active on <strong>{sessionConflict.device}</strong>.
+                {sessionConflict.since && (
+                  <> (since {new Date(sessionConflict.since).toLocaleString()})</>
+                )}
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                Only one active session is allowed at a time. What would you like to do?
+              </p>
+
+              <div className="session-conflict-options">
+                {/* Option 1: Switch to this device */}
+                <div className="conflict-option conflict-option-switch">
+                  <div className="conflict-option-icon">📱</div>
+                  <div className="conflict-option-body">
+                    <h4>Switch to this device</h4>
+                    <p>Log out from the other device and continue here.</p>
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSwitchDevice}
+                    disabled={loading}
+                  >
+                    {loading ? <><div className="spinner" style={{width:16,height:16}} /> Switching…</> : 'Switch Here'}
+                  </button>
+                </div>
+
+                {/* Option 2: Stay on old device */}
+                <div className="conflict-option conflict-option-keep">
+                  <div className="conflict-option-icon">🖥️</div>
+                  <div className="conflict-option-body">
+                    <h4>Stay on other device</h4>
+                    <p>Cancel this login and keep your existing session.</p>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleKeepExistingSession}
+                    disabled={loading}
+                  >
+                    Keep Existing
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload Modal */}
       {showUploadModal && (

@@ -203,6 +203,57 @@ const createToken = (userId, email, expiresIn = '7d') => {
   );
 };
 
+// Helper: short hash of a JWT used as the session fingerprint stored in DB
+const tokenFingerprint = (token) =>
+  crypto.createHash('sha256').update(token).digest('hex').slice(0, 32);
+
+/**
+ * Register the new session token in the DB (single-session enforcement).
+ * Overwrites any previous active_session_token for this user.
+ */
+const registerSession = async (userId, token, deviceHint = '') => {
+  const fp = tokenFingerprint(token);
+  try {
+    await query(
+      `UPDATE users
+         SET active_session_token  = $1,
+             active_session_at     = NOW(),
+             active_session_device = $2
+       WHERE id = $3`,
+      [fp, deviceHint || 'unknown', userId]
+    );
+  } catch (err) {
+    // Column may not exist yet (migration not run) — log and continue
+    console.warn('[SingleSession] Could not register session:', err.message);
+  }
+};
+
+/**
+ * Check whether another active session exists for this user.
+ * Returns { conflict: true, device, since } or { conflict: false }.
+ */
+const checkSessionConflict = async (userId, newToken) => {
+  try {
+    const result = await query(
+      `SELECT active_session_token, active_session_at, active_session_device
+         FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (!result.rows.length) return { conflict: false };
+    const row = result.rows[0];
+    if (!row.active_session_token) return { conflict: false };
+    const newFp = tokenFingerprint(newToken);
+    if (row.active_session_token === newFp) return { conflict: false }; // same session
+    return {
+      conflict: true,
+      device: row.active_session_device || 'another device',
+      since:  row.active_session_at,
+    };
+  } catch {
+    return { conflict: false }; // column missing — degrade gracefully
+  }
+};
+
 // Helper: Get client redirect URL
 const getClientUrl = (req) => {
   const envUrl =
@@ -404,7 +455,7 @@ router.post('/request-otp', async (req, res, next) => {
          VALUES ($1, $2, $3, $4)`,
         [normalizedEmail, otpCode, expiresAt, 'email']
       );
-    } else {
+     } else {
       // Store in memory for demo mode
       demoUsers.get(normalizedEmail).otp = {
         code: otpCode,
@@ -555,26 +606,12 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (isDemoMode) {
-      // Demo mode - check in-memory users
       const user = demoUsers.get(normalizedEmail);
-      
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
+      if (!user) return res.status(401).json({ error: 'Invalid credentials' });
       const isValid = await bcrypt.compare(password, user.password_hash);
-
-      if (!isValid) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
+      if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
       const token = createToken(user.id, user.email);
-
-      return res.json({
-        success: true,
-        user: sanitizeUser(user),
-        token
-      });
+      return res.json({ success: true, user: sanitizeUser(user), token });
     }
 
     // Database mode
@@ -582,34 +619,77 @@ router.post('/login', async (req, res, next) => {
       'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
       [normalizedEmail]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
     const user = result.rows[0];
-
     const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    if (!isValid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    await query(
-      'UPDATE users SET last_login = NOW() WHERE id = $1',
-      [user.id]
-    );
+    await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
     const token = createToken(user.id, user.email);
 
-    res.json({
-      success: true,
-      user: sanitizeUser(user),
-      token
-    });
+    // ── Single-session check ──────────────────────────────────────────────────
+    const conflict = await checkSessionConflict(user.id, token);
+    if (conflict.conflict) {
+      return res.status(409).json({
+        error:   'session_conflict',
+        message: 'You are already logged in on another device.',
+        device:  conflict.device,
+        since:   conflict.since,
+        // Return the pending token so the client can use it after user chooses
+        pendingToken: token,
+        user:    sanitizeUser(user),
+      });
+    }
+
+    await registerSession(user.id, token,
+      req.headers['user-agent']?.slice(0, 120) || 'unknown');
+
+    res.json({ success: true, user: sanitizeUser(user), token });
   } catch (error) {
     next(error);
   }
+});
+
+// ── Single-session: force-logout other device, activate this one ──────────────
+router.post('/force-logout-other', async (req, res, next) => {
+  try {
+    const { pendingToken } = req.body;
+    if (!pendingToken) return res.status(400).json({ error: 'pendingToken required' });
+
+    let decoded;
+    try {
+      decoded = jwt.verify(pendingToken, getJwtSecret());
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    if (!isDemoMode) {
+      await registerSession(decoded.id, pendingToken,
+        req.headers['user-agent']?.slice(0, 120) || 'unknown');
+    }
+
+    // Fetch user for response
+    let user;
+    if (isDemoMode) {
+      user = Array.from(demoUsers.values()).find(u => u.id === decoded.id);
+    } else {
+      const r = await query('SELECT * FROM users WHERE id = $1', [decoded.id]);
+      user = r.rows[0];
+    }
+
+    res.json({ success: true, token: pendingToken, user: sanitizeUser(user) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Single-session: stay on old device (reject new login) ────────────────────
+// Client just discards the pendingToken — no server action needed.
+// This endpoint is a no-op but provided for clarity / future audit logging.
+router.post('/keep-existing-session', async (req, res) => {
+  res.json({ success: true, message: 'Existing session kept. New login rejected.' });
 });
 
 // Get current user

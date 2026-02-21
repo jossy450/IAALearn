@@ -30,7 +30,7 @@ function InterviewSession() {
   const [isScreenShareDetected, setIsScreenShareDetected] = useState(false); // Mobile mode requirement
   const [showQRTransfer, setShowQRTransfer] = useState(false);
   const [responseTime, setResponseTime] = useState(null);
-  const [autoListen, setAutoListen] = useState(false); // default manual; user can opt-in to auto listening
+  const [autoListen, setAutoListen] = useState(true); // default ON — live auto-transcribe like a real conversation
   const [isAnswerHidden, setIsAnswerHidden] = useState(false); // default reveal; user can hide
   const [showFloatingAnswer, setShowFloatingAnswer] = useState(false); // floating answer visibility
   const [liveTranscript, setLiveTranscript] = useState(''); // real-time interim transcript shown while listening
@@ -1457,8 +1457,58 @@ function InterviewSession() {
                     setPerfectAnswer('');
                   }}
                 >
-                  Record Next Question
+                  Next Question
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Conversation History (chat-style bubbles) ── */}
+          {questionHistory.length > 0 && (
+            <div className="conversation-history">
+              <div className="conversation-history-header">
+                <span className="conversation-history-title">
+                  💬 Conversation History ({questionHistory.length} Q&amp;A{questionHistory.length !== 1 ? 's' : ''})
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
+                  onClick={() => setQuestionHistory([])}
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="conversation-bubbles">
+                {questionHistory.map((item, idx) => (
+                  <div key={idx} className="conversation-pair">
+                    {/* Interviewer bubble */}
+                    <div className="bubble bubble-interviewer">
+                      <div className="bubble-label">🎤 Interviewer</div>
+                      <p className="bubble-text">{item.question}</p>
+                      <span className="bubble-time">
+                        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    {/* AI answer bubble */}
+                    <div className="bubble bubble-ai">
+                      <div className="bubble-label">✨ AI Answer</div>
+                      <div
+                        className="bubble-text"
+                        dangerouslySetInnerHTML={{ __html: formatAnswer(item.perfectAnswer) }}
+                      />
+                      <div className="bubble-actions">
+                        <button
+                          className="bubble-copy-btn"
+                          onClick={() => navigator.clipboard.writeText(item.perfectAnswer)}
+                          title="Copy answer"
+                        >
+                          <Copy size={13} /> Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div ref={conversationEndRef} />
               </div>
             </div>
           )}

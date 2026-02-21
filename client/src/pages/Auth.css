@@ -779,13 +779,96 @@
   .modal-footer {
     flex-direction: column;
   }
-  
+
   .modal-footer button {
     flex: none;
     width: 100%;
   }
-  
+
   .modal-content {
     max-height: 95vh;
+  }
+}
+
+/* ── Session Conflict Modal ──────────────────────────────────────────────── */
+.session-conflict-modal {
+  max-width: 480px;
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+}
+
+.session-conflict-modal .modal-header h2 {
+  color: #fbbf24;
+}
+
+.session-conflict-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.conflict-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+
+.conflict-option:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.conflict-option-switch {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.conflict-option-keep {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.conflict-option-icon {
+  font-size: 1.75rem;
+  flex-shrink: 0;
+  width: 2.5rem;
+  text-align: center;
+}
+
+.conflict-option-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.conflict-option-body h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.conflict-option-body p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.4;
+}
+
+.conflict-option .btn {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.9rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .conflict-option {
+    flex-wrap: wrap;
+  }
+  .conflict-option .btn {
+    width: 100%;
+    margin-top: 0.5rem;
   }
 }
