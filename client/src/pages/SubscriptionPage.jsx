@@ -1,455 +1,724 @@
-import React, { useState, useEffect } from 'react';
-import api from '../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CreditCard, Gift } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from '@stripe/react-stripe-js';
+import api from '../services/api';
+import { Check, Gift, Shield, Zap, Star, X } from 'lucide-react';
 import './SubscriptionPage.css';
-import './SubscriptionPageModern.css';
 
-function SubscriptionPage() {
-  const navigate = useNavigate();
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [error, setError] = useState('');
-  const [subscription, setSubscription] = useState(null);
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('stripe');
-  const [paystackRef, setPaystackRef] = useState('');
-  const [paypalId, setPaypalId] = useState('');
-  const [paypalToken, setPaypalToken] = useState('');
-  const [flutterwaveTxId, setFlutterwaveTxId] = useState('');
-  const [ukBankRef, setUkBankRef] = useState('');
-  const [creditCardToken, setCreditCardToken] = useState('');
-  const [trialLoading, setTrialLoading] = useState(false);
-  const [trialMessage, setTrialMessage] = useState('');
-  const [stripeLoading, setStripeLoading] = useState(false);
-  const [stripeError, setStripeError] = useState('');
+// ── Stripe publishable key from Vite env ──────────────────────────────────────
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
-  useEffect(() => {
-    api.get('/subscriptions/plans')
-      .then(res => { setPlans(res.data); setLoading(false); })
-      .catch(() => { setLoading(false); });
+// ── Plan definitions ──────────────────────────────────────────────────────────
+const PLANS = [
+  {
+    id: 'basic',
+    name: 'Basic',
+    price: 9.99,
+    currency: '£',
+    period: '/month',
+    description: 'Perfect for individual job seekers',
+    icon: <Zap size={28} />,
+    color: '#3b82f6',
+    features: [
+      'Unlimited AI interview sessions',
+      'Priority AI responses',
+      'Advanced analytics',
+      'Email support',
+      '3 document uploads per session',
+    ],
+  },
+  {
+    id: 'pro',
+    name: 'Professional',
+    price: 19.99,
+    currency: '£',
+    period: '/month',
+    description: 'For serious job seekers',
+    icon: <Star size={28} />,
+    color: '#8b5cf6',
+    popular: true,
+    features: [
+      'Everything in Basic',
+      'Unlimited document uploads',
+      'Priority support',
+      'Custom AI instructions',
+      'Session history export',
+      'Team collaboration',
+    ],
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: 49.99,
+    currency: '£',
+    period: '/month',
+    description: 'For teams and organisations',
+    icon: <Shield size={28} />,
+    color: '#10b981',
+    features: [
+      'Everything in Professional',
+      'Team management dashboard',
+      'Custom branding',
+      'API access',
+      'Dedicated account manager',
+      'SLA guarantee',
+    ],
+  },
+];
 
-    api.get('/subscriptions/status')
-      .then(res => setSubscription(res.data))
-      .catch(() => setSubscription(null));
-  }, []);
+// ── Inner checkout form (rendered inside <Elements>) ──────────────────────────
+function CheckoutForm({ plan, clientSecret, onSuccess, onCancel }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSelectPlan = (plan) => {
-    setSelectedPlan(plan);
-    setShowPayment(false);
-    setStripeError('');
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setPaying(true);
+    setErrorMsg('');
 
-  const handleStartTrial = async () => {
-    setTrialLoading(true);
-    setTrialMessage('');
-    try {
-      const res = await api.post('/subscriptions/trial');
-      setSubscription(res.data);
-      setTrialMessage('✅ Trial started successfully! Enjoy your free access.');
-      setTimeout(() => setTrialMessage(''), 4000);
-    } catch (err) {
-      setTrialMessage('❌ Failed to start trial. You may have already used your trial.');
-    } finally {
-      setTrialLoading(false);
-    }
-  };
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        // No redirect — we handle everything in-page
+        return_url: window.location.href,
+      },
+      redirect: 'if_required',
+    });
 
-  // ── Stripe: create checkout session and redirect to Stripe-hosted page ──
-  const handleStripeCheckout = async (planId) => {
-    setStripeLoading(true);
-    setStripeError('');
-    try {
-      const res = await api.post('/subscriptions/stripe/create-checkout-session', { plan: planId });
-      if (res.data.url) {
-        window.location.href = res.data.url;
-      } else {
-        setStripeError('No checkout URL returned. Please try again.');
-        setStripeLoading(false);
-      }
-    } catch (err) {
-      setStripeError(
-        err?.response?.data?.error ||
-        err.message ||
-        'Failed to start Stripe checkout. Please try again.'
-      );
-      setStripeLoading(false);
-    }
-  };
-
-  const handleSubscribe = () => {
-    if (!selectedPlan) return;
-    if (paymentMethod === 'stripe') {
-      handleStripeCheckout(selectedPlan.id);
+    if (error) {
+      setErrorMsg(error.message || 'Payment failed. Please try again.');
+      setPaying(false);
       return;
     }
-    const body = { plan: selectedPlan.id, payment_method: paymentMethod };
-    if (paymentMethod === 'paystack') body.paystack_reference = paystackRef;
-    else if (paymentMethod === 'paypal') {
-      body.paypal_payment_id = paypalId;
-      body.paypal_access_token = paypalToken;
-    } else if (paymentMethod === 'flutterwave') body.flutterwave_tx_id = flutterwaveTxId;
-    else if (paymentMethod === 'uk_bank') body.uk_bank_ref = ukBankRef;
-    else if (paymentMethod === 'credit_card') body.credit_card_token = creditCardToken;
 
-    api.post('/subscriptions/create', body)
-      .then(res => {
-        setSubscription(res.data);
-        setShowPayment(false);
-        setError('✅ Subscription successful!');
-        setTimeout(() => setError(''), 3000);
-      })
-      .catch(() => setError('❌ Subscription failed. Please try again.'));
+    if (paymentIntent && paymentIntent.status === 'succeeded') {
+      // Tell server to activate subscription
+      try {
+        await api.post('/subscriptions/stripe/confirm-payment', {
+          paymentIntentId: paymentIntent.id,
+          plan: plan.id,
+        });
+        onSuccess(plan);
+      } catch (err) {
+        setErrorMsg('Payment succeeded but subscription activation failed. Please contact support.');
+      }
+    } else {
+      setErrorMsg('Payment was not completed. Please try again.');
+    }
+    setPaying(false);
   };
 
-  const defaultPlans = [
-    {
-      id: 'trial',
-      name: 'Free Trial',
-      description: 'Try all features for free',
-      price: 0,
-      duration: '7 days',
-      features: [
-        'Full access to all AI features',
-        'Unlimited interview sessions',
-        'Document upload support',
-        'Mobile app access',
-        'Basic analytics',
-      ],
-      popular: true,
-      trial: true,
-    },
-    {
-      id: 'basic',
-      name: 'Basic',
-      description: 'Perfect for individual users',
-      price: 9.99,
-      duration: 'month',
-      features: [
-        'All trial features',
-        'Priority AI responses',
-        'Advanced analytics',
-        'Email support',
-        '3 document uploads per session',
-      ],
-      popular: false,
-    },
-    {
-      id: 'pro',
-      name: 'Professional',
-      description: 'For serious job seekers',
-      price: 19.99,
-      duration: 'month',
-      features: [
-        'All basic features',
-        'Unlimited document uploads',
-        'Priority support',
-        'Custom AI instructions',
-        'Session history export',
-        'Team collaboration',
-      ],
-      popular: true,
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      description: 'For teams and organizations',
-      price: 49.99,
-      duration: 'month',
-      features: [
-        'All professional features',
-        'Team management dashboard',
-        'Custom branding',
-        'API access',
-        'Dedicated account manager',
-        'SLA guarantee',
-      ],
-      popular: false,
-    },
-  ];
+  return (
+    <form onSubmit={handleSubmit} style={{ width: '100%' }}>
+      {/* Plan summary */}
+      <div style={formStyles.planSummary}>
+        <span style={{ color: plan.color, fontWeight: 700, fontSize: '1.1rem' }}>{plan.name}</span>
+        <span style={{ color: '#fff', fontWeight: 800, fontSize: '1.25rem' }}>
+          {plan.currency}{plan.price}<span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'rgba(255,255,255,0.6)' }}>{plan.period}</span>
+        </span>
+      </div>
 
-  const displayPlans = plans.length > 0 ? plans : defaultPlans;
+      {/* Stripe Payment Element */}
+      <div style={formStyles.elementWrap}>
+        <PaymentElement
+          options={{
+            layout: 'tabs',
+            fields: { billingDetails: { email: 'auto' } },
+          }}
+        />
+      </div>
+
+      {errorMsg && (
+        <div style={formStyles.error}>{errorMsg}</div>
+      )}
+
+      <button
+        type="submit"
+        disabled={!stripe || paying}
+        style={{
+          ...formStyles.payBtn,
+          background: paying ? 'rgba(99,91,255,0.5)' : `linear-gradient(135deg, #635bff 0%, #7c3aed 100%)`,
+          cursor: paying ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {paying ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+            <span style={formStyles.spinner} /> Processing…
+          </span>
+        ) : (
+          `Pay ${plan.currency}${plan.price} now`
+        )}
+      </button>
+
+      <button type="button" onClick={onCancel} style={formStyles.cancelBtn}>
+        Cancel
+      </button>
+
+      <p style={formStyles.secureNote}>
+        🔒 Secured by Stripe · Your card details are never stored on our servers
+      </p>
+    </form>
+  );
+}
+
+// ── Payment Modal ─────────────────────────────────────────────────────────────
+function PaymentModal({ plan, onClose, onSuccess }) {
+  const [clientSecret, setClientSecret] = useState('');
+  const [loadingIntent, setLoadingIntent] = useState(true);
+  const [intentError, setIntentError] = useState('');
+
+  useEffect(() => {
+    setLoadingIntent(true);
+    setIntentError('');
+    api.post('/subscriptions/stripe/create-payment-intent', { plan: plan.id })
+      .then(res => {
+        setClientSecret(res.data.clientSecret);
+        setLoadingIntent(false);
+      })
+      .catch(err => {
+        setIntentError(err?.response?.data?.error || err.message || 'Failed to initialise payment.');
+        setLoadingIntent(false);
+      });
+  }, [plan.id]);
+
+  const appearance = {
+    theme: 'night',
+    variables: {
+      colorPrimary: '#635bff',
+      colorBackground: '#0f172a',
+      colorText: '#f1f5f9',
+      colorDanger: '#ef4444',
+      fontFamily: 'system-ui, sans-serif',
+      borderRadius: '8px',
+    },
+  };
 
   return (
-    <div className="subscription-page modern-ui">
-      <div className="subscription-header">
-        <h1>Subscription &amp; Trial</h1>
-        <p className="subtitle">Choose the perfect plan for your interview preparation journey</p>
-      </div>
-
-      {/* Trial Section */}
-      {(!subscription || subscription.status === 'inactive' || subscription.status === 'trial') && (
-        <div className="trial-section card">
-          <div className="trial-header">
-            <Gift size={32} className="trial-icon" />
-            <h2>Start Your Free Trial</h2>
-          </div>
-          <p className="trial-description">
-            Get full access to all premium features for 7 days. No credit card required.
-          </p>
-          <div className="trial-features">
-            {['Unlimited AI-powered interview sessions', 'Document analysis (CV, job descriptions)', 'Mobile app access', 'Real-time transcription'].map(f => (
-              <div className="feature-item" key={f}>
-                <Check size={18} />
-                <span>{f}</span>
-              </div>
-            ))}
-          </div>
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={handleStartTrial}
-            disabled={trialLoading || (subscription && subscription.status === 'trial')}
-          >
-            {trialLoading ? 'Starting…' : subscription?.status === 'trial' ? 'Trial Active' : 'Start 7-Day Free Trial'}
+    <div style={modalStyles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={modalStyles.modal}>
+        {/* Header */}
+        <div style={modalStyles.header}>
+          <h2 style={modalStyles.title}>Complete your subscription</h2>
+          <button onClick={onClose} style={modalStyles.closeBtn} aria-label="Close">
+            <X size={20} />
           </button>
-          {trialMessage && (
-            <div className={`alert ${trialMessage.startsWith('✅') ? 'alert-success' : 'alert-error'}`} style={{ marginTop: '1rem' }}>
-              {trialMessage}
-            </div>
-          )}
         </div>
-      )}
 
-      {/* Current Subscription Status */}
-      {subscription && subscription.status !== 'inactive' && (
-        <div className="current-subscription card">
-          <h3>Your Current Subscription</h3>
-          <div className="subscription-details">
-            <div className="detail-item">
-              <strong>Status:</strong>
-              <span className={`status-badge ${subscription.status}`}>
-                {subscription.status === 'trial' ? 'Free Trial' : subscription.status}
-              </span>
-            </div>
-            <div className="detail-item"><strong>Plan:</strong> {subscription.plan || 'Free Trial'}</div>
-            <div className="detail-item">
-              <strong>Ends:</strong> {subscription.end_date ? new Date(subscription.end_date).toLocaleDateString() : 'N/A'}
-            </div>
-            {subscription.status === 'trial' && (
-              <div className="detail-item"><strong>Days Remaining:</strong> {subscription.days_remaining || '7'}</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Stripe error banner (shown when checkout fails from plan card) */}
-      {stripeError && (
-        <div className="alert alert-error" style={{ margin: '0 0 1rem' }}>{stripeError}</div>
-      )}
-
-      {/* Subscription Plans */}
-      <div className="plans-section">
-        <h2>Choose Your Plan</h2>
-        <p className="section-subtitle">Upgrade for more features and better experience</p>
-
-        {loading ? (
-          <div className="loading">Loading plans…</div>
-        ) : (
-          <div className="plans-list">
-            {displayPlans.map(plan => (
-              <div
-                key={plan.id}
-                className={`plan-card ${selectedPlan?.id === plan.id ? 'selected' : ''} ${plan.popular ? 'popular' : ''}`}
-              >
-                {plan.popular && <div className="popular-badge">Most Popular</div>}
-                {plan.trial && <div className="trial-badge">Free</div>}
-
-                <div className="plan-header">
-                  <h3>{plan.name}</h3>
-                  <div className="plan-price">
-                    <span className="price">${plan.price}</span>
-                    <span className="duration">/{plan.duration}</span>
-                  </div>
-                  <p className="plan-description">{plan.description}</p>
-                </div>
-
-                <ul className="plan-features">
-                  {plan.features?.map((feature, idx) => (
-                    <li key={idx}><Check size={16} />{feature}</li>
-                  ))}
-                </ul>
-
-                <div className="plan-actions">
-                  {plan.trial ? (
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleStartTrial}
-                      disabled={trialLoading || subscription?.status === 'trial'}
-                    >
-                      {subscription?.status === 'trial' ? 'Trial Active' : 'Start Trial'}
-                    </button>
-                  ) : (
-                    <>
-                      {/* Primary: direct Stripe checkout */}
-                      <button
-                        onClick={() => handleStripeCheckout(plan.id)}
-                        disabled={stripeLoading}
-                        style={{
-                          background: 'linear-gradient(135deg, #635bff 0%, #7c3aed 100%)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          padding: '0.65rem 1.2rem',
-                          fontWeight: 700,
-                          fontSize: '0.95rem',
-                          cursor: stripeLoading ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          width: '100%',
-                          justifyContent: 'center',
-                          boxShadow: '0 4px 15px rgba(99,91,255,0.35)',
-                          opacity: stripeLoading ? 0.7 : 1,
-                          marginBottom: '0.5rem',
-                        }}
-                      >
-                        <CreditCard size={16} />
-                        {stripeLoading ? 'Redirecting…' : '🔒 Pay with Stripe'}
-                      </button>
-                      {/* Secondary: other payment methods */}
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => { handleSelectPlan(plan); setShowPayment(true); }}
-                        style={{ width: '100%' }}
-                      >
-                        Other payment methods
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+        {loadingIntent && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
+            <div style={{ ...formStyles.spinner, margin: '0 auto 1rem', width: 32, height: 32, borderWidth: 3 }} />
+            Preparing secure payment…
           </div>
         )}
-      </div>
 
-      {/* Other Payment Methods Section */}
-      {showPayment && selectedPlan && !selectedPlan.trial && (
-        <div className="payment-section card">
-          <h3>Payment Details — {selectedPlan.name}</h3>
-          <p>
-            Complete your subscription at <strong>${selectedPlan.price}/{selectedPlan.duration}</strong>
-          </p>
-
-          <div className="payment-method">
-            <label>Payment Method:</label>
-            <select value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value); setStripeError(''); }}>
-              <option value="stripe">Stripe (Global) — Recommended</option>
-              <option value="paystack">Paystack (Africa)</option>
-              <option value="paypal">PayPal (Global)</option>
-              <option value="flutterwave">Flutterwave (Africa)</option>
-              <option value="uk_bank">UK Bank Transfer</option>
-              <option value="credit_card">Credit Card Token</option>
-            </select>
+        {intentError && (
+          <div style={{ padding: '1.5rem', color: '#ef4444', textAlign: 'center' }}>
+            {intentError}
+            <br />
+            <button onClick={onClose} style={{ ...formStyles.cancelBtn, marginTop: '1rem' }}>Go back</button>
           </div>
+        )}
 
-          <div className="payment-details">
-            {paymentMethod === 'stripe' && (
-              <div className="payment-field">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem', background: 'rgba(99,102,241,0.1)', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.3)' }}>
-                  <CreditCard size={24} style={{ color: '#818cf8', flexShrink: 0 }} />
-                  <div>
-                    <strong style={{ color: '#c7d2fe', display: 'block', marginBottom: '0.25rem' }}>Secure Stripe Checkout</strong>
-                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.875rem' }}>
-                      You'll be redirected to Stripe's secure payment page.
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {paymentMethod === 'paystack' && (
-              <div className="payment-field">
-                <label>Paystack Reference:</label>
-                <input type="text" value={paystackRef} onChange={e => setPaystackRef(e.target.value)} placeholder="Enter Paystack transaction reference" />
-              </div>
-            )}
-            {paymentMethod === 'paypal' && (
-              <>
-                <div className="payment-field">
-                  <label>PayPal Payment ID:</label>
-                  <input type="text" value={paypalId} onChange={e => setPaypalId(e.target.value)} placeholder="Enter PayPal payment ID" />
-                </div>
-                <div className="payment-field">
-                  <label>PayPal Access Token:</label>
-                  <input type="text" value={paypalToken} onChange={e => setPaypalToken(e.target.value)} placeholder="Enter PayPal access token" />
-                </div>
-              </>
-            )}
-            {paymentMethod === 'flutterwave' && (
-              <div className="payment-field">
-                <label>Flutterwave Transaction ID:</label>
-                <input type="text" value={flutterwaveTxId} onChange={e => setFlutterwaveTxId(e.target.value)} placeholder="Enter Flutterwave transaction ID" />
-              </div>
-            )}
-            {paymentMethod === 'uk_bank' && (
-              <div className="payment-field">
-                <label>UK Bank Reference:</label>
-                <input type="text" value={ukBankRef} onChange={e => setUkBankRef(e.target.value)} placeholder="Enter UK bank transfer reference" />
-              </div>
-            )}
-            {paymentMethod === 'credit_card' && (
-              <div className="payment-field">
-                <label>Credit Card Token:</label>
-                <input type="text" value={creditCardToken} onChange={e => setCreditCardToken(e.target.value)} placeholder="Enter credit card token" />
-              </div>
-            )}
-          </div>
-
-          {stripeError && (
-            <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{stripeError}</div>
-          )}
-
-          <div className="payment-actions">
-            <button
-              className="btn btn-primary"
-              onClick={handleSubscribe}
-              disabled={paymentMethod === 'stripe' && stripeLoading}
-              style={paymentMethod === 'stripe' ? {
-                background: 'linear-gradient(135deg, #635bff 0%, #7c3aed 100%)',
-                boxShadow: '0 4px 15px rgba(99,91,255,0.35)',
-              } : {}}
-            >
-              {paymentMethod === 'stripe'
-                ? (stripeLoading ? 'Redirecting to Stripe…' : '🔒 Pay with Stripe')
-                : 'Complete Subscription'}
-            </button>
-            <button className="btn btn-secondary" onClick={() => setShowPayment(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* General error/success */}
-      {error && (
-        <div className={`alert ${error.startsWith('✅') ? 'alert-success' : 'alert-error'}`}>
-          {error}
-        </div>
-      )}
-
-      {/* FAQ */}
-      <div className="faq-section card">
-        <h3>Frequently Asked Questions</h3>
-        <div className="faq-item">
-          <h4>Can I cancel my subscription anytime?</h4>
-          <p>Yes, you can cancel at any time. Your access continues until the end of your billing period.</p>
-        </div>
-        <div className="faq-item">
-          <h4>What happens after my free trial ends?</h4>
-          <p>After 7 days, choose a paid plan to continue using premium features.</p>
-        </div>
-        <div className="faq-item">
-          <h4>Do you offer refunds?</h4>
-          <p>We offer a 14-day money-back guarantee for all paid subscriptions.</p>
-        </div>
-        <div className="faq-item">
-          <h4>Can I switch plans?</h4>
-          <p>Yes, upgrade or downgrade at any time. Changes take effect at your next billing cycle.</p>
-        </div>
+        {!loadingIntent && !intentError && clientSecret && (
+          <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
+            <CheckoutForm
+              plan={plan}
+              clientSecret={clientSecret}
+              onSuccess={onSuccess}
+              onCancel={onClose}
+            />
+          </Elements>
+        )}
       </div>
     </div>
   );
 }
 
-export default SubscriptionPage;
+// ── Success Screen ────────────────────────────────────────────────────────────
+function SuccessScreen({ plan, onContinue }) {
+  return (
+    <div style={successStyles.wrap}>
+      <div style={successStyles.card}>
+        <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🎉</div>
+        <h2 style={successStyles.title}>Payment Successful!</h2>
+        <p style={successStyles.sub}>
+          Your <strong style={{ color: plan.color }}>{plan.name}</strong> subscription is now active.
+          You have full access to all features.
+        </p>
+        <button onClick={onContinue} style={successStyles.btn}>
+          Start Using IAALearn →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main SubscriptionPage ─────────────────────────────────────────────────────
+export default function SubscriptionPage() {
+  const navigate = useNavigate();
+  const [subscription, setSubscription] = useState(null);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [successPlan, setSuccessPlan] = useState(null);
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialMsg, setTrialMsg] = useState('');
+
+  useEffect(() => {
+    api.get('/subscriptions/status')
+      .then(res => setSubscription(res.data))
+      .catch(() => setSubscription(null));
+  }, []);
+
+  const handleStartTrial = async () => {
+    setTrialLoading(true);
+    setTrialMsg('');
+    try {
+      const res = await api.post('/subscriptions/trial');
+      setSubscription(res.data);
+      setTrialMsg('success');
+    } catch {
+      setTrialMsg('error');
+    } finally {
+      setTrialLoading(false);
+    }
+  };
+
+  const handlePaymentSuccess = useCallback((plan) => {
+    setSelectedPlan(null);
+    setSuccessPlan(plan);
+    // Refresh subscription status
+    api.get('/subscriptions/status').then(res => setSubscription(res.data)).catch(() => {});
+  }, []);
+
+  if (successPlan) {
+    return <SuccessScreen plan={successPlan} onContinue={() => navigate('/')} />;
+  }
+
+  const isActive = subscription?.status === 'active';
+  const isTrial  = subscription?.status === 'trial';
+
+  return (
+    <div style={pageStyles.page}>
+      <div style={pageStyles.header}>
+        <h1 style={pageStyles.h1}>Choose Your Plan</h1>
+        <p style={pageStyles.sub}>Unlock the full power of AI-assisted interview preparation</p>
+      </div>
+
+      {/* Active subscription banner */}
+      {isActive && (
+        <div style={pageStyles.activeBanner}>
+          ✅ You have an active <strong>{subscription.plan}</strong> subscription
+          {subscription.end_date && ` · renews ${new Date(subscription.end_date).toLocaleDateString()}`}
+        </div>
+      )}
+
+      {/* Free Trial card */}
+      {!isActive && (
+        <div style={pageStyles.trialCard}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            <Gift size={32} style={{ color: '#f59e0b' }} />
+            <div>
+              <h3 style={{ margin: 0, color: '#fff', fontWeight: 800 }}>7-Day Free Trial</h3>
+              <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>
+                Full access · No credit card required
+              </p>
+            </div>
+          </div>
+          {isTrial ? (
+            <div style={pageStyles.trialActive}>
+              ✅ Trial active · {subscription?.days_remaining || '7'} days remaining
+            </div>
+          ) : (
+            <button
+              onClick={handleStartTrial}
+              disabled={trialLoading}
+              style={pageStyles.trialBtn}
+            >
+              {trialLoading ? 'Starting…' : 'Start Free Trial'}
+            </button>
+          )}
+          {trialMsg === 'success' && <p style={{ color: '#10b981', marginTop: '0.75rem', fontWeight: 600 }}>Trial started! Enjoy full access for 7 days.</p>}
+          {trialMsg === 'error'   && <p style={{ color: '#ef4444', marginTop: '0.75rem' }}>Could not start trial. You may have already used it.</p>}
+        </div>
+      )}
+
+      {/* Plan cards */}
+      <div style={pageStyles.grid}>
+        {PLANS.map(plan => (
+          <div
+            key={plan.id}
+            style={{
+              ...pageStyles.card,
+              borderColor: plan.popular ? plan.color : 'rgba(255,255,255,0.1)',
+              boxShadow: plan.popular ? `0 0 0 2px ${plan.color}40, 0 20px 60px rgba(0,0,0,0.4)` : '0 8px 32px rgba(0,0,0,0.3)',
+            }}
+          >
+            {plan.popular && (
+              <div style={{ ...pageStyles.badge, background: plan.color }}>Most Popular</div>
+            )}
+
+            <div style={{ color: plan.color, marginBottom: '0.75rem' }}>{plan.icon}</div>
+            <h3 style={pageStyles.planName}>{plan.name}</h3>
+            <p style={pageStyles.planDesc}>{plan.description}</p>
+
+            <div style={pageStyles.priceRow}>
+              <span style={pageStyles.currency}>{plan.currency}</span>
+              <span style={pageStyles.price}>{plan.price}</span>
+              <span style={pageStyles.period}>{plan.period}</span>
+            </div>
+
+            <ul style={pageStyles.featureList}>
+              {plan.features.map((f, i) => (
+                <li key={i} style={pageStyles.featureItem}>
+                  <Check size={15} style={{ color: plan.color, flexShrink: 0 }} />
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+
+            <button
+              onClick={() => setSelectedPlan(plan)}
+              style={{
+                ...pageStyles.subscribeBtn,
+                background: `linear-gradient(135deg, ${plan.color} 0%, ${plan.color}cc 100%)`,
+                opacity: isActive && subscription?.plan === plan.id ? 0.5 : 1,
+                cursor: isActive && subscription?.plan === plan.id ? 'default' : 'pointer',
+              }}
+              disabled={isActive && subscription?.plan === plan.id}
+            >
+              {isActive && subscription?.plan === plan.id ? '✓ Current Plan' : `Subscribe · ${plan.currency}${plan.price}/mo`}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <p style={pageStyles.footer}>
+        🔒 Payments secured by Stripe · Cancel anytime · 14-day money-back guarantee
+      </p>
+
+      {/* Payment Modal */}
+      {selectedPlan && (
+        <PaymentModal
+          plan={selectedPlan}
+          onClose={() => setSelectedPlan(null)}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const pageStyles = {
+  page: {
+    maxWidth: 1100,
+    margin: '0 auto',
+    padding: '2rem 1.5rem 4rem',
+    color: '#fff',
+  },
+  header: {
+    textAlign: 'center',
+    marginBottom: '2.5rem',
+  },
+  h1: {
+    fontSize: '2.25rem',
+    fontWeight: 900,
+    margin: '0 0 0.5rem',
+    background: 'linear-gradient(135deg, #fff 0%, #a5b4fc 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+  },
+  sub: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: '1.05rem',
+    margin: 0,
+  },
+  activeBanner: {
+    background: 'rgba(16,185,129,0.12)',
+    border: '1px solid rgba(16,185,129,0.35)',
+    borderRadius: 10,
+    padding: '0.85rem 1.25rem',
+    color: '#6ee7b7',
+    marginBottom: '1.5rem',
+    textAlign: 'center',
+    fontWeight: 600,
+  },
+  trialCard: {
+    background: 'rgba(245,158,11,0.08)',
+    border: '1.5px solid rgba(245,158,11,0.3)',
+    borderRadius: 14,
+    padding: '1.5rem',
+    marginBottom: '2rem',
+  },
+  trialActive: {
+    color: '#6ee7b7',
+    fontWeight: 700,
+    fontSize: '0.95rem',
+  },
+  trialBtn: {
+    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    padding: '0.7rem 1.5rem',
+    fontWeight: 700,
+    fontSize: '1rem',
+    cursor: 'pointer',
+    boxShadow: '0 4px 15px rgba(245,158,11,0.3)',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '1.5rem',
+    marginBottom: '2rem',
+  },
+  card: {
+    background: 'rgba(255,255,255,0.04)',
+    border: '1.5px solid',
+    borderRadius: 16,
+    padding: '1.75rem',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'transform 0.2s',
+  },
+  badge: {
+    position: 'absolute',
+    top: -12,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    color: '#fff',
+    fontSize: '0.75rem',
+    fontWeight: 800,
+    padding: '0.3rem 1rem',
+    borderRadius: 20,
+    whiteSpace: 'nowrap',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+  },
+  planName: {
+    fontSize: '1.35rem',
+    fontWeight: 800,
+    margin: '0 0 0.25rem',
+    color: '#fff',
+  },
+  planDesc: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '0.875rem',
+    margin: '0 0 1.25rem',
+  },
+  priceRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '0.2rem',
+    marginBottom: '1.25rem',
+  },
+  currency: {
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  price: {
+    fontSize: '2.5rem',
+    fontWeight: 900,
+    color: '#fff',
+    lineHeight: 1,
+  },
+  period: {
+    fontSize: '0.875rem',
+    color: 'rgba(255,255,255,0.45)',
+  },
+  featureList: {
+    listStyle: 'none',
+    padding: 0,
+    margin: '0 0 1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.6rem',
+    flex: 1,
+  },
+  featureItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '0.5rem',
+    fontSize: '0.9rem',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  subscribeBtn: {
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '0.85rem',
+    fontWeight: 800,
+    fontSize: '1rem',
+    width: '100%',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+    transition: 'transform 0.15s, box-shadow 0.15s',
+  },
+  footer: {
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: '0.85rem',
+    marginTop: '1rem',
+  },
+};
+
+const modalStyles = {
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.75)',
+    backdropFilter: 'blur(6px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '1rem',
+  },
+  modal: {
+    background: 'linear-gradient(145deg, #0f172a, #1e1b4b)',
+    border: '1.5px solid rgba(99,91,255,0.35)',
+    borderRadius: 20,
+    padding: '2rem',
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    boxShadow: '0 25px 80px rgba(0,0,0,0.6)',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '1.5rem',
+  },
+  title: {
+    margin: 0,
+    fontSize: '1.25rem',
+    fontWeight: 800,
+    color: '#fff',
+  },
+  closeBtn: {
+    background: 'rgba(255,255,255,0.08)',
+    border: 'none',
+    borderRadius: 8,
+    color: '#fff',
+    cursor: 'pointer',
+    padding: '0.4rem',
+    display: 'flex',
+    alignItems: 'center',
+  },
+};
+
+const formStyles = {
+  planSummary: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    padding: '0.85rem 1rem',
+    marginBottom: '1.25rem',
+  },
+  elementWrap: {
+    marginBottom: '1.25rem',
+  },
+  error: {
+    background: 'rgba(239,68,68,0.12)',
+    border: '1px solid rgba(239,68,68,0.35)',
+    borderRadius: 8,
+    color: '#fca5a5',
+    padding: '0.75rem 1rem',
+    fontSize: '0.9rem',
+    marginBottom: '1rem',
+  },
+  payBtn: {
+    width: '100%',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '0.9rem',
+    fontWeight: 800,
+    fontSize: '1.05rem',
+    marginBottom: '0.75rem',
+    boxShadow: '0 4px 20px rgba(99,91,255,0.4)',
+    transition: 'opacity 0.2s',
+  },
+  cancelBtn: {
+    width: '100%',
+    background: 'rgba(255,255,255,0.06)',
+    color: 'rgba(255,255,255,0.6)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    padding: '0.75rem',
+    fontWeight: 600,
+    fontSize: '0.95rem',
+    cursor: 'pointer',
+    marginBottom: '1rem',
+  },
+  secureNote: {
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: '0.78rem',
+    margin: 0,
+  },
+  spinner: {
+    display: 'inline-block',
+    width: 18,
+    height: 18,
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderTopColor: '#fff',
+    borderRadius: '50%',
+    animation: 'spin 0.7s linear infinite',
+  },
+};
+
+const successStyles = {
+  wrap: {
+    minHeight: '60vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '2rem',
+  },
+  card: {
+    background: 'rgba(16,185,129,0.08)',
+    border: '1.5px solid rgba(16,185,129,0.3)',
+    borderRadius: 20,
+    padding: '3rem 2.5rem',
+    maxWidth: 440,
+    width: '100%',
+    textAlign: 'center',
+  },
+  title: {
+    fontSize: '1.75rem',
+    fontWeight: 900,
+    color: '#fff',
+    margin: '0 0 0.75rem',
+  },
+  sub: {
+    color: 'rgba(255,255,255,0.65)',
+    lineHeight: 1.6,
+    marginBottom: '2rem',
+  },
+  btn: {
+    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '0.9rem 2rem',
+    fontWeight: 800,
+    fontSize: '1.05rem',
+    cursor: 'pointer',
+    boxShadow: '0 4px 20px rgba(16,185,129,0.35)',
+  },
+};

@@ -110,7 +110,69 @@ router.get('/history', authenticate, async (req, res) => {
 	}
 });
 
-// ─── Stripe Checkout ──────────────────────────────────────────────────────────
+// ─── Stripe PaymentIntent (embedded modal flow) ───────────────────────────────
+
+/**
+ * POST /api/subscriptions/stripe/create-payment-intent
+ * Creates a PaymentIntent and returns the clientSecret for the frontend
+ * Stripe Elements to collect card details directly in the page.
+ */
+router.post('/stripe/create-payment-intent', authenticate, async (req, res) => {
+  const { plan } = req.body;
+  const PLAN_AMOUNTS = { basic: 999, pro: 1999, enterprise: 4999 }; // pence (GBP)
+  const PLAN_LABELS  = { basic: 'Basic Plan', pro: 'Professional Plan', enterprise: 'Enterprise Plan' };
+
+  if (!PLAN_AMOUNTS[plan]) {
+    return res.status(400).json({ error: 'Invalid plan. Must be basic, pro, or enterprise.' });
+  }
+
+  try {
+    const { createPaymentIntent } = require('../services/stripe');
+    const intent = await createPaymentIntent({
+      amount:   PLAN_AMOUNTS[plan],
+      currency: 'gbp',
+      metadata: { userId: String(req.user.id), plan },
+      description: PLAN_LABELS[plan],
+    });
+    res.json({ clientSecret: intent.client_secret, amount: PLAN_AMOUNTS[plan], plan });
+  } catch (err) {
+    console.error('PaymentIntent error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to create payment intent.' });
+  }
+});
+
+/**
+ * POST /api/subscriptions/stripe/confirm-payment
+ * Called after frontend confirms payment — activates subscription in DB.
+ */
+router.post('/stripe/confirm-payment', authenticate, async (req, res) => {
+  const { paymentIntentId, plan } = req.body;
+  if (!paymentIntentId || !plan) {
+    return res.status(400).json({ error: 'paymentIntentId and plan are required.' });
+  }
+  try {
+    const { retrievePaymentIntent } = require('../services/stripe');
+    const intent = await retrievePaymentIntent(paymentIntentId);
+    if (intent.status !== 'succeeded') {
+      return res.status(400).json({ error: `Payment not succeeded. Status: ${intent.status}` });
+    }
+    if (process.env.DEMO_MODE !== 'true') {
+      const now = new Date();
+      const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      await db.query(
+        `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
+         VALUES ($1, $2, 'active', $3, $4, 'stripe', false)`,
+        [req.user.id, plan, now, endDate]
+      ).catch(e => console.warn('confirm-payment insert warning:', e.message));
+    }
+    res.json({ success: true, plan, message: 'Subscription activated!' });
+  } catch (err) {
+    console.error('confirm-payment error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to confirm payment.' });
+  }
+});
+
+// ─── Stripe Checkout (redirect flow — kept as fallback) ───────────────────────
 
 /**
  * POST /api/subscriptions/stripe/create-checkout-session

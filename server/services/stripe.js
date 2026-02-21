@@ -99,6 +99,28 @@ function constructWebhookEvent(rawBody, signature) {
   return stripe.webhooks.constructEvent(rawBody, signature, secret);
 }
 
+/**
+ * Create a PaymentIntent for embedded Stripe Elements (modal flow).
+ */
+async function createPaymentIntent({ amount, currency = 'gbp', metadata = {}, description = '' }) {
+  const stripe = getStripe();
+  return stripe.paymentIntents.create({
+    amount,
+    currency,
+    metadata,
+    description,
+    automatic_payment_methods: { enabled: true },
+  });
+}
+
+/**
+ * Retrieve a PaymentIntent by ID to verify its status.
+ */
+async function retrievePaymentIntent(paymentIntentId) {
+  const stripe = getStripe();
+  return stripe.paymentIntents.retrieve(paymentIntentId);
+}
+
 // Legacy helper kept for backward compatibility
 async function verifyStripePayment(sessionId) {
   const session = await retrieveCheckoutSession(sessionId);
@@ -109,5 +131,7 @@ module.exports = {
   createCheckoutSession,
   retrieveCheckoutSession,
   constructWebhookEvent,
+  createPaymentIntent,
+  retrievePaymentIntent,
   verifyStripePayment,
 };
