@@ -128,15 +128,28 @@ function App() {
         <Route path="/mobile-transfer" element={<MobileScanner />} />
         <Route path="/mobile-session/:sessionId" element={<MobileSession />} />
         <Route path="/mobile/:sessionId" element={<MobileInterviewSession />} />
-        <Route path="/admin" element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />
-        <Route path="/admin/users" element={
-          (user?.role === 'admin' || 
-           user?.id === 1 || 
+        <Route path="/admin" element={
+          (user?.role === 'admin' ||
+           user?.id === 1 ||
            user?.email?.toLowerCase().includes('owner') ||
            user?.email?.toLowerCase().includes('developer') ||
            user?.role === 'owner' ||
-           user?.email === 'admin@admin.com') ? 
-          <UserManagement /> : <Navigate to="/" />} />
+           user?.email === 'admin@admin.com' ||
+           user?.email === 'jossy450@gmail.com' ||
+           user?.email === 'mightyjosing@gmail.com') ?
+          <AdminDashboard /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/users" element={
+          (user?.role === 'admin' ||
+           user?.id === 1 ||
+           user?.email?.toLowerCase().includes('owner') ||
+           user?.email?.toLowerCase().includes('developer') ||
+           user?.role === 'owner' ||
+           user?.email === 'admin@admin.com' ||
+           user?.email === 'jossy450@gmail.com' ||
+           user?.email === 'mightyjosing@gmail.com') ?
+          <UserManagement /> : <Navigate to="/" />
+        } />
         
         {/* Stripe returns here after checkout — needs auth but no Layout chrome */}
         <Route path="/checkout/return" element={token ? <CheckoutReturn /> : <Navigate to="/login" />} />

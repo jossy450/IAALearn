@@ -122,14 +122,14 @@ function Layout() {
   const navItems = [
     { path: '/',            icon: LayoutDashboard, label: 'Dashboard',          requiredPlan: null },
     { path: '/subscription',icon: Monitor,         label: 'Subscription & Trial',requiredPlan: null },
-    { path: '/analytics',   icon: BarChart3,       label: 'Analytics',          requiredPlan: 'pro'   },
-    { path: '/stealth',     icon: Shield,          label: 'Stealth',            requiredPlan: 'basic' },
-    { path: '/mobile',      icon: Smartphone,      label: 'Mobile',             requiredPlan: 'basic' },
+    { path: '/analytics',   icon: BarChart3,       label: 'Analytics',          requiredPlan: null },
+    { path: '/stealth',     icon: Shield,          label: 'Stealth',            requiredPlan: null },
+    { path: '/mobile',      icon: Smartphone,      label: 'Mobile',             requiredPlan: null },
     { path: '/faq',         icon: HelpCircle,      label: 'FAQ',                requiredPlan: null },
     { path: '/feedback',    icon: MessageSquare,   label: 'Feedback',           requiredPlan: null },
     { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
-    // Add user management for owners
-    ...(isOwner() ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
+    // Always show user management for power users
+    ...((isOwner() || user?.role === 'admin') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
   ];
 
   const mobileActions = [
