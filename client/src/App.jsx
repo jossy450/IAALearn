@@ -26,6 +26,8 @@ import MobileSession from './pages/MobileSession';
 import StealthManager from './components/StealthManager';
 import SubscriptionPage from './pages/SubscriptionPage';
 import CheckoutReturn from './pages/CheckoutReturn';
+import FAQ from './pages/FAQ';
+import Feedback from './pages/Feedback';
 
 // Wrapper component to check auth status
 function ProtectedRoute({ children }) {
@@ -155,6 +157,8 @@ function App() {
             </PlanRoute>
           } />
           <Route path="subscription" element={<SubscriptionPage />} />
+          <Route path="faq" element={<FAQ />} />
+          <Route path="feedback" element={<Feedback />} />
         </Route>
       </Routes>
     </Router>

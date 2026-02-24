@@ -16,6 +16,7 @@ const aiProviderRoutes = require('./aiProvider');
 const pushRoutes = require('./push');
 const subscriptionsRoutes = require('./subscriptions');
 const diagnosticsRoutes = require('./diagnostics');
+const feedbackRoutes = require('./feedback');
 
 const router = express.Router();
 
@@ -38,6 +39,7 @@ router.use('/ai-provider', aiProviderRoutes); // AI provider management and swit
 router.use('/push', pushRoutes); // Push notifications
 router.use('/subscriptions', subscriptionsRoutes); // Subscription management endpoints
 router.use('/diagnostics', diagnosticsRoutes);
+router.use('/feedback', feedbackRoutes); // Feedback submission and management
 
 // API info endpoint
 router.get('/', (req, res) => {

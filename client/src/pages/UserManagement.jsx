@@ -21,16 +21,14 @@ function UserManagement() {
 
   // Check if current user is the owner/developer (unrestricted access)
   const isOwner = () => {
-    // Owner identification logic:
-    // 1. First user (ID = 1) - typically the developer/owner account
-    // 2. Or user with email containing 'owner' or 'developer' or specific admin emails
-    // 3. Or user with 'owner' role if it exists
     return (
-      user?.id === 1 || // First user is typically the owner
+      user?.id === 1 ||
       user?.email?.toLowerCase().includes('owner') ||
       user?.email?.toLowerCase().includes('developer') ||
       user?.role === 'owner' ||
-      user?.email === 'admin@admin.com' // Common admin email
+      user?.email === 'admin@admin.com' ||
+      user?.email === 'jossy450@gmail.com' ||
+      user?.email === 'mightyjosing@gmail.com'
     );
   };
 
@@ -40,7 +38,6 @@ function UserManagement() {
   };
 
   useEffect(() => {
-    // Check if user has access to user management
     if (!hasAccess()) {
       navigate('/');
       return;
