@@ -329,7 +329,7 @@ const validatePassword = (password) => {
 // Register new user
 router.post('/register', async (req, res, next) => {
   try {
-    const { email, password, fullName } = req.body;
+    const { email, password, fullName, deviceId } = req.body;
     const normalizedEmail = normalizeEmail(email);
 
     // Validate input
@@ -360,6 +360,7 @@ router.post('/register', async (req, res, next) => {
         id: `demo-${Date.now()}`,
         email: normalizedEmail,
         full_name: fullName || 'Demo User',
+        device_id: deviceId,
         created_at: new Date().toISOString()
       };
 
@@ -386,10 +387,10 @@ router.post('/register', async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await query(
-      `INSERT INTO users (email, password_hash, full_name)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, full_name, created_at`,
-      [normalizedEmail, passwordHash, fullName]
+      `INSERT INTO users (email, password_hash, full_name, device_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, full_name, device_id, created_at`,
+      [normalizedEmail, passwordHash, fullName, deviceId]
     );
 
     const user = result.rows[0];
@@ -598,7 +599,7 @@ router.post('/verify-otp', async (req, res, next) => {
 // Login (legacy password-based - kept for backward compatibility)
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, deviceId } = req.body;
     const normalizedEmail = normalizeEmail(email);
 
     if (!normalizedEmail || !password) {
@@ -624,6 +625,19 @@ router.post('/login', async (req, res, next) => {
     const user = result.rows[0];
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
+
+    // Validate device_id if user has one stored
+    if (user.device_id && deviceId && user.device_id !== deviceId) {
+      return res.status(403).json({ 
+        error: 'Device not authorized. Please contact administrator.' 
+      });
+    }
+
+    // Update device_id if not set
+    if (!user.device_id && deviceId) {
+      await query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
+      user.device_id = deviceId;
+    }
 
     await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 

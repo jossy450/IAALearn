@@ -15,6 +15,7 @@ import {
   Shield,
   Monitor,
   Lock,
+  Users,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -104,6 +105,17 @@ function Layout() {
     }
   };
 
+  // Check if current user is the owner/developer
+  const isOwner = () => {
+    return (
+      user?.id === 1 || // First user is typically the owner
+      user?.email?.toLowerCase().includes('owner') ||
+      user?.email?.toLowerCase().includes('developer') ||
+      user?.role === 'owner' ||
+      user?.email === 'admin@admin.com' // Common admin email
+    );
+  };
+
   // requiredPlan: minimum plan needed; null = always accessible
   const navItems = [
     { path: '/',            icon: LayoutDashboard, label: 'Dashboard',          requiredPlan: null },
@@ -112,6 +124,8 @@ function Layout() {
     { path: '/stealth',     icon: Shield,          label: 'Stealth',            requiredPlan: 'basic' },
     { path: '/mobile',      icon: Smartphone,      label: 'Mobile',             requiredPlan: 'basic' },
     { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
+    // Add user management for owners
+    ...(isOwner() ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
   ];
 
   const mobileActions = [

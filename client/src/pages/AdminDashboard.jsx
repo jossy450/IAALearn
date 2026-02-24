@@ -90,7 +90,7 @@ function AdminDashboard() {
           </button>
           <button
             className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
-            onClick={() => setActiveTab('users')}
+            onClick={() => navigate('/admin/users')}
           >
             <Users size={20} />
             <span>Users</span>

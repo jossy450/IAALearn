@@ -1,5 +1,6 @@
 import axios from "axios";
 import { Capacitor } from "@capacitor/core";
+import { getDeviceId } from "./deviceId";
 
 // IMPORTANT:
 // - Web should ALWAYS use same-origin (/api) to avoid stale cross-domain build env values.
@@ -77,10 +78,10 @@ api.interceptors.response.use(
  * Named API wrappers (these must exist because your pages import them)
  */
 export const authAPI = {
-  login: (data) => api.post("/auth/login", data),
+  login: (data) => api.post("/auth/login", { ...data, deviceId: getDeviceId() }),
   requestOtp: (data) => api.post("/auth/request-otp", data),
   verifyOtp: (data) => api.post("/auth/verify-otp", data),
-  register: (data) => api.post("/auth/register", data),
+  register: (data) => api.post("/auth/register", { ...data, deviceId: getDeviceId() }),
   forgotPassword: (data) => api.post("/auth/forgot-password", data),
   resetPassword: (data) => api.post("/auth/reset-password", data),
   me: () => api.get("/auth/me"),

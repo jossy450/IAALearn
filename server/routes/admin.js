@@ -4,7 +4,7 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Middleware to check if user is admin
+// Middleware to check if user is admin or owner
 const requireAdmin = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -13,12 +13,30 @@ const requireAdmin = async (req, res, next) => {
     }
 
     const result = await query(
-      'SELECT role FROM users WHERE id = $1',
+      'SELECT id, email, role FROM users WHERE id = $1',
       [userId]
     );
 
-    if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    
+    // Allow access if user is admin OR owner/developer
+    const isAdmin = user.role === 'admin';
+    const isOwner = (
+      user.id === 1 || // First user is typically the owner
+      user.email?.toLowerCase().includes('owner') ||
+      user.email?.toLowerCase().includes('developer') ||
+      user.role === 'owner' ||
+      user.email === 'admin@admin.com' || // Common admin email
+      user.email === 'jossy450@gmail.com' || // Owner/Developer
+      user.email === 'mightyjosing@gmail.com' // Owner/Developer
+    );
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: 'Admin or Owner access required' });
     }
 
     next();
@@ -133,7 +151,7 @@ router.patch('/users/:userId/role', authenticate, requireAdmin, async (req, res,
     const { userId } = req.params;
     const { role } = req.body;
 
-    if (!['user', 'admin', 'moderator'].includes(role)) {
+    if (!['user', 'admin', 'moderator', 'owner'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }
 
@@ -256,6 +274,79 @@ router.get('/system-status', authenticate, requireAdmin, async (req, res, next) 
         lastHour: parseInt(errorLogs.rows[0].count)
       },
       timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create new user (admin only)
+router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { email, fullName, role = 'user', password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    // Validate input
+    if (!normalizedEmail) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (!['user', 'admin', 'moderator', 'owner'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be user, admin, moderator, or owner' });
+    }
+
+    if (fullName && (typeof fullName !== 'string' || fullName.length > 255)) {
+      return res.status(400).json({ error: 'Invalid name format' });
+    }
+
+    // Check if user already exists
+    const existingUser = await query(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+
+    // Hash password if provided, otherwise create a temporary one
+    let passwordHash = null;
+    if (password) {
+      const bcrypt = require('bcrypt');
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    const result = await query(
+      `INSERT INTO users (email, password_hash, full_name, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, full_name, role, created_at`,
+      [normalizedEmail, passwordHash, fullName, role]
+    );
+
+    const user = result.rows[0];
+
+    // Create privacy settings for new user
+    await query(
+      'INSERT INTO privacy_settings (user_id) VALUES ($1)',
+      [user.id]
+    );
+
+    // Log this action
+    await query(
+      `INSERT INTO document_audit_logs (user_id, action, details) 
+       VALUES ($1, $2, $3)`,
+      [req.user.id, 'admin_user_create', JSON.stringify({ newUser: user.id, email: user.email, role: user.role })]
+    );
+
+    res.status(201).json({
+      success: true,
+      user,
+      message: password ? 'User created successfully' : 'User created successfully. They will need to reset their password to login.'
     });
   } catch (error) {
     next(error);

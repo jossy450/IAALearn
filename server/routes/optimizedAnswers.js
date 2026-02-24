@@ -247,9 +247,20 @@ router.get('/cache-stats', authenticate, async (req, res, next) => {
 // Clear cache
 router.post('/clear-cache', authenticate, async (req, res, next) => {
   try {
-    // Only allow admin to clear cache
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    // Only allow admin or owner to clear cache
+    const isAdmin = req.user.role === 'admin';
+    const isOwner = (
+      req.user.id === 1 || // First user is typically the owner
+      req.user.email?.toLowerCase().includes('owner') ||
+      req.user.email?.toLowerCase().includes('developer') ||
+      req.user.role === 'owner' ||
+      req.user.email === 'admin@admin.com' || // Common admin email
+      req.user.email === 'jossy450@gmail.com' || // Owner/Developer
+      req.user.email === 'mightyjosing@gmail.com' // Owner/Developer
+    );
+    
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: 'Admin or Owner access required' });
     }
 
     const cleared = optimizedAnswerService.clearCache();

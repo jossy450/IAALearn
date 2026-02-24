@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Calendar, Clock, TrendingUp, FileText, Briefcase, X, User, MessageSquare, Trash, RotateCw } from 'lucide-react';
@@ -154,7 +154,22 @@ function Dashboard() {
       // Try to load sessions
       try {
         const sessionsRes = await sessionAPI.getAll({ limit: 10 });
-        setSessions(sessionsRes.data.sessions || []);
+        let sessionsData = sessionsRes.data.sessions || [];
+        
+        // Filter out duplicate sessions based on title, keeping the most recent one
+        const uniqueSessions = sessionsData.reduce((acc, session) => {
+          const existing = acc.find(s => s.title === session.title);
+          if (!existing) {
+            acc.push(session);
+          } else if (new Date(session.created_at) > new Date(existing.created_at)) {
+            // Replace with more recent session
+            const index = acc.indexOf(existing);
+            acc[index] = session;
+          }
+          return acc;
+        }, []);
+        
+        setSessions(uniqueSessions);
       } catch (sessionsErr) {
         console.warn('Failed to load sessions:', sessionsErr);
         setSessions([]); // Set empty array on error
@@ -427,38 +442,6 @@ function Dashboard() {
         <button className="option-btn" onClick={() => navigate('/stealth')}>Stealth Mode</button>
       </div>
       <div className="dashboard-content">
-        <div className="sessions-section card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h2 className="card-title">Recent Sessions</h2>
-            <div className="sessions-header-actions">
-              <button
-                className="btn btn-ghost"
-                onClick={() => setShowArchived((v) => !v)}
-                aria-pressed={showArchived}
-              >
-                {showArchived ? 'Show active' : `Show archived (${sessions.filter(s => s.archived).length})`}
-              </button>
-            </div>
-          </div>
-
-          {showArchived ? (
-            archivedView()
-          ) : (
-            activeView()
-          )}
-        </div>
-        <div className="analytics-section card">
-          <h2 className="card-title">Your Analytics</h2>
-          {analytics ? (
-            <div className="analytics-stats">
-              <p><b>Total Sessions:</b> {analytics.sessionStats.total_sessions}</p>
-              <p><b>Avg Duration:</b> {formatDuration(analytics.sessionStats.avg_duration)}</p>
-              <p><b>Completed Sessions:</b> {analytics.sessionStats.completed_sessions}</p>
-              <button className="btn btn-primary" onClick={() => navigate('/analytics')}>More Analytics</button>
-            </div>
-          ) : <p>No analytics data.</p>}
-        </div>
-        {/* modal removed: rendering overlay modal via portal below to avoid clipping */}
         <div className="payment-history card">
           <h3 className="card-title">Payment History</h3>
           {paymentHistory.length === 0 ? (
@@ -467,25 +450,25 @@ function Dashboard() {
             <table className="payment-table">
               <thead>
                 <tr>
-                      <th>Date</th>
-                      <th>Method</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paymentHistory.map((p, idx) => (
-                      <tr key={idx}>
-                        <td>{new Date(p.date).toLocaleString()}</td>
-                        <td>{p.method}</td>
-                        <td>{p.amount ? `$${p.amount}` : 'N/A'}</td>
-                        <td>{p.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                  <th>Date</th>
+                  <th>Method</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentHistory.map((p, idx) => (
+                  <tr key={idx}>
+                    <td>{new Date(p.date).toLocaleString()}</td>
+                    <td>{p.method}</td>
+                    <td>{p.amount ? `$${p.amount}` : 'N/A'}</td>
+                    <td>{p.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Analytics Cards */}
@@ -564,6 +547,17 @@ function Dashboard() {
                   <div className="stat-badge">
                     {session.status}
                   </div>
+                  <button
+                    className="session-delete-btn"
+                    title="Delete session"
+                    aria-label={`Delete session ${session.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSession(session.id);
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               </div>
             ))}
