@@ -31,26 +31,42 @@ function Layout() {
   const [forceDesktop, setForceDesktop] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 1024px)').matches);
 
-  const renderMobileBottomNav = () => {
+  // Modern left-side expandable navigation drawer
+  const renderMobileDrawerNav = () => {
     if (!isMobileLayout) return null;
     return (
-      <nav className="mobile-bottom-nav">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path;
-          return (
-            <button
-              key={`mobile-bottom-${item.path}`}
-              className={`mobile-bottom-item ${isActive ? 'active' : ''}`}
-              type="button"
-              onClick={() => handleNavClick(item.path)}
-            >
-              <Icon size={20} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      <aside className={`mobile-drawer ${isSidebarOpen ? 'open' : ''}`}>
+        <div className="drawer-header">
+          <button className="drawer-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
+            <span className="drawer-icon" />
+          </button>
+          <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '32px', height: '32px', marginRight: '8px'}} />
+          <span className="drawer-title">{disguiseMode ? 'Productivity' : 'Mightysky'}</span>
+        </div>
+        <nav className="drawer-nav">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <button
+                key={`drawer-nav-${item.path}`}
+                className={`drawer-item ${isActive ? 'active' : ''}`}
+                type="button"
+                onClick={() => { setSidebarOpen(false); handleNavClick(item.path); }}
+              >
+                <Icon size={22} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+        <div className="drawer-footer">
+          <button className="drawer-item" type="button" onClick={handleLogout}>
+            <LogOut size={22} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
     );
   };
 
@@ -272,7 +288,7 @@ function Layout() {
         </header>
         <Outlet />
       </main>
-      {renderMobileBottomNav()}
+      {renderMobileDrawerNav()}
     </div>
   );
 }

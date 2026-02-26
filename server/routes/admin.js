@@ -23,8 +23,9 @@ const requireAdmin = async (req, res, next) => {
 
     const user = result.rows[0];
     
-    // Allow access if user is admin OR owner/developer
+    // Allow access if user is admin, power user, or owner/developer
     const isAdmin = user.role === 'admin';
+    const isPowerUser = user.role === 'power_user';
     const isOwner = (
       user.id === 1 || // First user is typically the owner
       user.email?.toLowerCase().includes('owner') ||
@@ -35,9 +36,52 @@ const requireAdmin = async (req, res, next) => {
       user.email === 'mightyjosing@gmail.com' // Owner/Developer
     );
 
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({ error: 'Admin or Owner access required' });
+    if (!isAdmin && !isOwner && !isPowerUser) {
+      return res.status(403).json({ error: 'Admin, Power User, or Owner access required' });
     }
+// Block user account
+router.patch('/users/:userId/block', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const result = await query(
+      'UPDATE users SET is_active = false WHERE id = $1 RETURNING id, email, is_active',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    await query(
+      `INSERT INTO document_audit_logs (user_id, action, details)
+       VALUES ($1, $2, $3)`,
+      [req.user.id, 'admin_user_block', JSON.stringify({ targetUser: userId })]
+    );
+    res.json({ user: result.rows[0], message: 'User blocked successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Remove user account
+router.delete('/users/:userId', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const result = await query(
+      'DELETE FROM users WHERE id = $1 RETURNING id, email',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    await query(
+      `INSERT INTO document_audit_logs (user_id, action, details)
+       VALUES ($1, $2, $3)`,
+      [req.user.id, 'admin_user_remove', JSON.stringify({ targetUser: userId })]
+    );
+    res.json({ user: result.rows[0], message: 'User removed successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
 
     next();
   } catch (error) {

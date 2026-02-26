@@ -18,6 +18,14 @@ function Admin() {
   const [period, setPeriod] = useState('month');
 
   useEffect(() => {
+    // Check user role before loading admin data
+    const token = localStorage.getItem('auth-storage');
+    const user = token ? JSON.parse(token).state.user : null;
+    if (!user || !['admin', 'owner', 'power_user'].includes(user.role)) {
+      // Redirect if not privileged
+      navigate('/');
+      return;
+    }
     loadAdminData();
   }, [period]);
 

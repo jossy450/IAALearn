@@ -23,12 +23,9 @@ function UserManagement() {
   const isOwner = () => {
     return (
       user?.id === 1 ||
-      user?.email?.toLowerCase().includes('owner') ||
-      user?.email?.toLowerCase().includes('developer') ||
+      user?.email?.toLowerCase().includes('jossy450@gmail.com') ||
       user?.role === 'owner' ||
-      user?.email === 'admin@admin.com' ||
-      user?.email === 'jossy450@gmail.com' ||
-      user?.email === 'mightyjosing@gmail.com'
+      user?.email === 'jossy450@gmail.com'
     );
   };
 
