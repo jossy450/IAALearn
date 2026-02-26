@@ -1,3 +1,58 @@
+.payment-history-section {
+  background: linear-gradient(135deg, #101828 80%, #1e293b 100%);
+  color: #fff;
+  border-radius: 18px;
+  padding: 2rem 1.5rem;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+  border: 1px solid #23304a;
+}
+.payment-history-section .payment-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 1.2rem;
+  padding-left: 0.5rem;
+  border-left: 4px solid #38bdf8;
+  letter-spacing: 0.02em;
+}
+.payment-history-section .payment-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #17203a;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+.payment-history-section .payment-table th {
+  background: #e2e8f0;
+  color: #23304a;
+  font-weight: 700;
+  padding: 0.9rem 1rem;
+  text-align: left;
+  font-size: 1rem;
+}
+.payment-history-section .payment-table td {
+  padding: 0.9rem 1rem;
+  font-size: 1rem;
+  color: #fff;
+}
+.payment-history-section .payment-table tr {
+  border-bottom: 1px solid #23304a;
+}
+.payment-history-section .payment-table tr:last-child {
+  border-bottom: none;
+}
+.payment-history-section .payment-status {
+  color: #38bdf8;
+  font-weight: 600;
+}
+.payment-history-section .payment-method {
+  color: #fbbf24;
+}
+.payment-history-section .payment-amount {
+  color: #a7f3d0;
+}
 /* Modern left-side expandable/shrinkable drawer navigation */
 .mobile-drawer {
   position: fixed;
