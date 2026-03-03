@@ -130,6 +130,7 @@ function App() {
         <Route path="/mobile/:sessionId" element={<MobileInterviewSession />} />
         <Route path="/admin" element={
           (user?.role === 'admin' ||
+           user?.role === 'power_user' ||
            user?.id === 1 ||
            user?.email?.toLowerCase().includes('owner') ||
            user?.email?.toLowerCase().includes('developer') ||
@@ -141,6 +142,7 @@ function App() {
         } />
         <Route path="/admin/users" element={
           (user?.role === 'admin' ||
+           user?.role === 'power_user' ||
            user?.id === 1 ||
            user?.email?.toLowerCase().includes('owner') ||
            user?.email?.toLowerCase().includes('developer') ||

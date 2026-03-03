@@ -4,7 +4,7 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Middleware to check if user is admin or owner
+// Middleware to check if user is admin, power user, or owner
 const requireAdmin = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -39,6 +39,13 @@ const requireAdmin = async (req, res, next) => {
     if (!isAdmin && !isOwner && !isPowerUser) {
       return res.status(403).json({ error: 'Admin, Power User, or Owner access required' });
     }
+
+    return next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Block user account
 router.patch('/users/:userId/block', authenticate, requireAdmin, async (req, res, next) => {
   try {
@@ -56,6 +63,31 @@ router.patch('/users/:userId/block', authenticate, requireAdmin, async (req, res
       [req.user.id, 'admin_user_block', JSON.stringify({ targetUser: userId })]
     );
     res.json({ user: result.rows[0], message: 'User blocked successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Unblock user account
+router.patch('/users/:userId/unblock', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const result = await query(
+      'UPDATE users SET is_active = true WHERE id = $1 RETURNING id, email, is_active',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await query(
+      `INSERT INTO document_audit_logs (user_id, action, details)
+       VALUES ($1, $2, $3)`,
+      [req.user.id, 'admin_user_unblock', JSON.stringify({ targetUser: userId })]
+    );
+
+    res.json({ user: result.rows[0], message: 'User unblocked successfully' });
   } catch (error) {
     next(error);
   }
@@ -82,12 +114,6 @@ router.delete('/users/:userId', authenticate, requireAdmin, async (req, res, nex
     next(error);
   }
 });
-
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
 
 // Get admin dashboard overview
 router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
@@ -133,14 +159,25 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
     const { page = 1, limit = 50, role, status } = req.query;
     const offset = (page - 1) * limit;
 
-    let queryStr = `SELECT id, email, full_name, role, created_at, last_login, 
+    let queryStr = `SELECT id, email, full_name, role, created_at, last_login, is_active,
                            (SELECT COUNT(*) FROM interview_sessions WHERE user_id = users.id) as session_count
                     FROM users`;
     const params = [];
 
+    const filters = [];
     if (role) {
-      queryStr += ` WHERE role = $1`;
+      filters.push(`role = $${params.length + filters.length + 1}`);
       params.push(role);
+    }
+
+    if (status === 'active') {
+      filters.push(`is_active = true`);
+    } else if (status === 'inactive') {
+      filters.push(`is_active = false`);
+    }
+
+    if (filters.length > 0) {
+      queryStr += ` WHERE ${filters.join(' AND ')}`;
     }
 
     queryStr += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -195,8 +232,13 @@ router.patch('/users/:userId/role', authenticate, requireAdmin, async (req, res,
     const { userId } = req.params;
     const { role } = req.body;
 
-    if (!['user', 'admin', 'moderator', 'owner'].includes(role)) {
+    if (!['user', 'admin', 'moderator', 'owner', 'power_user'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    // Power users can promote/demote but cannot assign owner role
+    if (req.user?.role === 'power_user' && role === 'owner') {
+      return res.status(403).json({ error: 'Power users cannot assign owner role' });
     }
 
     const result = await query(
@@ -324,7 +366,7 @@ router.get('/system-status', authenticate, requireAdmin, async (req, res, next) 
   }
 });
 
-// Create new user (admin only)
+// Create new user (admin/power user)
 router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { email, fullName, role = 'user', password } = req.body;
@@ -339,9 +381,12 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
     if (!emailRegex.test(normalizedEmail)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
+    if (!['user', 'admin', 'moderator', 'owner', 'power_user'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be user, admin, moderator, power_user, or owner' });
+    }
 
-    if (!['user', 'admin', 'moderator', 'owner'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role. Must be user, admin, moderator, or owner' });
+    if (req.user?.role === 'power_user' && role === 'owner') {
+      return res.status(403).json({ error: 'Power users cannot create owner accounts' });
     }
 
     if (fullName && (typeof fullName !== 'string' || fullName.length > 255)) {
@@ -368,7 +413,7 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
     const result = await query(
       `INSERT INTO users (email, password_hash, full_name, role)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, full_name, role, created_at`,
+       RETURNING id, email, full_name, role, created_at, is_active`,
       [normalizedEmail, passwordHash, fullName, role]
     );
 

@@ -144,8 +144,8 @@ function Layout() {
     { path: '/faq',         icon: HelpCircle,      label: 'FAQ',                requiredPlan: null },
     { path: '/feedback',    icon: MessageSquare,   label: 'Feedback',           requiredPlan: null },
     { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
-    // Always show user management for power users
-    ...((isOwner() || user?.role === 'admin') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
+    // Show user management for owner, admin, or power user
+    ...((isOwner() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
   ];
 
   const mobileActions = [

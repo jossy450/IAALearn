@@ -5,4 +5,4 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user';
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 -- Add a constraint to ensure valid roles
-ALTER TABLE users ADD CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'moderator'));
+ALTER TABLE users ADD CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'moderator', 'owner', 'power_user'));

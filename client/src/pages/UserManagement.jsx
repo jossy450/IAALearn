@@ -34,6 +34,7 @@ function UserManagement() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [status, setStatus] = useState({ type: '', message: '' });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
@@ -57,9 +58,9 @@ function UserManagement() {
     );
   };
 
-  // Owners have unrestricted access, others need admin role
+  // Owners have unrestricted access, admins and power users manage users
   const hasAccess = () => {
-    return isOwner() || user?.role === 'admin';
+    return isOwner() || user?.role === 'admin' || user?.role === 'power_user';
   };
 
   useEffect(() => {
@@ -144,6 +145,12 @@ function UserManagement() {
       if (!proceed) return;
     }
 
+    // Client-side guard: power users cannot assign owner
+    if (user?.role === 'power_user' && newRole === 'owner') {
+      setStatus({ type: 'error', message: 'Power users cannot assign owner role.' });
+      return;
+    }
+
     try {
       await api.patch(`/admin/users/${userId}/role`, { role: newRole });
       setStatus({ type: 'success', message: 'User role updated.' });
@@ -184,20 +191,54 @@ function UserManagement() {
     }
   };
 
+  const handleBlockToggle = async (userId, email, shouldBlock) => {
+    if (userId === user?.id) {
+      setStatus({ type: 'error', message: 'You cannot block/unblock your own account from this screen.' });
+      return;
+    }
+
+    if (shouldBlock) {
+      const confirmed = window.confirm(`Block ${email}? They will not be able to sign in.`);
+      if (!confirmed) return;
+    }
+
+    try {
+      const action = shouldBlock ? 'block' : 'unblock';
+      await api.patch(`/admin/users/${userId}/${action}`);
+      setStatus({ type: 'success', message: shouldBlock ? 'User blocked.' : 'User unblocked.' });
+      await loadUsers({ silent: true, clearStatus: false });
+    } catch (error) {
+      console.error('Failed to update user status:', error);
+      setStatus({
+        type: 'error',
+        message:
+          error?.response?.data?.error ||
+          'Failed to update user status. Please try again.'
+      });
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && u.is_active) ||
+      (statusFilter === 'inactive' && !u.is_active);
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
   const stats = useMemo(() => {
     const total = users.length;
     const admins = users.filter((u) => u.role === 'admin').length;
+    const powerUsers = users.filter((u) => u.role === 'power_user').length;
     const moderators = users.filter((u) => u.role === 'moderator').length;
     const owners = users.filter((u) => u.role === 'owner').length;
-    return { total, admins, moderators, owners };
+    const active = users.filter((u) => u.is_active).length;
+    const blocked = users.filter((u) => !u.is_active).length;
+    return { total, admins, powerUsers, moderators, owners, active, blocked };
   }, [users]);
 
   if (loading) {
@@ -271,12 +312,24 @@ function UserManagement() {
             <strong>{stats.admins}</strong>
           </div>
           <div className="summary-card">
+            <span>Power Users</span>
+            <strong>{stats.powerUsers}</strong>
+          </div>
+          <div className="summary-card">
             <span>Moderators</span>
             <strong>{stats.moderators}</strong>
           </div>
           <div className="summary-card">
             <span>Owners</span>
             <strong>{stats.owners}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Active</span>
+            <strong>{stats.active}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Blocked</span>
+            <strong>{stats.blocked}</strong>
           </div>
         </div>
 
@@ -302,8 +355,22 @@ function UserManagement() {
               <option value="all">All roles</option>
               <option value="user">Users</option>
               <option value="moderator">Moderators</option>
+              <option value="power_user">Power Users</option>
               <option value="admin">Admins</option>
               <option value="owner">Owners</option>
+            </select>
+          </div>
+
+          <div className="filter-box">
+            <Filter size={16} />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="role-filter"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Blocked</option>
             </select>
           </div>
         </div>
@@ -315,6 +382,7 @@ function UserManagement() {
                 <th>Full Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Status</th>
                 <th>Sessions</th>
                 <th>Joined</th>
                 <th>Last Login</th>
@@ -345,6 +413,11 @@ function UserManagement() {
                     )}
                   </td>
                   <td>
+                    <span className={`status-pill ${userData.is_active ? 'active' : 'blocked'}`}>
+                      {userData.is_active ? 'Active' : 'Blocked'}
+                    </span>
+                  </td>
+                  <td>
                     <span className="session-pill">{userData.session_count || 0}</span>
                   </td>
                   <td>{formatDate(userData.created_at)}</td>
@@ -362,6 +435,26 @@ function UserManagement() {
                         >
                           <Trash2 size={16} />
                         </button>
+                      )}
+                      {hasAccess() && (
+                        userData.is_active ? (
+                          <button
+                            className="btn-icon btn-warning"
+                            onClick={() => handleBlockToggle(userData.id, userData.email, true)}
+                            title="Block user"
+                            disabled={userData.id === user?.id}
+                          >
+                            ⛔
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-icon btn-success"
+                            onClick={() => handleBlockToggle(userData.id, userData.email, false)}
+                            title="Unblock user"
+                          >
+                            ✅
+                          </button>
+                        )
                       )}
                     </div>
                   </td>
@@ -444,6 +537,7 @@ function UserManagement() {
                 >
                   <option value="user">User</option>
                   <option value="moderator">Moderator</option>
+                  <option value="power_user">Power User</option>
                   <option value="admin">Admin</option>
                   {isOwner() && <option value="owner">Owner</option>}
                 </select>
