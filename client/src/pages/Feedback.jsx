@@ -1,25 +1,87 @@
-import React, { useState } from 'react';
-import { Send, MessageSquare, Star, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import {
+  Send,
+  MessageSquare,
+  Star,
+  CheckCircle,
+  AlertCircle,
+  Bug,
+  Lightbulb,
+  LifeBuoy,
+  Mail
+} from 'lucide-react';
 import api from '../services/api';
 import './Feedback.css';
 
+const INITIAL_FORM = {
+  type: 'feedback',
+  subject: '',
+  message: '',
+  rating: 0,
+  email: ''
+};
+
+const FEEDBACK_TYPES = [
+  {
+    value: 'feedback',
+    label: 'General Feedback',
+    icon: MessageSquare,
+    description: 'Share your overall experience and suggestions.'
+  },
+  {
+    value: 'bug',
+    label: 'Bug Report',
+    icon: Bug,
+    description: 'Tell us what broke and how we can reproduce it.'
+  },
+  {
+    value: 'feature',
+    label: 'Feature Request',
+    icon: Lightbulb,
+    description: 'Suggest a feature that would improve your workflow.'
+  },
+  {
+    value: 'support',
+    label: 'Support Request',
+    icon: LifeBuoy,
+    description: 'Need help? Let us know what you are blocked on.'
+  }
+];
+
 function Feedback() {
-  const [formData, setFormData] = useState({
-    type: 'feedback',
-    subject: '',
-    message: '',
-    rating: 0,
-    email: ''
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState(null);
+  const [submitStatus, setSubmitStatus] = useState({ type: '', message: '' });
+
+  const isFeedbackType = formData.type === 'feedback';
+  const subjectLength = formData.subject.trim().length;
+  const messageLength = formData.message.trim().length;
+
+  const emailIsValid = useMemo(() => {
+    const trimmedEmail = formData.email.trim();
+    if (!trimmedEmail) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  }, [formData.email]);
+
+  const canSubmit =
+    subjectLength >= 3 &&
+    messageLength >= 10 &&
+    emailIsValid &&
+    (!isFeedbackType || formData.rating > 0) &&
+    !isSubmitting;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: value,
+      ...(name === 'type' && value !== 'feedback' ? { rating: 0 } : {})
     }));
+
+    if (submitStatus.message) {
+      setSubmitStatus({ type: '', message: '' });
+    }
   };
 
   const handleRatingChange = (rating) => {
@@ -31,33 +93,46 @@ function Feedback() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!canSubmit) return;
+
     setIsSubmitting(true);
-    setSubmitStatus(null);
+    setSubmitStatus({ type: '', message: '' });
+
+    const payload = {
+      type: formData.type,
+      subject: formData.subject.trim(),
+      message: formData.message.trim()
+    };
+
+    if (isFeedbackType && formData.rating > 0) {
+      payload.rating = formData.rating;
+    }
+
+    const trimmedEmail = formData.email.trim();
+    if (trimmedEmail) {
+      payload.email = trimmedEmail;
+    }
 
     try {
-      await api.post('/feedback', formData);
-      setSubmitStatus('success');
-      setFormData({
-        type: 'feedback',
-        subject: '',
-        message: '',
-        rating: 0,
-        email: ''
+      await api.post('/feedback', payload);
+      setSubmitStatus({
+        type: 'success',
+        message: "Thank you! Your message has been submitted successfully."
       });
+      setFormData(INITIAL_FORM);
     } catch (error) {
       console.error('Feedback submission error:', error);
-      setSubmitStatus('error');
+      setSubmitStatus({
+        type: 'error',
+        message:
+          error?.response?.data?.error ||
+          'Sorry, there was an error submitting your feedback. Please try again.'
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const feedbackTypes = [
-    { value: 'feedback', label: 'General Feedback', icon: MessageSquare },
-    { value: 'bug', label: 'Bug Report', icon: AlertCircle },
-    { value: 'feature', label: 'Feature Request', icon: Star },
-    { value: 'support', label: 'Support Request', icon: CheckCircle }
-  ];
 
   return (
     <div className="feedback-container">
@@ -68,36 +143,49 @@ function Feedback() {
       </div>
 
       <div className="feedback-content">
-        {submitStatus === 'success' && (
+        {submitStatus.type === 'success' && (
           <div className="feedback-alert success">
             <CheckCircle size={20} />
-            <span>Thank you for your feedback! We'll review it and get back to you if needed.</span>
+            <span>{submitStatus.message}</span>
           </div>
         )}
 
-        {submitStatus === 'error' && (
+        {submitStatus.type === 'error' && (
           <div className="feedback-alert error">
             <AlertCircle size={20} />
-            <span>Sorry, there was an error submitting your feedback. Please try again.</span>
+            <span>{submitStatus.message}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="feedback-form">
           <div className="form-group">
-            <label htmlFor="type">Feedback Type</label>
-            <select
-              id="type"
-              name="type"
-              value={formData.type}
-              onChange={handleInputChange}
-              required
-            >
-              {feedbackTypes.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+            <label>Feedback Type</label>
+            <div className="feedback-type-grid" role="group" aria-label="Feedback Type">
+              {FEEDBACK_TYPES.map((type) => {
+                const Icon = type.icon;
+                const isActive = formData.type === type.value;
+
+                return (
+                  <button
+                    key={type.value}
+                    type="button"
+                    className={`feedback-type-card ${isActive ? 'active' : ''}`}
+                    onClick={() =>
+                      handleInputChange({
+                        target: { name: 'type', value: type.value }
+                      })
+                    }
+                    aria-pressed={isActive}
+                  >
+                    <span className="feedback-type-icon">
+                      <Icon size={16} />
+                    </span>
+                    <span className="feedback-type-text">{type.label}</span>
+                    <span className="feedback-type-desc">{type.description}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="form-group">
@@ -109,24 +197,34 @@ function Feedback() {
               value={formData.subject}
               onChange={handleInputChange}
               placeholder="Brief description of your feedback"
+              maxLength={120}
               required
             />
+            <div className="input-meta">
+              <small>Minimum 3 characters</small>
+              <small>{formData.subject.length}/120</small>
+            </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="email">Email (optional)</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              placeholder="your.email@example.com"
-            />
+            <div className="input-with-icon">
+              <Mail size={16} />
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="your.email@example.com"
+                autoComplete="email"
+              />
+            </div>
             <small>If you'd like us to follow up, please provide your email address.</small>
+            {!emailIsValid && <small className="error-text">Please enter a valid email address.</small>}
           </div>
 
-          {formData.type === 'feedback' && (
+          {isFeedbackType && (
             <div className="form-group">
               <label>Rating</label>
               <div className="rating-stars">
@@ -144,6 +242,9 @@ function Feedback() {
                   {formData.rating > 0 && `${formData.rating} star${formData.rating > 1 ? 's' : ''}`}
                 </span>
               </div>
+              {formData.rating === 0 && (
+                <small className="error-text">Please select a rating before submitting feedback.</small>
+              )}
             </div>
           )}
 
@@ -156,14 +257,19 @@ function Feedback() {
               onChange={handleInputChange}
               placeholder="Please provide detailed information about your feedback, bug report, or feature request..."
               rows={6}
+              maxLength={2000}
               required
             />
+            <div className="input-meta">
+              <small>Minimum 10 characters</small>
+              <small>{formData.message.length}/2000</small>
+            </div>
           </div>
 
           <button
             type="submit"
             className="submit-button"
-            disabled={isSubmitting}
+            disabled={!canSubmit}
           >
             {isSubmitting ? (
               <>

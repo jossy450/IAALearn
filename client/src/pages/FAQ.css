@@ -34,6 +34,67 @@
   gap: 3rem;
 }
 
+.faq-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.faq-search,
+.faq-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 10px;
+  min-height: 42px;
+  padding: 0 0.75rem;
+}
+
+.faq-search {
+  flex: 1;
+  min-width: 230px;
+}
+
+.faq-filter {
+  min-width: 180px;
+}
+
+.faq-search input,
+.faq-filter select {
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  color: #111827;
+  width: 100%;
+}
+
+.faq-search input:focus,
+.faq-filter select:focus {
+  outline: none;
+}
+
+.faq-search:focus-within,
+.faq-filter:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.clear-search {
+  border: none;
+  background: #f3f4f6;
+  color: #4b5563;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
 .faq-list {
   background: white;
   border-radius: 12px;
@@ -74,9 +135,28 @@
   background-color: #f9fafb;
 }
 
-.faq-question span {
+.faq-question > .faq-question-meta {
   flex: 1;
   margin-right: 1rem;
+}
+
+.faq-question-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.faq-category-tag {
+  display: inline-flex;
+  align-self: flex-start;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .faq-answer {
@@ -87,6 +167,17 @@
 
 .faq-answer p {
   margin: 0;
+}
+
+.faq-empty {
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.faq-empty h3 {
+  margin: 0 0 0.5rem;
+  color: #111827;
 }
 
 .faq-contact {
@@ -149,6 +240,16 @@
   .faq-question {
     padding: 1rem;
     font-size: 1rem;
+  }
+
+  .faq-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .faq-search,
+  .faq-filter {
+    width: 100%;
   }
 
   .faq-answer {

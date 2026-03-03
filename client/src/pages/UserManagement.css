@@ -4,6 +4,12 @@
   padding: 20px;
 }
 
+.user-management-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .user-management-header {
   display: flex;
   justify-content: space-between;
@@ -47,6 +53,113 @@
   font-size: 16px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.management-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-card span {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.summary-card strong {
+  font-size: 22px;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-banner.success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.status-banner.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.status-banner span {
+  flex: 1;
+}
+
+.status-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.search-box,
+.filter-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 0 10px;
+  min-height: 44px;
+}
+
+.search-box {
+  flex: 1;
+  min-width: 260px;
+}
+
+.filter-box {
+  min-width: 180px;
+}
+
+.search-box svg,
+.filter-box svg {
+  color: #6b7280;
+}
+
 .user-management-loading {
   display: flex;
   flex-direction: column;
@@ -71,18 +184,29 @@
 
 .search-input {
   width: 100%;
-  max-width: 400px;
-  padding: 12px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 16px;
-  background: white;
+  max-width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-radius: 0;
+  font-size: 15px;
+  background: transparent;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: none;
+}
+
+.role-filter {
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+  min-width: 110px;
+}
+
+.role-filter:focus {
+  outline: none;
 }
 
 .users-table-container {
@@ -126,6 +250,19 @@
   min-width: 120px;
 }
 
+.session-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .role-user {
   background: #dbeafe;
   color: #1e40af;
@@ -151,15 +288,6 @@
   text-transform: capitalize;
 }
 
-.device-id {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 12px;
-  background: #f3f4f6;
-  padding: 4px 8px;
-  border-radius: 4px;
-  color: #6b7280;
-}
-
 .action-buttons {
   display: flex;
   gap: 8px;
@@ -178,6 +306,15 @@
 
 .btn-icon:hover {
   transform: scale(1.1);
+}
+
+.btn-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-icon:disabled:hover {
+  transform: none;
 }
 
 .btn-danger {
@@ -321,6 +458,11 @@
   gap: 8px;
 }
 
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .btn-primary {
   background: #3b82f6;
   color: white;
@@ -339,6 +481,20 @@
   background: #e5e7eb;
 }
 
+.btn-ghost {
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-ghost:hover {
+  background: #f9fafb;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
@@ -354,6 +510,26 @@
     flex-direction: column;
     gap: 20px;
     align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .management-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box,
+  .filter-box {
+    width: 100%;
   }
 
   .users-table-container {
@@ -383,5 +559,9 @@
   .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .header-actions .btn {
+    width: auto;
   }
 }

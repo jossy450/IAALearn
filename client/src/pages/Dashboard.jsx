@@ -442,27 +442,27 @@ function Dashboard() {
         <button className="option-btn" onClick={() => navigate('/stealth')}>Stealth Mode</button>
       </div>
       <div className="dashboard-content">
-        <div className="payment-history card">
-          <h3 className="card-title">Payment History</h3>
+        <div className="payment-history-section">
+          <div className="payment-title">Payment History</div>
           {paymentHistory.length === 0 ? (
-            <p>No payments yet.</p>
+            <p style={{ color: '#fff', margin: '1rem 0' }}>No payments yet.</p>
           ) : (
             <table className="payment-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Method</th>
-                  <th>Amount</th>
-                  <th>Status</th>
+                  <th>DATE</th>
+                  <th>METHOD</th>
+                  <th>AMOUNT</th>
+                  <th>STATUS</th>
                 </tr>
               </thead>
               <tbody>
                 {paymentHistory.map((p, idx) => (
                   <tr key={idx}>
                     <td>{new Date(p.date).toLocaleString()}</td>
-                    <td>{p.method}</td>
-                    <td>{p.amount ? `$${p.amount}` : 'N/A'}</td>
-                    <td>{p.status}</td>
+                    <td className="payment-method">{p.method}</td>
+                    <td className="payment-amount">{p.amount ? `$${p.amount}` : 'N/A'}</td>
+                    <td className="payment-status">{p.status}</td>
                   </tr>
                 ))}
               </tbody>

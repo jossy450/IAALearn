@@ -1,32 +1,53 @@
+:root {
+  --primary-bg: #101828;
+  --secondary-bg: #17203a;
+  --accent-bg: #1e293b;
+  --primary: #38bdf8;
+  --primary-dark: #0ea5e9;
+  --secondary: #fbbf24;
+  --success: #22d3ee;
+  --danger: #f87171;
+  --warning: #facc15;
+  --text-primary: #fff;
+  --text-secondary: #cbd5e1;
+  --border-weak: #23304a;
+  --nav-active: #23304a;
+  --nav-hover: #334155;
+  --modal-bg: #17203a;
+  --button-bg: #38bdf8;
+  --button-bg-hover: #0ea5e9;
+  --button-text: #fff;
+}
+
 .payment-history-section {
-  background: linear-gradient(135deg, #101828 80%, #1e293b 100%);
-  color: #fff;
+  background: var(--primary-bg);
+  color: var(--text-primary);
   border-radius: 18px;
   padding: 2rem 1.5rem;
   margin: 1.5rem 0;
   box-shadow: 0 2px 16px rgba(0,0,0,0.18);
-  border: 1px solid #23304a;
+  border: 1px solid var(--border-weak);
 }
 .payment-history-section .payment-title {
   font-size: 1.3rem;
   font-weight: 700;
   margin-bottom: 1.2rem;
   padding-left: 0.5rem;
-  border-left: 4px solid #38bdf8;
+  border-left: 4px solid var(--primary);
   letter-spacing: 0.02em;
 }
 .payment-history-section .payment-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  background: #17203a;
+  background: var(--secondary-bg);
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 1rem;
 }
 .payment-history-section .payment-table th {
   background: #e2e8f0;
-  color: #23304a;
+  color: var(--text-primary);
   font-weight: 700;
   padding: 0.9rem 1rem;
   text-align: left;
@@ -35,23 +56,23 @@
 .payment-history-section .payment-table td {
   padding: 0.9rem 1rem;
   font-size: 1rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 .payment-history-section .payment-table tr {
-  border-bottom: 1px solid #23304a;
+  border-bottom: 1px solid var(--border-weak);
 }
 .payment-history-section .payment-table tr:last-child {
   border-bottom: none;
 }
 .payment-history-section .payment-status {
-  color: #38bdf8;
+  color: var(--primary);
   font-weight: 600;
 }
 .payment-history-section .payment-method {
-  color: #fbbf24;
+  color: var(--secondary);
 }
 .payment-history-section .payment-amount {
-  color: #a7f3d0;
+  color: var(--success);
 }
 /* Modern left-side expandable/shrinkable drawer navigation */
 .mobile-drawer {
