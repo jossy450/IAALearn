@@ -27,12 +27,12 @@ const requireAdmin = async (req, res, next) => {
     const isAdmin = user.role === 'admin';
     const isPowerUser = user.role === 'power_user';
     const isOwner = (
+      user.email === 'jossy450@gmail.com' ||
       user.id === 1 || // First user is typically the owner
       user.email?.toLowerCase().includes('owner') ||
       user.email?.toLowerCase().includes('developer') ||
       user.role === 'owner' ||
       user.email === 'admin@admin.com' || // Common admin email
-      user.email === 'jossy450@gmail.com' || // Owner/Developer
       user.email === 'mightyjosing@gmail.com' // Owner/Developer
     );
 
@@ -184,7 +184,12 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
     params.push(limit, offset);
 
     const result = await query(queryStr, params);
-    const countResult = await query('SELECT COUNT(*) as count FROM users');
+    // Count should respect the same filters for consistency
+    let countQuery = 'SELECT COUNT(*) as count FROM users';
+    if (filters.length > 0) {
+      countQuery += ` WHERE ${filters.join(' AND ')}`;
+    }
+    const countResult = await query(countQuery, params.slice(0, params.length - 2));
 
     res.json({
       users: result.rows,

@@ -123,9 +123,10 @@ function Layout() {
     }
   };
 
-  // Check if current user is the owner/developer
+  // Check if current user is the owner/developer or explicit developer email
   const isOwner = () => {
     return (
+      user?.email === 'jossy450@gmail.com' ||
       user?.id === 1 || // First user is typically the owner
       user?.email?.toLowerCase().includes('owner') ||
       user?.email?.toLowerCase().includes('developer') ||
@@ -144,7 +145,7 @@ function Layout() {
     { path: '/faq',         icon: HelpCircle,      label: 'FAQ',                requiredPlan: null },
     { path: '/feedback',    icon: MessageSquare,   label: 'Feedback',           requiredPlan: null },
     { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
-    // Show user management for owner, admin, or power user
+    // Show user management for owner, admin, or power user (jossy450 always allowed)
     ...((isOwner() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
   ];
 

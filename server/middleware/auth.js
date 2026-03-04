@@ -3,7 +3,38 @@ const jwt = require('jsonwebtoken');
 // Get JWT secret dynamically from environment
 const getJwtSecret = () => process.env.JWT_SECRET || 'demo-secret';
 
-const verifyToken = (token) => jwt.verify(token, getJwtSecret());
+// Support legacy/rotated secrets to avoid locking out admins after deployments.
+const getLegacySecrets = () => {
+  const raw = process.env.LEGACY_JWT_SECRETS || '';
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
+
+const verifyToken = (token) => {
+  // Try current secret first
+  const primarySecret = getJwtSecret();
+  const legacySecrets = getLegacySecrets();
+
+  const tryVerify = (secret) => jwt.verify(token, secret);
+
+  try {
+    return tryVerify(primarySecret);
+  } catch (primaryErr) {
+    // If the primary fails, attempt any legacy secrets to allow previously issued tokens
+    for (const legacy of legacySecrets) {
+      try {
+        console.warn('[AUTH] Primary JWT secret rejected token, trying legacy secret');
+        return tryVerify(legacy);
+      } catch (_) {
+        // keep trying
+      }
+    }
+    // If all attempts failed, surface the original error for accurate messaging
+    throw primaryErr;
+  }
+};
 
 const authenticate = async (req, res, next) => {
   try {

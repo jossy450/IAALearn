@@ -129,27 +129,31 @@ function App() {
         <Route path="/mobile-session/:sessionId" element={<MobileSession />} />
         <Route path="/mobile/:sessionId" element={<MobileInterviewSession />} />
         <Route path="/admin" element={
-          (user?.role === 'admin' ||
-           user?.role === 'power_user' ||
-           user?.id === 1 ||
-           user?.email?.toLowerCase().includes('owner') ||
-           user?.email?.toLowerCase().includes('developer') ||
-           user?.role === 'owner' ||
-           user?.email === 'admin@admin.com' ||
-           user?.email === 'jossy450@gmail.com' ||
-           user?.email === 'mightyjosing@gmail.com') ?
+          (
+            user?.email === 'jossy450@gmail.com' ||
+            user?.role === 'admin' ||
+            user?.role === 'power_user' ||
+            user?.id === 1 ||
+            user?.email?.toLowerCase().includes('owner') ||
+            user?.email?.toLowerCase().includes('developer') ||
+            user?.role === 'owner' ||
+            user?.email === 'admin@admin.com' ||
+            user?.email === 'mightyjosing@gmail.com'
+          ) ?
           <AdminDashboard /> : <Navigate to="/" />
         } />
         <Route path="/admin/users" element={
-          (user?.role === 'admin' ||
-           user?.role === 'power_user' ||
-           user?.id === 1 ||
-           user?.email?.toLowerCase().includes('owner') ||
-           user?.email?.toLowerCase().includes('developer') ||
-           user?.role === 'owner' ||
-           user?.email === 'admin@admin.com' ||
-           user?.email === 'jossy450@gmail.com' ||
-           user?.email === 'mightyjosing@gmail.com') ?
+          (
+            user?.email === 'jossy450@gmail.com' ||
+            user?.role === 'admin' ||
+            user?.role === 'power_user' ||
+            user?.id === 1 ||
+            user?.email?.toLowerCase().includes('owner') ||
+            user?.email?.toLowerCase().includes('developer') ||
+            user?.role === 'owner' ||
+            user?.email === 'admin@admin.com' ||
+            user?.email === 'mightyjosing@gmail.com'
+          ) ?
           <UserManagement /> : <Navigate to="/" />
         } />
         
