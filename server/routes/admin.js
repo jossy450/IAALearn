@@ -12,9 +12,10 @@ const requireAdmin = async (req, res, next) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
+    // Accept UUID stored in tokens as string; avoid invalid UUID syntax errors
     const result = await query(
-      'SELECT id, email, role FROM users WHERE id = $1',
-      [userId]
+      'SELECT id, email, role FROM users WHERE id::text = $1',
+      [String(userId)]
     );
 
     if (result.rows.length === 0) {
@@ -156,15 +157,19 @@ router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
 // Get users list with filters
 router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, role, status } = req.query;
+    const { role, status } = req.query;
+
+    // Sanitize pagination to avoid invalid integer inputs (e.g., "100:1")
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
     const offset = (page - 1) * limit;
 
     let queryStr = `SELECT id, email, full_name, role, created_at, last_login, is_active,
                            (SELECT COUNT(*) FROM interview_sessions WHERE user_id = users.id) as session_count
                     FROM users`;
     const params = [];
-
     const filters = [];
+
     if (role) {
       filters.push(`role = $${params.length + filters.length + 1}`);
       params.push(role);
@@ -184,12 +189,15 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
     params.push(limit, offset);
 
     const result = await query(queryStr, params);
+
     // Count should respect the same filters for consistency
     let countQuery = 'SELECT COUNT(*) as count FROM users';
+    const countParams = params.slice(0, params.length - 2); // exclude limit/offset
     if (filters.length > 0) {
       countQuery += ` WHERE ${filters.join(' AND ')}`;
     }
-    const countResult = await query(countQuery, params.slice(0, params.length - 2));
+
+    const countResult = await query(countQuery, countParams);
 
     res.json({
       users: result.rows,
@@ -376,6 +384,7 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { email, fullName, role = 'user', password } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
+    const normalizedName = fullName?.trim();
 
     // Validate input
     if (!normalizedEmail) {
@@ -394,8 +403,12 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
       return res.status(403).json({ error: 'Power users cannot create owner accounts' });
     }
 
-    if (fullName && (typeof fullName !== 'string' || fullName.length > 255)) {
+    if (normalizedName && (typeof normalizedName !== 'string' || normalizedName.length > 255)) {
       return res.status(400).json({ error: 'Invalid name format' });
+    }
+
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password is required (min 8 characters).' });
     }
 
     // Check if user already exists
@@ -408,27 +421,25 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
       return res.status(409).json({ error: 'User already exists' });
     }
 
-    // Hash password if provided, otherwise create a temporary one
-    let passwordHash = null;
-    if (password) {
-      const bcrypt = require('bcrypt');
-      passwordHash = await bcrypt.hash(password, 10);
-    }
+    const bcrypt = require('bcrypt');
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const result = await query(
       `INSERT INTO users (email, password_hash, full_name, role)
        VALUES ($1, $2, $3, $4)
        RETURNING id, email, full_name, role, created_at, is_active`,
-      [normalizedEmail, passwordHash, fullName, role]
+      [normalizedEmail, passwordHash, normalizedName || null, role]
     );
 
     const user = result.rows[0];
 
-    // Create privacy settings for new user
-    await query(
-      'INSERT INTO privacy_settings (user_id) VALUES ($1)',
-      [user.id]
-    );
+    // Create privacy settings for new user (ignore if already exists)
+    try {
+      await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+    } catch (psErr) {
+      // Swallow unique violations or missing table errors to avoid blocking user creation
+      console.warn('[admin/users] privacy_settings insert skipped:', psErr?.message || psErr);
+    }
 
     // Log this action
     await query(
@@ -440,7 +451,7 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
     res.status(201).json({
       success: true,
       user,
-      message: password ? 'User created successfully' : 'User created successfully. They will need to reset their password to login.'
+      message: 'User created successfully'
     });
   } catch (error) {
     next(error);

@@ -14,9 +14,9 @@
   --panel-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
 
   /* Text */
-  --text-on-dark: #ffffff;
-  --text-primary: #e6eef8;
-  --text-muted: #b8c2d6;
+  --text-on-dark: #0e0101;
+  --text-primary: #051120;
+  --text-muted: #00040b;
 
   /* Borders & shadows */
   --border-weak: rgba(255, 255, 255, 0.06);

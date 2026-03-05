@@ -43,14 +43,34 @@ function ProtectedRoute({ children }) {
   return token ? children : null;
 }
 
+// Privileged users (owner/developer/admin emails) can bypass plan gates
+const isPrivilegedUser = (user) => {
+  if (!user) return false;
+  const email = user.email?.toLowerCase() || '';
+  return (
+    user.email === 'jossy450@gmail.com' ||
+    user.id === 1 ||
+    email.includes('owner') ||
+    email.includes('developer') ||
+    user.role === 'owner' ||
+    user.email === 'admin@admin.com' ||
+    user.email === 'mightyjosing@gmail.com'
+  );
+};
+
 /**
  * PlanRoute — wraps a page that requires a minimum subscription plan.
  * If the user's plan doesn't meet the requirement, redirect to /subscription
  * with a message explaining why.
  */
 function PlanRoute({ children, requiredPlan }) {
-  const { subscription } = useAuthStore();
+  const { subscription, user } = useAuthStore();
   const plan = subscription?.plan || subscription?.status || 'trial';
+
+  // Allow privileged/owner/dev accounts to bypass plan gating
+  if (isPrivilegedUser(user)) {
+    return children;
+  }
 
   if (!canAccess(plan, requiredPlan)) {
     return <Navigate to="/subscription" replace state={{ requiredPlan }} />;

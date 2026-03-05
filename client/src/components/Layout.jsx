@@ -123,15 +123,18 @@ function Layout() {
     }
   };
 
-  // Check if current user is the owner/developer or explicit developer email
-  const isOwner = () => {
+  // Check if current user is privileged (owner/developer/admin emails) for gating bypass
+  const isPrivileged = () => {
+    if (!user) return false;
+    const email = user.email?.toLowerCase() || '';
     return (
-      user?.email === 'jossy450@gmail.com' ||
-      user?.id === 1 || // First user is typically the owner
-      user?.email?.toLowerCase().includes('owner') ||
-      user?.email?.toLowerCase().includes('developer') ||
-      user?.role === 'owner' ||
-      user?.email === 'admin@admin.com' // Common admin email
+      user.email === 'jossy450@gmail.com' ||
+      user.id === 1 ||
+      email.includes('owner') ||
+      email.includes('developer') ||
+      user.role === 'owner' ||
+      user.email === 'admin@admin.com' ||
+      user.email === 'mightyjosing@gmail.com'
     );
   };
 
@@ -145,8 +148,8 @@ function Layout() {
     { path: '/faq',         icon: HelpCircle,      label: 'FAQ',                requiredPlan: null },
     { path: '/feedback',    icon: MessageSquare,   label: 'Feedback',           requiredPlan: null },
     { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
-    // Show user management for owner, admin, or power user (jossy450 always allowed)
-    ...((isOwner() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
+    // Show user management for privileged, admin, or power user
+    ...((isPrivileged() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
   ];
 
   const mobileActions = [
@@ -185,7 +188,7 @@ function Layout() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
-            const locked = item.requiredPlan ? !canAccess(userPlan, item.requiredPlan) : false;
+            const locked = item.requiredPlan ? (!isPrivileged() && !canAccess(userPlan, item.requiredPlan)) : false;
             const planLabel = item.requiredPlan === 'pro' ? 'Pro' : item.requiredPlan === 'basic' ? 'Basic' : null;
             return (
               <button
