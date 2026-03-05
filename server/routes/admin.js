@@ -171,7 +171,8 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
     const filters = [];
 
     if (role) {
-      filters.push(`role = $${params.length + filters.length + 1}`);
+      const idx = params.length + 1;
+      filters.push(`role = $${idx}`);
       params.push(role);
     }
 
