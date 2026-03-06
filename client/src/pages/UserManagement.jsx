@@ -16,6 +16,7 @@ import api from '../services/api';
 import './UserManagement.css';
 
 const OWNER_EMAILS = ['jossy450@gmail.com', 'mightyjosing@gmail.com', 'admin@admin.com'];
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const formatDate = (value) => {
   if (!value) return 'Never';
@@ -44,6 +45,18 @@ function UserManagement() {
     password: '',
     role: 'user'
   });
+
+  const validateNewUser = () => {
+    const trimmedEmail = newUser.email.trim().toLowerCase();
+    const trimmedName = newUser.fullName.trim();
+
+    if (!trimmedEmail) return 'Email is required to create a user.';
+    if (!EMAIL_REGEX.test(trimmedEmail)) return 'Enter a valid email address.';
+    if (!newUser.password || newUser.password.length < 8) return 'Password must be at least 8 characters.';
+    if (trimmedName && trimmedName.length > 255) return 'Full name is too long (max 255 characters).';
+    if (user?.role === 'power_user' && newUser.role === 'owner') return 'Power users cannot assign owner role.';
+    return null;
+  };
 
   // Check if current user is the owner/developer (unrestricted access)
   const isOwner = () => {
@@ -102,13 +115,14 @@ function UserManagement() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
 
-    const trimmedEmail = newUser.email.trim().toLowerCase();
-    const trimmedName = newUser.fullName.trim();
-
-    if (!trimmedEmail) {
-      setStatus({ type: 'error', message: 'Email is required to create a user.' });
+    const validationError = validateNewUser();
+    if (validationError) {
+      setStatus({ type: 'error', message: validationError });
       return;
     }
+
+    const trimmedEmail = newUser.email.trim().toLowerCase();
+    const trimmedName = newUser.fullName.trim();
 
     try {
       setIsCreatingUser(true);
@@ -129,8 +143,9 @@ function UserManagement() {
       setStatus({
         type: 'error',
         message:
-          error?.response?.data?.error ||
-          'Failed to create user. Please try again.'
+          error?.response?.status === 409
+            ? 'A user with this email already exists.'
+            : error?.response?.data?.error || 'Failed to create user. Please try again.'
       });
     } finally {
       setIsCreatingUser(false);
@@ -533,7 +548,7 @@ function UserManagement() {
                 <select
                   className="input"
                   value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                 >
                   <option value="user">User</option>
                   <option value="moderator">Moderator</option>

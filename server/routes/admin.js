@@ -436,7 +436,13 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
 
     // Create privacy settings for new user (ignore if already exists)
     try {
-      await query('INSERT INTO privacy_settings (user_id) VALUES ($1)', [user.id]);
+      // Check if privacy_settings table exists before inserting
+      const tableCheck = await query(
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'privacy_settings')"
+      );
+      if (tableCheck.rows[0].exists) {
+        await query('INSERT INTO privacy_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [user.id]);
+      }
     } catch (psErr) {
       // Swallow unique violations or missing table errors to avoid blocking user creation
       console.warn('[admin/users] privacy_settings insert skipped:', psErr?.message || psErr);
