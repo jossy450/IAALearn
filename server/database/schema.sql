@@ -16,6 +16,16 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN DEFAULT true
 );
 
+-- Ensure role column exists for role-based access control (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user';
+
+-- Ensure valid roles constraint (drop/re-add to stay in sync)
+ALTER TABLE users DROP CONSTRAINT IF EXISTS valid_role;
+ALTER TABLE users ADD CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'moderator', 'owner', 'power_user'));
+
+-- Index to speed up role filtering
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
 -- Login OTP table
 CREATE TABLE IF NOT EXISTS login_otp (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
