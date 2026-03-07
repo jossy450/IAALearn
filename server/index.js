@@ -1,4 +1,6 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
 // Default to production when unset so Fly machines serve the built client
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'production';
@@ -22,7 +24,6 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
 const fs = require('fs');
 const passport = require('passport');
 

@@ -9,12 +9,17 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
+    -- Optional device fingerprint for login validation
+    device_id VARCHAR(255),
     phone_number VARCHAR(20),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP,
     is_active BOOLEAN DEFAULT true
 );
+
+-- Ensure device_id column exists when table was created earlier without it
+ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255);
 
 -- Ensure role column exists for role-based access control (idempotent)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user';
@@ -25,6 +30,12 @@ ALTER TABLE users ADD CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'mo
 
 -- Index to speed up role filtering
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- Index for device_id lookups (idempotent)
+CREATE INDEX IF NOT EXISTS idx_users_device_id ON users(device_id);
+
+-- Document device_id column purpose
+COMMENT ON COLUMN users.device_id IS 'Unique device identifier for security validation';
 
 -- Login OTP table
 CREATE TABLE IF NOT EXISTS login_otp (
@@ -153,18 +164,18 @@ CREATE TABLE IF NOT EXISTS research_history (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for better performance
-CREATE INDEX idx_interview_sessions_user_id ON interview_sessions(user_id);
-CREATE INDEX idx_interview_sessions_started_at ON interview_sessions(started_at);
-CREATE INDEX idx_questions_session_id ON questions(session_id);
-CREATE INDEX idx_questions_asked_at ON questions(asked_at);
-CREATE INDEX idx_answer_cache_question_hash ON answer_cache(question_hash);
-CREATE INDEX idx_answer_cache_category ON answer_cache(category);
-CREATE INDEX idx_answer_cache_keywords ON answer_cache USING GIN(keywords);
-CREATE INDEX idx_pre_generated_answers_user_id ON pre_generated_answers(user_id);
-CREATE INDEX idx_pre_generated_answers_category ON pre_generated_answers(category);
-CREATE INDEX idx_mobile_sessions_connection_code ON mobile_sessions(connection_code);
-CREATE INDEX idx_performance_metrics_session_id ON performance_metrics(session_id);
+-- Create indexes for better performance (using IF NOT EXISTS for idempotency)
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_user_id ON interview_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_started_at ON interview_sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_questions_session_id ON questions(session_id);
+CREATE INDEX IF NOT EXISTS idx_questions_asked_at ON questions(asked_at);
+CREATE INDEX IF NOT EXISTS idx_answer_cache_question_hash ON answer_cache(question_hash);
+CREATE INDEX IF NOT EXISTS idx_answer_cache_category ON answer_cache(category);
+CREATE INDEX IF NOT EXISTS idx_answer_cache_keywords ON answer_cache USING GIN(keywords);
+CREATE INDEX IF NOT EXISTS idx_pre_generated_answers_user_id ON pre_generated_answers(user_id);
+CREATE INDEX IF NOT EXISTS idx_pre_generated_answers_category ON pre_generated_answers(category);
+CREATE INDEX IF NOT EXISTS idx_mobile_sessions_connection_code ON mobile_sessions(connection_code);
+CREATE INDEX IF NOT EXISTS idx_performance_metrics_session_id ON performance_metrics(session_id);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -175,14 +186,14 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Apply updated_at triggers
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+-- Apply updated_at triggers (using OR REPLACE for idempotency)
+CREATE OR REPLACE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_privacy_settings_updated_at BEFORE UPDATE ON privacy_settings
+CREATE OR REPLACE TRIGGER update_privacy_settings_updated_at BEFORE UPDATE ON privacy_settings
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_pre_generated_answers_updated_at BEFORE UPDATE ON pre_generated_answers
+CREATE OR REPLACE TRIGGER update_pre_generated_answers_updated_at BEFORE UPDATE ON pre_generated_answers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Views for analytics
@@ -250,7 +261,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_cleanup_session_documents
+CREATE OR REPLACE TRIGGER trigger_cleanup_session_documents
 AFTER UPDATE ON interview_sessions
 FOR EACH ROW
 EXECUTE FUNCTION delete_session_documents();

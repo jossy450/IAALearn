@@ -4,6 +4,18 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Helper to safely log to audit logs (fails silently if table doesn't exist)
+const logAuditAction = async (userId, action, details) => {
+  try {
+    await query(
+      `INSERT INTO document_audit_logs (user_id, action, details) VALUES ($1, $2, $3)`,
+      [userId, action, typeof details === 'string' ? details : JSON.stringify(details)]
+    );
+  } catch (err) {
+    console.warn(`[admin] audit log insert failed: ${err.message}`);
+  }
+};
+
 // Middleware to check if user is admin, power user, or owner
 const requireAdmin = async (req, res, next) => {
   try {
@@ -58,11 +70,7 @@ router.patch('/users/:userId/block', authenticate, requireAdmin, async (req, res
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, details)
-       VALUES ($1, $2, $3)`,
-      [req.user.id, 'admin_user_block', JSON.stringify({ targetUser: userId })]
-    );
+    await logAuditAction(req.user.id, 'admin_user_block', { targetUser: userId });
     res.json({ user: result.rows[0], message: 'User blocked successfully' });
   } catch (error) {
     next(error);
@@ -82,11 +90,7 @@ router.patch('/users/:userId/unblock', authenticate, requireAdmin, async (req, r
       return res.status(404).json({ error: 'User not found' });
     }
 
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, details)
-       VALUES ($1, $2, $3)`,
-      [req.user.id, 'admin_user_unblock', JSON.stringify({ targetUser: userId })]
-    );
+    await logAuditAction(req.user.id, 'admin_user_unblock', { targetUser: userId });
 
     res.json({ user: result.rows[0], message: 'User unblocked successfully' });
   } catch (error) {
@@ -105,11 +109,7 @@ router.delete('/users/:userId', authenticate, requireAdmin, async (req, res, nex
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, details)
-       VALUES ($1, $2, $3)`,
-      [req.user.id, 'admin_user_remove', JSON.stringify({ targetUser: userId })]
-    );
+    await logAuditAction(req.user.id, 'admin_user_remove', { targetUser: userId });
     res.json({ user: result.rows[0], message: 'User removed successfully' });
   } catch (error) {
     next(error);
@@ -193,7 +193,7 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
 
     // Count should respect the same filters for consistency
     let countQuery = 'SELECT COUNT(*) as count FROM users';
-    const countParams = params.slice(0, params.length - 2); // exclude limit/offset
+    const countParams = params.slice(0, Math.max(0, params.length - 2)); // exclude limit/offset safely
     if (filters.length > 0) {
       countQuery += ` WHERE ${filters.join(' AND ')}`;
     }
@@ -264,12 +264,7 @@ router.patch('/users/:userId/role', authenticate, requireAdmin, async (req, res,
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Log this action
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, details) 
-       VALUES ($1, $2, $3)`,
-      [req.user.id, 'admin_role_change', JSON.stringify({ targetUser: userId, newRole: role })]
-    );
+    await logAuditAction(req.user.id, 'admin_role_change', { targetUser: userId, newRole: role });
 
     res.json({ user: result.rows[0] });
   } catch (error) {
@@ -320,6 +315,13 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req, res, next) => 
     const { page = 1, limit = 100, action, userId } = req.query;
     const offset = (page - 1) * limit;
 
+    const tableCheck = await query(
+      "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'document_audit_logs')"
+    );
+    if (!tableCheck.rows[0].exists) {
+      return res.json({ logs: [], total: 0, page: 1, limit, pages: 0 });
+    }
+
     let queryStr = 'SELECT * FROM document_audit_logs WHERE 1=1';
     const params = [];
 
@@ -347,6 +349,9 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req, res, next) => 
       pages: Math.ceil(countResult.rows[0].count / limit)
     });
   } catch (error) {
+    if (error.code === '42P01') {
+      return res.json({ logs: [], total: 0, page: 1, limit: 100, pages: 0 });
+    }
     next(error);
   }
 });
@@ -448,12 +453,7 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
       console.warn('[admin/users] privacy_settings insert skipped:', psErr?.message || psErr);
     }
 
-    // Log this action
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, details) 
-       VALUES ($1, $2, $3)`,
-      [req.user.id, 'admin_user_create', JSON.stringify({ newUser: user.id, email: user.email, role: user.role })]
-    );
+    await logAuditAction(req.user.id, 'admin_user_create', { newUser: user.id, email: user.email, role: user.role });
 
     res.status(201).json({
       success: true,

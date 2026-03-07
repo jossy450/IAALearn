@@ -190,6 +190,7 @@
   border-radius: 0;
   font-size: 15px;
   background: transparent;
+  color: #000000;
 }
 
 .search-input:focus {
@@ -226,6 +227,7 @@
   padding: 16px;
   text-align: left;
   border-bottom: 1px solid #e5e7eb;
+  color: #000000;
 }
 
 .users-table th {
@@ -248,6 +250,7 @@
   font-size: 14px;
   background: white;
   min-width: 120px;
+  color: #000000;
 }
 
 .session-pill {
@@ -286,6 +289,7 @@
   font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
+  color: #000000;
 }
 
 .status-pill {
@@ -454,7 +458,7 @@
 .label {
   display: block;
   font-weight: 500;
-  color: #374151;
+  color: #000000;
   margin-bottom: 8px;
   font-size: 14px;
 }

@@ -9,9 +9,25 @@ import './Analytics.css';
 
 function Analytics() {
   const navigate = useNavigate();
-  const { subscription } = useAuthStore();
+  const { user, subscription } = useAuthStore();
   const userPlan = subscription?.plan || subscription?.status || 'trial';
-  const hasAccess = canAccess(userPlan, 'pro');
+  
+  // Check if user is privileged (owner/developer/admin emails) for bypassing plan gates
+  const isPrivileged = () => {
+    if (!user) return false;
+    const email = user.email?.toLowerCase() || '';
+    return (
+      email === 'jossy450@gmail.com' ||
+      user.id === 1 ||
+      email.includes('owner') ||
+      email.includes('developer') ||
+      user.role === 'owner' ||
+      email === 'admin@admin.com' ||
+      email === 'mightyjosing@gmail.com'
+    );
+  };
+  
+  const hasAccess = isPrivileged() || canAccess(userPlan, 'pro');
 
   const [userAnalytics, setUserAnalytics] = useState(null);
   const [cacheStats, setCacheStats] = useState(null);

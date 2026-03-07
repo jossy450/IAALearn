@@ -21,7 +21,9 @@ function Admin() {
     // Check user role before loading admin data
     const token = localStorage.getItem('auth-storage');
     const user = token ? JSON.parse(token).state.user : null;
-    if (!user || !['admin', 'owner', 'power_user'].includes(user.role)) {
+    const userEmail = user?.email?.toLowerCase() || '';
+    const isOwnerEmail = userEmail === 'jossy450@gmail.com' || userEmail === 'mightyjosing@gmail.com' || userEmail.includes('owner');
+    if (!user || (!isOwnerEmail && !['admin', 'owner', 'power_user'].includes(user.role))) {
       // Redirect if not privileged
       navigate('/');
       return;

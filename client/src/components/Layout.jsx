@@ -292,7 +292,29 @@ function Layout() {
         </header>
         <Outlet />
       </main>
-      {renderMobileDrawerNav()}
+
+      {/* Mobile Bottom Navigation */}
+      {isMobileLayout && (
+        <nav className="mobile-bottom-nav">
+          <div className="mobile-bottom-nav-inner">
+            {navItems.slice(0, 5).map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              return (
+                <button
+                  key={`bottom-nav-${item.path}`}
+                  className={`mobile-bottom-item ${isActive ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => handleNavClick(item.path)}
+                >
+                  <Icon size={22} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

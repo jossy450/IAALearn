@@ -162,20 +162,6 @@ function App() {
           ) ?
           <AdminDashboard /> : <Navigate to="/" />
         } />
-        <Route path="/admin/users" element={
-          (
-            user?.email === 'jossy450@gmail.com' ||
-            user?.role === 'admin' ||
-            user?.role === 'power_user' ||
-            user?.id === 1 ||
-            user?.email?.toLowerCase().includes('owner') ||
-            user?.email?.toLowerCase().includes('developer') ||
-            user?.role === 'owner' ||
-            user?.email === 'admin@admin.com' ||
-            user?.email === 'mightyjosing@gmail.com'
-          ) ?
-          <UserManagement /> : <Navigate to="/" />
-        } />
         
         {/* Stripe returns here after checkout — needs auth but no Layout chrome */}
         <Route path="/checkout/return" element={token ? <CheckoutReturn /> : <Navigate to="/login" />} />
@@ -198,6 +184,7 @@ function App() {
           <Route path="subscription" element={<SubscriptionPage />} />
           <Route path="faq" element={<FAQ />} />
           <Route path="feedback" element={<Feedback />} />
+          <Route path="admin/users" element={<UserManagement />} />
         </Route>
       </Routes>
     </Router>
