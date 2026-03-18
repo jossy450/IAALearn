@@ -45,6 +45,17 @@ const initializeDatabase = async () => {
   try {
     const client = await pool.connect();
     console.log('✅ Database connection established');
+    
+    // Run migrations
+    const fs = require('fs');
+    const path = require('path');
+    const schemaSQL = fs.readFileSync(
+      path.join(__dirname, 'schema.sql'),
+      'utf8'
+    );
+    await client.query(schemaSQL);
+    console.log('✅ Database migration completed');
+    
     client.release();
     return true;
   } catch (error) {

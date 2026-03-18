@@ -7,6 +7,8 @@ const jwksClient = require('jwks-rsa');
 const { promisify } = require('util');
 const { query } = require('../database/connection');
 const { getJwtSecret } = require('../middleware/auth');
+const nodemailer = require('nodemailer');
+const twilio = require('twilio');
 
 const authRouter = express.Router();
 // Backwards-compat alias: some handlers below use `router` variable.
@@ -296,6 +298,217 @@ const sanitizeUser = (user) => {
   return safe;
 };
 
+// Simple masker for IDs/secrets when reporting status
+const mask = (val = '') => {
+  if (!val) return '';
+  const keep = 4;
+  return val.length <= keep * 2 ? `${val.slice(0, 2)}…${val.slice(-2)}` : `${val.slice(0, keep)}…${val.slice(-keep)}`;
+};
+
+// ── Notification helpers ───────────────────────────────────────────────────
+const smtpEnabled = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+
+// SMS Provider Detection (Priority: Telnyx → Ycloud → Twilio)
+const twilioEnabled = !!(
+  process.env.TWILIO_ACCOUNT_SID && 
+  process.env.TWILIO_AUTH_TOKEN && 
+  process.env.TWILIO_PHONE_NUMBER
+);
+const ycloudEnabled = !!(
+  process.env.YCLOUD_API_KEY && 
+  process.env.YCLOUD_SENDER_ID
+);
+const telnyxEnabled = !!(
+  process.env.TELNYX_API_KEY && 
+  process.env.TELNYX_PHONE_NUMBER
+);
+
+// Determine primary provider based on what's configured
+const getPrimaryProvider = () => {
+  if (telnyxEnabled) return 'telnyx';
+  if (ycloudEnabled) return 'ycloud';
+  if (twilioEnabled) return 'twilio';
+  return null;
+};
+
+const primaryProvider = getPrimaryProvider();
+
+// Log configured providers
+const configuredProviders = [];
+if (telnyxEnabled) configuredProviders.push('Telnyx');
+if (ycloudEnabled) configuredProviders.push('Ycloud');
+if (twilioEnabled) configuredProviders.push('Twilio');
+console.log(`📱 SMS Providers configured: ${configuredProviders.join(', ') || 'None'}`);
+
+const transporter = smtpEnabled
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+  : null;
+
+const twilioClient = twilioEnabled
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
+
+// Cache for provider validation to avoid repeated verify hits
+let smtpCache = { ts: 0, data: null };
+let twilioCache = { ts: 0, data: null };
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+const validateSmtp = async () => {
+  if (!transporter) return { ok: false, reason: 'not_configured' };
+  const now = Date.now();
+  if (smtpCache.data && now - smtpCache.ts < CACHE_TTL_MS) return smtpCache.data;
+  try {
+    await transporter.verify();
+    smtpCache = { ts: now, data: { ok: true } };
+    return smtpCache.data;
+  } catch (err) {
+    const data = { ok: false, reason: err.message || 'smtp_verify_failed' };
+    smtpCache = { ts: now, data };
+    return data;
+  }
+};
+
+const validateTwilio = async () => {
+  if (!twilioClient) return { ok: false, reason: 'not_configured' };
+  if (!process.env.TWILIO_PHONE_NUMBER) return { ok: false, reason: 'missing_from_number' };
+  const now = Date.now();
+  if (twilioCache.data && now - twilioCache.ts < CACHE_TTL_MS) return twilioCache.data;
+  try {
+    // Lightweight check: fetch account to ensure credentials are valid
+    await twilioClient.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+    twilioCache = { ts: now, data: { ok: true } };
+    return twilioCache.data;
+  } catch (err) {
+    const data = { ok: false, reason: err.message || 'twilio_verify_failed' };
+    twilioCache = { ts: now, data };
+    return data;
+  }
+};
+
+const sendEmailOtp = async (to, code) => {
+  if (!transporter) throw new Error('Email not configured');
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await transporter.sendMail({
+    from,
+    to,
+    subject: 'Your Login Verification Code',
+    html: `
+      <h2>Login Verification Code</h2>
+      <p>Your verification code is: <strong>${code}</strong></p>
+      <p>This code expires in 10 minutes.</p>
+      <p>If you didn't request this code, please ignore this email.</p>
+    `
+  });
+};
+
+// ── Multi-Provider SMS OTP ────────────────────────────────────────────────
+const sendSmsOtp = async (to, code, channel = 'sms') => {
+  const errors = [];
+  
+  // Normalize phone number (ensure E.164 format)
+  let normalizedPhone = to.replace(/[^0-9+]/g, '');
+  if (!normalizedPhone.startsWith('+')) {
+    // Assume UK number if no country code
+    normalizedPhone = '+44' + normalizedPhone.replace(/^0/, '');
+  }
+  
+  // Try Telnyx first
+  if (telnyxEnabled) {
+    try {
+      const response = await fetch('https://api.telnyx.com/v2/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.TELNYX_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.TELNYX_PHONE_NUMBER,
+          to: normalizedPhone,
+          text: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`,
+          ...(channel === 'whatsapp' && process.env.TELNYX_PROFILE_ID ? {
+            messaging_profile_id: process.env.TELNYX_PROFILE_ID
+          } : {})
+        })
+      });
+      
+      if (response.ok) {
+        console.log(`✅ OTP sent via Telnyx to ${normalizedPhone}`);
+        return { provider: 'telnyx', success: true };
+      }
+      const errData = await response.text();
+      errors.push(`Telnyx: ${response.status} - ${errData}`);
+    } catch (err) {
+      errors.push(`Telnyx: ${err.message}`);
+    }
+  }
+  
+  // Try Ycloud
+  if (ycloudEnabled) {
+    try {
+      const ycloudResponse = await fetch('https://api.ycloud.com/v2/sms', {
+        method: 'POST',
+        headers: {
+          'X-API-Key': process.env.YCLOUD_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender_id: process.env.YCLOUD_SENDER_ID,
+          recipient: normalizedPhone,
+          message: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`
+        })
+      });
+      
+      if (ycloudResponse.ok) {
+        console.log(`✅ OTP sent via Ycloud to ${normalizedPhone}`);
+        return { provider: 'ycloud', success: true };
+      }
+      const errData = await ycloudResponse.text();
+      errors.push(`Ycloud: ${ycloudResponse.status} - ${errData}`);
+    } catch (err) {
+      errors.push(`Ycloud: ${err.message}`);
+    }
+  }
+  
+  // Try Twilio
+  if (twilioEnabled) {
+    try {
+      const from = process.env.TWILIO_PHONE_NUMBER;
+      let message;
+      
+      if (channel === 'whatsapp') {
+        message = await twilioClient.messages.create({
+          from: `whatsapp:${from}`,
+          to: `whatsapp:${normalizedPhone}`,
+          body: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`
+        });
+      } else {
+        message = await twilioClient.messages.create({
+          from,
+          to: normalizedPhone,
+          body: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`
+        });
+      }
+      
+      console.log(`✅ OTP sent via Twilio to ${normalizedPhone} (SID: ${message.sid})`);
+      return { provider: 'twilio', success: true };
+    } catch (err) {
+      errors.push(`Twilio: ${err.message}`);
+    }
+  }
+  
+  // All providers failed
+  console.error('❌ All SMS providers failed:', errors);
+  throw new Error(`SMS delivery failed. Tried: ${errors.join('; ')}`);
+};
+
 // In-memory users for demo mode
 const demoUsers = new Map();
 // In-memory password reset tokens for demo mode
@@ -329,7 +542,7 @@ const validatePassword = (password) => {
 // Register new user
 router.post('/register', async (req, res, next) => {
   try {
-    const { email, password, fullName, deviceId } = req.body;
+    const { email, password, fullName, deviceId, referralCode } = req.body;
     const normalizedEmail = normalizeEmail(email);
 
     // Validate input
@@ -400,6 +613,36 @@ router.post('/register', async (req, res, next) => {
       [user.id]
     );
 
+    // Handle referral code
+    if (referralCode) {
+      try {
+        const referrer = await query(
+          'SELECT id FROM users WHERE referral_code = $1',
+          [referralCode.toUpperCase()]
+        );
+        
+        if (referrer.rows.length > 0) {
+          const referrerId = referrer.rows[0].id;
+          
+          // Don't allow self-referral
+          if (referrerId !== user.id) {
+            await query(
+              `INSERT INTO referral_rewards (referrer_id, referred_id, referral_code, reward_type, reward_value)
+               VALUES ($1, $2, $3, 'trial_days', 7)`,
+              [referrerId, user.id, referralCode.toUpperCase()]
+            );
+            
+            await query(
+              'UPDATE users SET referred_by = $1 WHERE id = $2',
+              [referrerId, user.id]
+            );
+          }
+        }
+      } catch (refError) {
+        console.error('Referral processing error:', refError);
+      }
+    }
+
     const token = createToken(user.id, user.email);
 
     res.status(201).json({
@@ -412,30 +655,54 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-// Request Login OTP
+// Request Login OTP (multi-channel: email | sms | whatsapp)
 router.post('/request-otp', async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email, deliveryMethod = 'email', phone } = req.body;
     const normalizedEmail = normalizeEmail(email);
+    const method = (deliveryMethod || 'email').toLowerCase();
 
     if (!normalizedEmail || !validateEmail(normalizedEmail)) {
       return res.status(400).json({ error: 'Valid email is required' });
     }
 
-    // Check if user exists
+    if (!['email', 'sms', 'whatsapp'].includes(method)) {
+      return res.status(400).json({ error: 'deliveryMethod must be email, sms, or whatsapp' });
+    }
+
+    // Require phone for sms/whatsapp
+    if ((method === 'sms' || method === 'whatsapp') && !phone) {
+      return res.status(400).json({ error: 'Phone number is required for SMS/WhatsApp delivery' });
+    }
+
+    // Check if user exists & capture phone if provided
+    let user;
     if (isDemoMode) {
-      const user = demoUsers.get(normalizedEmail);
+      user = demoUsers.get(normalizedEmail);
       if (!user) {
         return res.status(404).json({ error: 'No account found with this email' });
       }
+      if (phone) {
+        user.phone_number = phone;
+      }
     } else {
       const result = await query(
-        'SELECT id, email, full_name FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
+        'SELECT id, email, full_name, phone_number FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
         [normalizedEmail]
       );
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'No account found with this email' });
+      }
+      user = result.rows[0];
+
+      // Upsert phone number if provided
+      if (phone && phone !== user.phone_number) {
+        try {
+          await query('UPDATE users SET phone_number = $1 WHERE id = $2', [phone, user.id]);
+        } catch (err) {
+          console.warn('Could not update phone number:', err.message);
+        }
       }
     }
 
@@ -454,27 +721,66 @@ router.post('/request-otp', async (req, res, next) => {
       await query(
         `INSERT INTO login_otp (email, otp_code, expires_at, delivery_method)
          VALUES ($1, $2, $3, $4)`,
-        [normalizedEmail, otpCode, expiresAt, 'email']
+        [normalizedEmail, otpCode, expiresAt, method]
       );
      } else {
       // Store in memory for demo mode
       demoUsers.get(normalizedEmail).otp = {
         code: otpCode,
-        expiresAt: expiresAt.getTime()
+        expiresAt: expiresAt.getTime(),
+        delivery_method: method,
+        phone
       };
     }
 
-    // TODO: Send email/SMS with OTP
-    // For now, log it (in production, integrate with email service)
-    console.log(`🔐 OTP for ${normalizedEmail}: ${otpCode} (expires in 10 minutes)`);
+    // Dispatch OTP
+    let smsResult = null;
+    try {
+      if (method === 'email') {
+        if (!smtpEnabled) {
+          console.warn('SMTP not configured; OTP will not be emailed. Falling back to response display in dev.');
+        } else {
+          await sendEmailOtp(normalizedEmail, otpCode);
+        }
+      } else if (method === 'sms' || method === 'whatsapp') {
+        // Check if any SMS provider is configured
+        if (!primaryProvider) {
+          console.warn('No SMS provider configured; OTP shown in response (DEMO MODE).');
+          console.log(`📱 [DEMO] ${method.toUpperCase()} OTP for ${phone}: ${otpCode}`);
+        } else {
+          smsResult = await sendSmsOtp(phone, otpCode, method === 'whatsapp' ? 'whatsapp' : 'sms');
+        }
+      }
+    } catch (sendErr) {
+      console.error('Failed to send OTP:', sendErr.message || sendErr);
+      return res.status(500).json({ error: 'Failed to send verification code' });
+    }
 
-    res.json({
+    // Log for debugging (avoid exposing in prod)
+    console.log(`🔐 OTP for ${normalizedEmail} via ${method}${phone ? ` to ${phone}` : ''}: ${otpCode} (expires in 10 minutes)`);
+
+    // Build response
+    const isDemo = !primaryProvider;
+    const providerName = smsResult?.provider || (isDemo ? 'demo' : null);
+    
+    const response = {
       success: true,
-      message: 'Verification code sent to your email',
+      message: providerName 
+        ? `Verification code sent via ${method} (${providerName})` 
+        : `Verification code sent (configure SMS provider for production)`,
       email: normalizedEmail,
-      // Always return OTP code in response for testing purposes
-      code: otpCode
-    });
+      phone: phone || null,
+      deliveryMethod: method,
+      smsProvider: providerName,
+      demoMode: isDemo,
+    };
+
+    // Include code in development or when SMS provider not configured
+    if (process.env.NODE_ENV !== 'production' || isDemo) {
+      response.code = otpCode;
+    }
+
+    res.json(response);
   } catch (error) {
     next(error);
   }
@@ -792,8 +1098,20 @@ router.get(
   },
   async (req, res, next) => {
     try {
-      const { id, emails, displayName } = req.user;
-      const email = normalizeEmail(emails[0]?.value);
+      const { id, emails, displayName, provider, photos, name, profileUrl, _json } = req.user || {};
+      const email = normalizeEmail(emails?.[0]?.value);
+
+      console.log('🔵 Google callback profile:', {
+        id,
+        provider,
+        displayName,
+        name,
+        email,
+        profileUrl,
+        photo: photos?.[0]?.value,
+        emailVerified: _json?.email_verified,
+        hd: _json?.hd,
+      });
 
       if (!email) {
         return res.redirect(`${getClientUrl(req)}/login?error=${encodeURIComponent('OAuth provider did not return an email')}`);
@@ -863,6 +1181,66 @@ router.get(
     }
   }
 );
+
+// Lightweight status endpoint for OAuth/OTP config visibility (masked)
+router.get('/status', (_req, res) => {
+  const baseServerUrl = (
+    process.env.SERVER_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.PUBLIC_SERVER_URL ||
+    process.env.PUBLIC_URL ||
+    'http://localhost:3000'
+  ).replace(/\/$/, '');
+
+  const googleConfigured = !!process.env.GOOGLE_CLIENT_ID;
+  const googleCallback = `${baseServerUrl}/api/auth/google/callback`;
+
+  Promise.all([validateSmtp(), validateTwilio()]).then(([smtpStatus, twilioStatus]) => {
+    res.json({
+      success: true,
+      google: {
+        configured: googleConfigured,
+        clientId: mask(process.env.GOOGLE_CLIENT_ID),
+        callback: googleCallback,
+      },
+      github: {
+        configured: !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+        clientId: mask(process.env.GITHUB_CLIENT_ID),
+      },
+      smtp: {
+        configured: smtpEnabled,
+        host: process.env.SMTP_HOST || '',
+        from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+        status: smtpStatus,
+      },
+      sms: {
+        primary: primaryProvider,
+        telnyx: {
+          configured: telnyxEnabled,
+          from: process.env.TELNYX_PHONE_NUMBER || '',
+        },
+        ycloud: {
+          configured: ycloudEnabled,
+          senderId: process.env.YCLOUD_SENDER_ID || '',
+        },
+        twilio: {
+          configured: twilioEnabled,
+          from: process.env.TWILIO_PHONE_NUMBER || '',
+          status: twilioStatus,
+        },
+      },
+      otp: {
+        channels: ['email', 'sms', 'whatsapp'],
+        codeDigits: 6,
+        ttlMinutes: 10,
+        maxAttempts: 5,
+      }
+    });
+  }).catch((err) => {
+    console.error('Status check error:', err);
+    res.status(500).json({ success: false, error: 'status_check_failed', message: err.message });
+  });
+});
 
 // GitHub OAuth - Initiate authentication
 router.get('/github', (req, res, next) => {

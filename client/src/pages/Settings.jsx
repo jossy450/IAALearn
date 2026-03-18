@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, Eye, EyeOff, Trash2, Lock, Calendar, Upload, FileText, Briefcase } from 'lucide-react';
+import { Shield, Eye, EyeOff, Trash2, Lock, Calendar, Upload, FileText, Briefcase, Link } from 'lucide-react';
 import { privacyAPI } from '../services/api';
 import './Settings.css';
 

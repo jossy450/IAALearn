@@ -292,3 +292,34 @@ COMMENT ON COLUMN session_transfers.transfer_code IS '6-character alphanumeric c
 COMMENT ON COLUMN session_transfers.device_info IS 'JSON object containing mobile device information';
 COMMENT ON COLUMN session_transfers.expires_at IS 'Transfer code expiration time (typically 60 seconds from creation)';
 COMMENT ON COLUMN session_transfers.is_active IS 'Whether the transfer is currently active (can be deactivated on session end)';
+
+-- Mock Interview Tables
+CREATE TABLE IF NOT EXISTS mock_interview_sessions (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  persona VARCHAR(50) DEFAULT 'professional',
+  role VARCHAR(100),
+  experience_level VARCHAR(50) DEFAULT 'mid',
+  status VARCHAR(20) DEFAULT 'in_progress',
+  created_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS mock_interview_answers (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES mock_interview_sessions(id) ON DELETE CASCADE,
+  question_number INTEGER NOT NULL,
+  question_text TEXT,
+  user_answer TEXT,
+  ai_suggestion TEXT,
+  feedback TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes for mock interview tables
+CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_user_id ON mock_interview_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_mock_interview_answers_session_id ON mock_interview_answers(session_id);
+
+-- Ensure new columns exist when upgrading
+ALTER TABLE mock_interview_answers ADD COLUMN IF NOT EXISTS question_text TEXT;
+ALTER TABLE mock_interview_answers ADD COLUMN IF NOT EXISTS feedback TEXT;

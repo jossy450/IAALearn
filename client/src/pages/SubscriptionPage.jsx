@@ -15,41 +15,60 @@ import './SubscriptionPage.css';
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 // ── Annual pricing (save ~17%) ────────────────────────────────────────────────
-const ANNUAL_PRICES = { basic: 99, pro: 199, enterprise: 499 };
-const MONTHLY_PRICES = { basic: 9.99, pro: 19.99, enterprise: 49.99 };
+const ANNUAL_PRICES = { plus: 79.99, pro: 149.99, enterprise: 399.99 };
+const MONTHLY_PRICES = { plus: 7.99, pro: 14.99, enterprise: 39.99 };
 
-// ── Plan definitions ──────────────────────────────────────────────────────────
+// ── Pay-per-interview pricing ────────────────────────────────────────────────
+const PAY_PER_INTERVIEW_PRICE = 0.99;
+
+// ── Plan definitions ─────────────────────────────────────────────────────────
 const PLANS = [
   {
-    id: 'basic',
-    name: 'Essentials',
-    monthlyPrice: 9.99,
-    annualPrice: 99,
+    id: 'free',
+    name: 'Free',
+    monthlyPrice: 0,
+    annualPrice: 0,
     currency: '£',
-    description: 'Perfect for individual job seekers',
-    icon: <Zap size={28} />,
-    color: '#3b82f6',
+    description: 'Perfect for trying out the basics',
+    icon: <Gift size={28} />,
+    color: '#6b7280',
     features: [
       'Unlimited AI interview sessions',
+      '3 stealth mode sessions/month',
+      'Basic practice questions',
+      '3 document uploads per session',
+    ],
+  },
+  {
+    id: 'plus',
+    name: 'Plus',
+    monthlyPrice: 7.99,
+    annualPrice: 79.99,
+    currency: '£',
+    description: 'Everything you need for your job search',
+    icon: <Zap size={28} />,
+    color: '#3b82f6',
+    popular: true,
+    features: [
+      'Unlimited stealth mode access',
+      'Mobile app access',
       'Priority AI responses',
       'Email support',
-      '3 document uploads per session',
-      '🥷 Stealth mode access',
-      '📱 Mobile app access',
+      '10 document uploads per session',
+      'Pay-per-interview option',
     ],
   },
   {
     id: 'pro',
     name: 'Professional',
-    monthlyPrice: 19.99,
-    annualPrice: 199,
+    monthlyPrice: 14.99,
+    annualPrice: 149.99,
     currency: '£',
     description: 'For serious job seekers',
     icon: <Star size={28} />,
     color: '#8b5cf6',
-    popular: true,
     features: [
-      'Everything in Essentials',
+      'Everything in Plus',
       'Unlimited document uploads',
       '📊 Advanced analytics',
       '🎬 Session recording & playback',
@@ -61,8 +80,8 @@ const PLANS = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    monthlyPrice: 49.99,
-    annualPrice: 499,
+    monthlyPrice: 39.99,
+    annualPrice: 399.99,
     currency: '£',
     description: 'For teams and organisations',
     icon: <Shield size={28} />,

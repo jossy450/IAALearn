@@ -6,7 +6,7 @@
  */
 
 // ── Plan hierarchy (order matters — higher index = higher tier) ───────────────
-export const PLAN_ORDER = ['trial', 'basic', 'pro', 'enterprise'];
+export const PLAN_ORDER = ['free', 'plus', 'pro', 'enterprise'];
 
 /**
  * Returns true if `userPlan` meets or exceeds `requiredPlan`.
@@ -25,33 +25,37 @@ export function canAccess(userPlan, requiredPlan) {
  * Components should import this and check against the user's current plan.
  */
 export const PLAN_LIMITS = {
-  trial: {
+  free: {
     maxDocUploadsPerSession: 3,
     unlimitedDocUploads:     false,
     advancedAnalytics:       false,
     sessionRecording:        false,
     customAI:                false,
     sessionExport:           false,
-    stealthMode:             false,
+    stealthMode:             true,    // Limited stealth in free tier to compete
+    stealthModeLimit:        3,       // 3 stealth sessions per month
     mobileApp:               false,
-    teamCollaboration:       false,
+    teamCollaboration:      false,
     apiAccess:               false,
     prioritySupport:         false,
     dedicatedManager:        false,
+    payPerInterview:         true,   // Can pay per interview
   },
-  basic: {
-    maxDocUploadsPerSession: 3,
+  plus: {
+    maxDocUploadsPerSession: 10,
     unlimitedDocUploads:     false,
-    advancedAnalytics:       false,   // moved to Pro
+    advancedAnalytics:       false,
     sessionRecording:        false,
     customAI:                false,
     sessionExport:           false,
-    stealthMode:             true,    // Stealth is the Basic differentiator
-    mobileApp:               true,    // Mobile access from Basic+
-    teamCollaboration:       false,
+    stealthMode:             true,
+    stealthModeLimit:        Infinity,
+    mobileApp:               true,
+    teamCollaboration:      false,
     apiAccess:               false,
     prioritySupport:         false,
     dedicatedManager:        false,
+    payPerInterview:         true,
   },
   pro: {
     maxDocUploadsPerSession: Infinity,
@@ -61,11 +65,13 @@ export const PLAN_LIMITS = {
     customAI:                true,
     sessionExport:           true,
     stealthMode:             true,
+    stealthModeLimit:        Infinity,
     mobileApp:               true,
-    teamCollaboration:       false,   // moved to Enterprise
+    teamCollaboration:      false,
     apiAccess:               false,
     prioritySupport:         true,
     dedicatedManager:        false,
+    payPerInterview:         true,
   },
   enterprise: {
     maxDocUploadsPerSession: Infinity,
@@ -75,11 +81,13 @@ export const PLAN_LIMITS = {
     customAI:                true,
     sessionExport:           true,
     stealthMode:             true,
+    stealthModeLimit:        Infinity,
     mobileApp:               true,
-    teamCollaboration:       true,
+    teamCollaboration:      true,
     apiAccess:               true,
     prioritySupport:         true,
     dedicatedManager:        true,
+    payPerInterview:         true,
   },
 };
 

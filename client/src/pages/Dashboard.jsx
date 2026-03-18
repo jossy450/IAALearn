@@ -346,8 +346,11 @@ function Dashboard() {
   const formatDuration = (seconds) => {
     if (!seconds) return 'N/A';
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}m ${secs}s`;
+    const secs = Number((seconds % 60).toFixed(2));
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
   };
 
   // Helper render functions inside component so they can access state/handlers

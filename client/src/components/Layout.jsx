@@ -18,6 +18,12 @@ import {
   Users,
   HelpCircle,
   MessageSquare,
+  Headphones,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  Gift,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -26,67 +32,27 @@ function Layout() {
   const navigate = useNavigate();
   const { user, logout, subscription } = useAuthStore();
   const { disguiseMode, setDisguiseMode } = usePrivacyStore();
-  const userPlan = subscription?.plan || subscription?.status || 'trial';
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const userPlan = subscription?.plan || subscription?.status || 'free';
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [forceDesktop, setForceDesktop] = useState(false);
-  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 1024px)').matches);
-
-  // Modern left-side expandable navigation drawer
-  const renderMobileDrawerNav = () => {
-    if (!isMobileLayout) return null;
-    return (
-      <aside className={`mobile-drawer ${isSidebarOpen ? 'open' : ''}`}>
-        <div className="drawer-header">
-          <button className="drawer-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
-            <span className="drawer-icon" />
-          </button>
-          <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '32px', height: '32px', marginRight: '8px'}} />
-          <span className="drawer-title">{disguiseMode ? 'Productivity' : 'Mightysky'}</span>
-        </div>
-        <nav className="drawer-nav">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            return (
-              <button
-                key={`drawer-nav-${item.path}`}
-                className={`drawer-item ${isActive ? 'active' : ''}`}
-                type="button"
-                onClick={() => { setSidebarOpen(false); handleNavClick(item.path); }}
-              >
-                <Icon size={22} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <div className="drawer-footer">
-          <button className="drawer-item" type="button" onClick={handleLogout}>
-            <LogOut size={22} />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
-    );
-  };
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 768px)').matches);
 
   useEffect(() => {
-    // Hydrate desktop override preference
     const stored = localStorage.getItem('forceDesktopLayout');
     if (stored === 'true') {
       setForceDesktop(true);
     }
 
-    const mq = window.matchMedia('(max-width: 1024px)');
+    const mq = window.matchMedia('(max-width: 768px)');
     const handler = (e) => setIsMobileViewport(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
 
   useEffect(() => {
-    // Close sidebar when switching into mobile layout
     if (isMobileViewport && !forceDesktop) {
-      setSidebarOpen(false);
+      setMobileMenuOpen(false);
     }
   }, [isMobileViewport, forceDesktop]);
 
@@ -94,7 +60,6 @@ function Layout() {
 
   const handleLogout = async () => {
     try {
-      // Call server logout endpoint
       const authData = localStorage.getItem('auth-storage');
       const token = authData ? JSON.parse(authData).state?.token : null;
       
@@ -108,22 +73,16 @@ function Layout() {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
-        }).catch(() => {
-          // Logout might fail but we still want to clear client-side
-        });
+        }).catch(() => {});
       }
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      // Clear client-side auth state
       logout();
-      
-      // Use navigate instead of window.location to avoid page reload issues on mobile
       navigate('/login', { replace: true });
     }
   };
 
-  // Check if current user is privileged (owner/developer/admin emails) for gating bypass
   const isPrivileged = () => {
     if (!user) return false;
     const email = user.email?.toLowerCase() || '';
@@ -138,183 +97,127 @@ function Layout() {
     );
   };
 
-  // requiredPlan: minimum plan needed; null = always accessible
   const navItems = [
     { path: '/',            icon: LayoutDashboard, label: 'Dashboard',          requiredPlan: null },
-    { path: '/subscription',icon: Monitor,         label: 'Subscription & Trial',requiredPlan: null },
+    { path: '/subscription',icon: Monitor,         label: 'Subscription',       requiredPlan: null },
     { path: '/analytics',   icon: BarChart3,       label: 'Analytics',          requiredPlan: null },
     { path: '/stealth',     icon: Shield,          label: 'Stealth',            requiredPlan: null },
     { path: '/mobile',      icon: Smartphone,      label: 'Mobile',             requiredPlan: null },
+    { path: '/mock-interview', icon: Headphones,  label: 'Mock Interview',     requiredPlan: null },
     { path: '/faq',         icon: HelpCircle,      label: 'FAQ',                requiredPlan: null },
     { path: '/feedback',    icon: MessageSquare,   label: 'Feedback',           requiredPlan: null },
     { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
-    // Show user management for privileged, admin, or power user
-    ...((isPrivileged() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'User Management', requiredPlan: null }] : []),
-  ];
-
-  const mobileActions = [
-    { 
-      action: () => setDisguiseMode(!disguiseMode), 
-      icon: disguiseMode ? Eye : EyeOff, 
-      label: disguiseMode ? 'Show' : 'Hide'
-    },
-    { 
-      action: handleLogout, 
-      icon: LogOut, 
-      label: 'Logout' 
-    },
+    ...((isPrivileged() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'Users', requiredPlan: null }] : []),
   ];
 
   const handleNavClick = (path) => {
-    setSidebarOpen(false);
+    if (isMobileLayout) {
+      setMobileMenuOpen(false);
+    }
     navigate(path);
   };
 
-  const toggleDesktopOverride = () => {
-    const next = !forceDesktop;
-    setForceDesktop(next);
-    localStorage.setItem('forceDesktopLayout', next ? 'true' : 'false');
-  };
-
   return (
-    <div className={`layout ${disguiseMode ? 'disguise-mode' : ''} ${isSidebarOpen ? 'sidebar-open' : ''} ${isMobileLayout ? 'mobile-layout' : 'force-desktop'}`}>
-      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '32px', height: '32px', marginRight: '8px'}} />
-          <h1>{disguiseMode ? 'Productivity' : 'Mightysky'}</h1>
+    <div className={`layout ${disguiseMode ? 'disguise-mode' : ''} ${isMobileLayout ? 'mobile-layout' : 'force-desktop'}`}>
+      
+      {/* Mobile Header */}
+      {isMobileLayout && (
+        <header className="mobile-header">
+          <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+          <div className="mobile-header-brand">
+            <img src="/mightysky-logo.svg" alt="Mightysky" />
+            <span>{disguiseMode ? 'Productivity' : 'Mightysky'}</span>
+          </div>
+          <button className="icon-btn logout-btn" onClick={handleLogout} title="Logout">
+            <LogOut size={20} />
+          </button>
+        </header>
+      )}
+
+      {/* Left Navigation Pane */}
+      <aside className={`left-nav ${mobileMenuOpen ? 'mobile-open' : ''} ${navCollapsed ? 'collapsed' : ''}`}>
+        {/* Nav Header */}
+        <div className="left-nav-header">
+          <div className="nav-brand">
+            <img src="/mightysky-logo.svg" alt="Mightysky" />
+            {!navCollapsed && <span className="brand-name">{disguiseMode ? 'Productivity' : 'Mightysky'}</span>}
+          </div>
+          {!isMobileLayout && (
+            <button className="nav-collapse-btn" onClick={() => setNavCollapsed(!navCollapsed)}>
+              {navCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            </button>
+          )}
         </div>
 
-        <nav className="sidebar-nav">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            const locked = item.requiredPlan ? (!isPrivileged() && !canAccess(userPlan, item.requiredPlan)) : false;
-            const planLabel = item.requiredPlan === 'pro' ? 'Pro' : item.requiredPlan === 'basic' ? 'Basic' : null;
-            return (
-              <button
-                key={item.path}
-                className={`nav-item ${isActive ? 'active' : ''} ${locked ? 'nav-item-locked' : ''}`}
-                type="button"
-                onClick={() => handleNavClick(item.path)}
-                title={locked ? `Requires ${planLabel} plan` : item.label}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-                {locked && (
-                  <span className="nav-plan-badge" title={`Requires ${planLabel} plan`}>
-                    <Lock size={11} style={{ marginRight: 2 }} />
-                    {planLabel}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {mobileActions.map((action, index) => {
-            const Icon = action.icon;
-            return (
-              <button
-                key={`mobile-action-${index}`}
-                className="nav-item mobile-only"
-                type="button"
-                onClick={action.action}
-              >
-                <Icon size={20} />
-                <span>{action.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="sidebar-footer">
-          <button
-            className="nav-item"
-            type="button"
-            onClick={toggleDesktopOverride}
-            title={forceDesktop ? 'Switch to mobile view' : 'Switch to desktop view'}
-          >
-            {forceDesktop ? <Smartphone size={20} /> : <Monitor size={20} />}
-            <span>{forceDesktop ? 'Mobile view' : 'Desktop view'}</span>
-          </button>
-          <button
-            className="nav-item"
-            type="button"
-            onClick={() => setDisguiseMode(!disguiseMode)}
-            title={disguiseMode ? 'Disable Disguise Mode' : 'Enable Disguise Mode'}
-          >
-            {disguiseMode ? <Eye size={20} /> : <EyeOff size={20} />}
-            <span>{disguiseMode ? 'Show' : 'Hide'}</span>
-          </button>
-          
-          <button className="nav-item" type="button" onClick={handleLogout}>
-            <LogOut size={20} />
-            <span>Logout</span>
-          </button>
-          
-          <div className="user-info">
-            <div className="user-avatar">
-              {user?.full_name?.[0] || user?.email?.[0] || 'U'}
-            </div>
+        {/* User Info */}
+        <div className="left-nav-user">
+          <div className="user-avatar-large">
+            {user?.full_name?.[0] || user?.email?.[0] || 'U'}
+          </div>
+          {!navCollapsed && (
             <div className="user-details">
               <div className="user-name">{user?.full_name || 'User'}</div>
               <div className="user-email">{user?.email}</div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* Navigation Items */}
+        <nav className="left-nav-items">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            const locked = item.requiredPlan ? (!isPrivileged() && !canAccess(userPlan, item.requiredPlan)) : false;
+            return (
+              <button
+                key={item.path}
+                className={`nav-item ${isActive ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                onClick={() => !locked && handleNavClick(item.path)}
+                title={navCollapsed ? item.label : undefined}
+              >
+                <Icon size={20} />
+                {!navCollapsed && <span>{item.label}</span>}
+                {locked && !navCollapsed && <Lock size={14} className="lock-icon" />}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Referral Link */}
+        <button className="nav-item referral-item" onClick={() => handleNavClick('/referral')}>
+          <Gift size={20} />
+          {!navCollapsed && <span>Invite Friends</span>}
+        </button>
+
+        {/* Footer Actions */}
+        <div className="left-nav-footer">
+          <button 
+            className="nav-item" 
+            onClick={() => setDisguiseMode(!disguiseMode)}
+            title={navCollapsed ? (disguiseMode ? 'Show App' : 'Hide App') : undefined}
+          >
+            {disguiseMode ? <Eye size={20} /> : <EyeOff size={20} />}
+            {!navCollapsed && <span>{disguiseMode ? 'Show' : 'Hide'}</span>}
+          </button>
+          
+          <button className="nav-item logout-item" onClick={handleLogout}>
+            <LogOut size={20} />
+            {!navCollapsed && <span>Logout</span>}
+          </button>
         </div>
       </aside>
 
-      <div className={`sidebar-backdrop ${isSidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)} />
+      {/* Mobile Overlay */}
+      {isMobileLayout && mobileMenuOpen && (
+        <div className="mobile-nav-overlay" onClick={() => setMobileMenuOpen(false)} />
+      )}
 
+      {/* Main Content */}
       <main className="main-content">
-        <header className="mobile-topbar">
-          <button className="mobile-menu-btn" type="button" onClick={() => setSidebarOpen(!isSidebarOpen)} aria-label="Toggle navigation">
-            <span />
-            <span />
-            <span />
-          </button>
-          <div className="mobile-brand">
-            <img src="/mightysky-logo.svg" alt="Mightysky" />
-            <div>
-              <div className="brand-title">{disguiseMode ? 'Productivity' : 'Mightysky'}</div>
-              <div className="brand-sub">Dashboard</div>
-            </div>
-          </div>
-          <div className="mobile-actions">
-            <button className="icon-btn" type="button" onClick={toggleDesktopOverride} aria-label={forceDesktop ? 'Switch to mobile view' : 'Switch to desktop view'}>
-              {forceDesktop ? <Smartphone size={18} /> : <Monitor size={18} />}
-            </button>
-            <button className="icon-btn" type="button" onClick={() => setDisguiseMode(!disguiseMode)} aria-label="Toggle disguise mode">
-              {disguiseMode ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-            <button className="icon-btn" type="button" onClick={handleLogout} aria-label="Logout">
-              <LogOut size={18} />
-            </button>
-          </div>
-        </header>
         <Outlet />
       </main>
-
-      {/* Mobile Bottom Navigation */}
-      {isMobileLayout && (
-        <nav className="mobile-bottom-nav">
-          <div className="mobile-bottom-nav-inner">
-            {navItems.slice(0, 5).map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <button
-                  key={`bottom-nav-${item.path}`}
-                  className={`mobile-bottom-item ${isActive ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => handleNavClick(item.path)}
-                >
-                  <Icon size={22} />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      )}
     </div>
   );
 }

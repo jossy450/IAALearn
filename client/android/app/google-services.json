@@ -1,26 +1,36 @@
 {
   "project_info": {
-    "project_number": "0",
-    "project_id": "test-project",
-    "storage_bucket": "test-project.appspot.com"
+    "project_number": "859557481151",
+    "project_id": "iaalearn",
+    "storage_bucket": "iaalearn.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:0:android:0",
+        "mobilesdk_app_id": "1:859557481151:android:b7779cf6287d2aea3bd40a",
         "android_client_info": {
-          "package_name": "com.interviewassistant.app"
+          "package_name": "com.iaalearn.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "859557481151-cdno2ivnlr7trpn61vpndubstl2mfnr3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "test_key"
+          "current_key": "AIzaSyDNgL4cQq7Rzq2Kr1bpUkvq264zEoQI1GQ"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "859557481151-cdno2ivnlr7trpn61vpndubstl2mfnr3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

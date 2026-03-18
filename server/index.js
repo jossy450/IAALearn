@@ -110,6 +110,7 @@ const allowedOrigins = [
   'http://127.0.0.1:3001',
   'https://iaalearn-cloud.fly.dev',
   'https://iaalearn-1.fly.dev',
+  'https://www.interviewassistant.app',
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',

@@ -1,67 +1,68 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
-const { getSubscriptionStatus, startTrial, createSubscription, cancelSubscription } = require('../services/subscriptions');
+const { getSubscriptionStatus, startTrial, createSubscription, cancelSubscription, upsertActiveSubscription } = require('../services/subscriptions');
 const { createCheckoutSession, retrieveCheckoutSession, constructWebhookEvent } = require('../services/stripe');
 const db = require('../database/connection');
 
 // ── Plan limits (mirrors client/src/store/subscriptionStore.js) ───────────────
 const PLAN_LIMITS = {
-  trial:      { maxDocUploadsPerSession: 3, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: false, mobileApp: false, teamCollaboration: false, apiAccess: false },
-  basic:      { maxDocUploadsPerSession: 3, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: true,  mobileApp: true,  teamCollaboration: false, apiAccess: false },
-  pro:        { maxDocUploadsPerSession: Infinity, unlimitedDocUploads: true, advancedAnalytics: true, sessionRecording: true, customAI: true, sessionExport: true, stealthMode: true, mobileApp: true, teamCollaboration: false, apiAccess: false },
-  enterprise: { maxDocUploadsPerSession: Infinity, unlimitedDocUploads: true, advancedAnalytics: true, sessionRecording: true, customAI: true, sessionExport: true, stealthMode: true, mobileApp: true, teamCollaboration: true,  apiAccess: true  },
+  free:      { maxDocUploadsPerSession: 3, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: true, stealthModeLimit: 3, mobileApp: false, teamCollaboration: false, apiAccess: false },
+  plus:      { maxDocUploadsPerSession: 10, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: true, stealthModeLimit: Infinity, mobileApp: true, teamCollaboration: false, apiAccess: false },
+  pro:        { maxDocUploadsPerSession: Infinity, unlimitedDocUploads: true, advancedAnalytics: true, sessionRecording: true, customAI: true, sessionExport: true, stealthMode: true, stealthModeLimit: Infinity, mobileApp: true, teamCollaboration: false, apiAccess: false },
+  enterprise: { maxDocUploadsPerSession: Infinity, unlimitedDocUploads: true, advancedAnalytics: true, sessionRecording: true, customAI: true, sessionExport: true, stealthMode: true, stealthModeLimit: Infinity, mobileApp: true, teamCollaboration: true,  apiAccess: true  },
 };
 
 // Get available subscription plans
 router.get('/plans', authenticate, async (req, res) => {
   const plans = [
     {
-      id: 'trial',
-      name: 'Free Trial',
-      description: 'Try all features for 7 days',
+      id: 'free',
+      name: 'Free',
+      description: 'Perfect for trying out the basics',
       monthlyPrice: 0,
       annualPrice: 0,
       currency: '£',
-      duration: '7 days',
+      duration: 'forever',
       features: [
         'Unlimited AI interview sessions',
-        'Priority AI responses',
-        'Email support',
+        '3 stealth mode sessions/month',
+        'Basic practice questions',
         '3 document uploads per session',
       ],
-      trial: true,
-      limits: PLAN_LIMITS.trial,
+      popular: false,
+      limits: PLAN_LIMITS.free,
     },
     {
-      id: 'basic',
-      name: 'Essentials',
-      description: 'Perfect for individual job seekers',
-      monthlyPrice: 9.99,
-      annualPrice: 99,
+      id: 'plus',
+      name: 'Plus',
+      description: 'Everything you need for your job search',
+      monthlyPrice: 7.99,
+      annualPrice: 79.99,
       currency: '£',
       duration: 'month',
       features: [
         'Unlimited AI interview sessions',
+        'Unlimited stealth mode access',
+        'Mobile app access',
         'Priority AI responses',
         'Email support',
-        '3 document uploads per session',
-        'Stealth mode access',
-        'Mobile app access',
+        '10 document uploads per session',
+        'Pay-per-interview available',
       ],
-      popular: false,
-      limits: PLAN_LIMITS.basic,
+      popular: true,
+      limits: PLAN_LIMITS.plus,
     },
     {
       id: 'pro',
       name: 'Professional',
       description: 'For serious job seekers',
-      monthlyPrice: 19.99,
-      annualPrice: 199,
+      monthlyPrice: 14.99,
+      annualPrice: 149.99,
       currency: '£',
       duration: 'month',
       features: [
-        'Everything in Essentials',
+        'Everything in Plus',
         'Unlimited document uploads',
         'Advanced analytics',
         'Session recording & playback',
@@ -69,15 +70,15 @@ router.get('/plans', authenticate, async (req, res) => {
         'Session history export',
         'Priority support',
       ],
-      popular: true,
+      popular: false,
       limits: PLAN_LIMITS.pro,
     },
     {
       id: 'enterprise',
       name: 'Enterprise',
       description: 'For teams and organisations',
-      monthlyPrice: 49.99,
-      annualPrice: 499,
+      monthlyPrice: 39.99,
+      annualPrice: 399.99,
       currency: '£',
       duration: 'month',
       features: [
@@ -99,17 +100,19 @@ router.get('/plans', authenticate, async (req, res) => {
 // GET /api/subscriptions/limits — returns feature limits for the current user's plan
 router.get('/limits', authenticate, async (req, res) => {
   try {
-    let plan = 'trial';
+    let plan = 'free';
     if (process.env.DEMO_MODE !== 'true') {
       const result = await db.query(
-        `SELECT plan FROM subscriptions WHERE user_id = $1 AND status IN ('active','trial') ORDER BY start_date DESC LIMIT 1`,
+        `SELECT plan FROM subscriptions 
+         WHERE user_id = $1 AND status = 'active' AND end_date > NOW()
+         ORDER BY end_date DESC LIMIT 1`,
         [req.user.id]
       );
       if (result.rows.length > 0) plan = result.rows[0].plan;
     }
-    res.json({ plan, limits: PLAN_LIMITS[plan] || PLAN_LIMITS.trial });
+    res.json({ plan, limits: PLAN_LIMITS[plan] || PLAN_LIMITS.free });
   } catch (err) {
-    res.json({ plan: 'trial', limits: PLAN_LIMITS.trial });
+    res.json({ plan: 'free', limits: PLAN_LIMITS.free });
   }
 });
 
@@ -189,6 +192,7 @@ router.post('/stripe/confirm-payment', authenticate, async (req, res) => {
   }
   try {
     const { retrievePaymentIntent } = require('../services/stripe');
+    const { upsertActiveSubscription } = require('../services/subscriptions');
     const intent = await retrievePaymentIntent(paymentIntentId);
     if (intent.status !== 'succeeded') {
       return res.status(400).json({ error: `Payment not succeeded. Status: ${intent.status}` });
@@ -196,11 +200,13 @@ router.post('/stripe/confirm-payment', authenticate, async (req, res) => {
     if (process.env.DEMO_MODE !== 'true') {
       const now = new Date();
       const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      await db.query(
-        `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
-         VALUES ($1, $2, 'active', $3, $4, 'stripe', false)`,
-        [req.user.id, plan, now, endDate]
-      ).catch(e => console.warn('confirm-payment insert warning:', e.message));
+      await upsertActiveSubscription({
+        userId: req.user.id,
+        plan,
+        startDate: now,
+        endDate,
+        paymentMethod: 'stripe',
+      }).catch(e => console.warn('confirm-payment upsert warning:', e.message));
     }
     res.json({ success: true, plan, message: 'Subscription activated!' });
   } catch (err) {
@@ -217,9 +223,9 @@ router.post('/stripe/confirm-payment', authenticate, async (req, res) => {
  */
 router.post('/stripe/create-checkout-session', authenticate, async (req, res) => {
   const { plan } = req.body;
-  const validPlans = ['basic', 'pro', 'enterprise'];
+  const validPlans = ['plus', 'pro', 'enterprise'];
   if (!validPlans.includes(plan)) {
-    return res.status(400).json({ error: 'Invalid plan. Must be basic, pro, or enterprise.' });
+    return res.status(400).json({ error: 'Invalid plan. Must be plus, pro, or enterprise.' });
   }
 
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -260,24 +266,18 @@ router.get('/stripe/session-status', authenticate, async (req, res) => {
     const paid = session.payment_status === 'paid' || session.status === 'complete';
 
     if (paid && process.env.DEMO_MODE !== 'true') {
-      const plan = session.metadata?.plan || 'basic';
+      const plan = session.metadata?.plan || 'plus';
       const now = new Date();
       const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
       // Upsert subscription — avoid duplicate if webhook already handled it
-      await db.query(
-        `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
-         VALUES ($1, $2, 'active', $3, $4, 'stripe', false)
-         ON CONFLICT DO NOTHING`,
-        [req.user.id, plan, now, endDate]
-      ).catch(() => {
-        // If ON CONFLICT not supported, just insert (idempotent enough for our use)
-        return db.query(
-          `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
-           VALUES ($1, $2, 'active', $3, $4, 'stripe', false)`,
-          [req.user.id, plan, now, endDate]
-        );
-      });
+      await upsertActiveSubscription({
+        userId: req.user.id,
+        plan,
+        startDate: now,
+        endDate,
+        paymentMethod: 'stripe',
+      }).catch(e => console.warn('session-status upsert warning:', e.message));
     }
 
     res.json({
@@ -315,15 +315,17 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
       const paid = session.payment_status === 'paid';
       if (paid && process.env.DEMO_MODE !== 'true') {
         const userId = session.metadata?.userId;
-        const plan   = session.metadata?.plan || 'basic';
+        const plan   = session.metadata?.plan || 'plus';
         if (userId) {
           const now = new Date();
           const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-          await db.query(
-            `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
-             VALUES ($1, $2, 'active', $3, $4, 'stripe', false)`,
-            [userId, plan, now, endDate]
-          ).catch(e => console.warn('Webhook subscription insert warning:', e.message));
+          await upsertActiveSubscription({
+            userId,
+            plan,
+            startDate: now,
+            endDate,
+            paymentMethod: 'stripe',
+          }).catch(e => console.warn('Webhook subscription insert warning:', e.message));
         }
       }
     }
@@ -346,6 +348,72 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
   }
 
   res.json({ received: true });
+});
+
+// Pay-per-interview: purchase single interview credits
+router.post('/pay-per-interview/create-payment-intent', authenticate, async (req, res) => {
+  const { credits = 1 } = req.body;
+  const CREDIT_PRICE = 99; // pence = £0.99
+  
+  try {
+    const { createPaymentIntent } = require('../services/stripe');
+    const intent = await createPaymentIntent({
+      amount: CREDIT_PRICE * credits,
+      currency: 'gbp',
+      metadata: { userId: String(req.user.id), credits: String(credits), type: 'pay_per_interview' },
+      description: `${credits} interview credit${credits > 1 ? 's' : ''}`,
+    });
+    res.json({ clientSecret: intent.client_secret, amount: CREDIT_PRICE * credits, credits });
+  } catch (err) {
+    console.error('pay-per-interview error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to create payment intent.' });
+  }
+});
+
+// Confirm pay-per-interview payment
+router.post('/pay-per-interview/confirm', authenticate, async (req, res) => {
+  const { paymentIntentId, credits = 1 } = req.body;
+  
+  try {
+    const { retrievePaymentIntent } = require('../services/stripe');
+    const intent = await retrievePaymentIntent(paymentIntentId);
+    
+    if (intent.status !== 'succeeded') {
+      return res.status(400).json({ error: 'Payment not succeeded.' });
+    }
+    
+    if (process.env.DEMO_MODE !== 'true') {
+      // Add interview credits to user's account
+      await db.query(
+        `INSERT INTO interview_credits (user_id, credits, purchased_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id) 
+         DO UPDATE SET credits = interview_credits.credits + $2, purchased_at = NOW()`,
+        [req.user.id, credits]
+      ).catch(e => console.warn('interview credits insert warning:', e.message));
+    }
+    
+    res.json({ success: true, credits });
+  } catch (err) {
+    console.error('pay-per-interview confirm error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to confirm payment.' });
+  }
+});
+
+// Get user's interview credits
+router.get('/credits', authenticate, async (req, res) => {
+  if (process.env.DEMO_MODE === 'true') {
+    return res.json({ credits: 0 });
+  }
+  try {
+    const result = await db.query(
+      'SELECT credits FROM interview_credits WHERE user_id = $1',
+      [req.user.id]
+    );
+    res.json({ credits: result.rows[0]?.credits || 0 });
+  } catch (err) {
+    res.json({ credits: 0 });
+  }
 });
 
 module.exports = router;

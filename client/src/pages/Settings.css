@@ -10,8 +10,12 @@
 .settings-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: var(--gray-900);
+  color: #ffffff;
   margin-bottom: 0.25rem;
+}
+
+.settings-header .subtitle {
+  color: #e5e5e5;
 }
 
 .card-header {
@@ -19,12 +23,21 @@
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
-  color: var(--gray-900);
+  color: #ffffff;
 }
 
 .card-header h2 {
   font-size: 1.25rem;
   font-weight: 600;
+  color: #000000;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .settings-section {
@@ -39,7 +52,7 @@
   align-items: center;
   gap: 1rem;
   padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--gray-200);
+  border-bottom: 1px solid #e5e5e5;
 }
 
 .setting-item:last-child {
@@ -56,13 +69,13 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: var(--gray-900);
+  color: #000000;
   margin-bottom: 0.25rem;
 }
 
 .setting-description {
   font-size: 0.875rem;
-  color: var(--gray-600);
+  color: #555555;
   margin-top: 0.25rem;
 }
 
@@ -115,7 +128,7 @@
 .settings-actions {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
-  border-top: 1px solid var(--gray-200);
+  border-top: 1px solid #e5e5e5;
   display: flex;
   justify-content: flex-end;
 }
@@ -183,7 +196,7 @@
 .upload-content h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--gray-900);
+  color: #000000;
   margin-bottom: 0.25rem;
 }
 

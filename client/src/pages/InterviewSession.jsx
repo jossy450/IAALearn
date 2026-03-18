@@ -4,14 +4,21 @@ import { Mic, MicOff, Copy, QrCode, MonitorUp, Loader, Square } from 'lucide-rea
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 import { sessionAPI, transcriptionAPI, getApiRoot } from '../services/api';
 import { startNativeRecording, stopNativeRecording } from '../services/nativeAudioRecorder';
 import QRTransferModal from '../components/QRTransferModal';
 import FloatingAnswer from '../components/FloatingAnswer';
 import ScreenShareDetector from '../components/ScreenShareDetector';
 import useStealthStore from '../store/stealthStore';
+import { trackSessionStart, trackEvent } from '../services/firebaseAnalytics';
 import './InterviewSession.css';
+
+let SpeechRecognition = null;
+if (typeof window !== 'undefined') {
+  import('@capacitor-community/speech-recognition').then(module => {
+    SpeechRecognition = module;
+  }).catch(() => {});
+}
 
 function InterviewSession() {
   const { id } = useParams();
@@ -470,6 +477,7 @@ function InterviewSession() {
       const response = await sessionAPI.getOne(id);
       setSession(response.data.session);
       setSessionQuestions(response.data.session.questions || []);
+      trackSessionStart(response.data.session.type || 'practice');
     } catch (error) {
       console.error('Failed to load session:', error);
       alert('Session not found');
@@ -496,6 +504,8 @@ function InterviewSession() {
       console.log('🎤 Starting recording...');
       console.log('Platform:', Capacitor.getPlatform());
       console.log('Is native platform:', Capacitor.isNativePlatform());
+      
+      trackEvent('recording_start', { session_id: id, platform: Capacitor.getPlatform() });
       
       const isAndroid = Capacitor.getPlatform() === 'android' || /android/i.test(navigator.userAgent);
       const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

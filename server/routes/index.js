@@ -17,6 +17,8 @@ const pushRoutes = require('./push');
 const subscriptionsRoutes = require('./subscriptions');
 const diagnosticsRoutes = require('./diagnostics');
 const feedbackRoutes = require('./feedback');
+const mockInterviewRoutes = require('./mockInterview');
+const referralRoutes = require('./referral');
 
 const router = express.Router();
 
@@ -40,6 +42,8 @@ router.use('/push', pushRoutes); // Push notifications
 router.use('/subscriptions', subscriptionsRoutes); // Subscription management endpoints
 router.use('/diagnostics', diagnosticsRoutes);
 router.use('/feedback', feedbackRoutes); // Feedback submission and management
+router.use('/mock-interview', mockInterviewRoutes); // Virtual mock interview with AI interviewer
+router.use('/referral', referralRoutes); // Referral system
 
 // API info endpoint
 router.get('/', (req, res) => {

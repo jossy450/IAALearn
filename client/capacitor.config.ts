@@ -1,20 +1,17 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.interviewassistant.app',
-  appName: 'Interview Assistant',
+  appId: 'com.iaalearn.app',
+  appName: 'IAALearn',
   webDir: 'dist',
   server: {
-    // Load bundled web assets from the app itself.
-    // For API calls, the React app should use an explicit base URL
-    // (e.g. http://10.152.201.17:3001) instead of relying on this.
     androidScheme: 'https',
     iosScheme: 'capacitor',
   },
   android: {
     buildOptions: {
       keystorePath: 'release.keystore',
-      keystoreAlias: 'interview-assistant-key'
+      keystoreAlias: 'iaalearn-key'
     },
     backgroundColor: '#3b82f6'
   },
@@ -23,6 +20,9 @@ const config: CapacitorConfig = {
     backgroundColor: '#3b82f6'
   },
   plugins: {
+    FirebaseAnalytics: {
+      enabled: true
+    },
     SplashScreen: {
       launchShowDuration: 2000,
       backgroundColor: '#3b82f6',

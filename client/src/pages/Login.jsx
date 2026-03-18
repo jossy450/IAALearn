@@ -6,6 +6,7 @@ import { Upload, FileText, Briefcase, X, Eye, EyeOff, Lock, Mail, AlertCircle, C
 import { supabase } from '../services/supabaseClient';
 import pushNotifications from '../services/pushNotifications';
 import axios from 'axios';
+import { trackLogin, trackButtonClick } from '../services/firebaseAnalytics';
 import './Auth.css';
 
 function Login() {
@@ -43,7 +44,10 @@ function Login() {
         if (supaError) throw supaError;
         // Exchange Supabase JWT for app JWT
         const ok = await exchangeSupabaseToken(data.session);
-        if (ok) navigate('/');
+        if (ok) {
+          trackLogin('email');
+          navigate('/');
+        }
       } catch (err) {
         setError(err.message || 'Supabase login failed');
       } finally {
@@ -55,11 +59,12 @@ function Login() {
     const handleGoogleLogin = async () => {
       setError('');
       setSocialLoading(true);
-          try {
-            // Always use server-driven OAuth initiation to keep Supabase configuration optional.
-            // The server will redirect to Google and return to /auth/callback with app token.
-            window.location.href = '/api/auth/google';
-            return;
+      trackButtonClick('google_login', 'login_page');
+      try {
+        // Always use server-driven OAuth initiation to keep Supabase configuration optional.
+        // The server will redirect to Google and return to /auth/callback with app token.
+        window.location.href = '/api/auth/google';
+        return;
       } catch (err) {
         setError(err.message || 'Google login failed');
       } finally {
@@ -84,7 +89,7 @@ function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { setAuth } = useAuthStore();
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ email: '', password: '', phone: '', deliveryMethod: 'email' });
   const [error, setError] = useState(() => {
     // Show OAuth error if redirected back from server with ?error=
     const oauthError = searchParams.get('error');
@@ -132,12 +137,20 @@ function Login() {
       setError('Please enter your email address');
       return;
     }
+    if ((formData.deliveryMethod === 'sms' || formData.deliveryMethod === 'whatsapp') && !formData.phone) {
+      setError('Please enter your phone number for SMS/WhatsApp delivery');
+      return;
+    }
     
     setError('');
     setOtpLoading(true);
 
     try {
-      const response = await authAPI.requestOtp({ email: formData.email });
+      const response = await authAPI.requestOtp({ 
+        email: formData.email,
+        deliveryMethod: formData.deliveryMethod,
+        phone: formData.phone
+      });
       
       setOtpSent(true);
       setResendTimer(60);
@@ -355,6 +368,36 @@ function Login() {
               disabled={otpSent}
             />
           </div>
+
+          {useOtp && (
+            <div className="form-group">
+              <label className="label">Delivery Method</label>
+              <div className="delivery-options" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {['email', 'sms', 'whatsapp'].map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, deliveryMethod: method })}
+                    className={`btn btn-outline btn-small ${formData.deliveryMethod === method ? 'active' : ''}`}
+                  >
+                    {method.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              {(formData.deliveryMethod === 'sms' || formData.deliveryMethod === 'whatsapp') && (
+                <input
+                  type="tel"
+                  className="input input-with-icon"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="Enter phone with country code (e.g., +14155552671)"
+                  required
+                  disabled={otpSent}
+                  style={{ marginTop: '8px' }}
+                />
+              )}
+            </div>
+          )}
 
           {!useOtp && (
             <div className="form-group">

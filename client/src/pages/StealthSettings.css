@@ -184,8 +184,8 @@
   padding: 0.85rem 1rem;
   border: 1px solid var(--border-weak);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
   font-size: 1rem;
   font-family: inherit;
   transition: all 0.2s ease;
@@ -200,8 +200,8 @@
 }
 
 .form-select option {
-  background: var(--bg-900);
-  color: var(--text-primary);
+  background: #ffffff;
+  color: #000000;
 }
 
 /* Feature Grid */

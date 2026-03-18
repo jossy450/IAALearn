@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import pushNotifications from '../services/pushNotifications';
 import { Capacitor } from '@capacitor/core';
+import { trackLogin } from '../services/firebaseAnalytics';
 
 // Add cache-busting to component
 const CACHE_BUSTER = Date.now();
@@ -68,6 +69,10 @@ function OAuthCallback() {
         // Store auth in state and localStorage
         setAuth(token, user);
         try { pushNotifications.flushPendingPushToken(); } catch (_) {}
+        
+        // Track successful login
+        const provider = searchParams.get('provider') || 'google';
+        trackLogin(provider);
         
         // Wait briefly for persist middleware to write, then route without hard reload
         const maxAttempts = 50; // 5 seconds max

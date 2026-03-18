@@ -10,7 +10,7 @@ import './Analytics.css';
 function Analytics() {
   const navigate = useNavigate();
   const { user, subscription } = useAuthStore();
-  const userPlan = subscription?.plan || subscription?.status || 'trial';
+  const userPlan = subscription?.plan || subscription?.status || 'free';
   
   // Check if user is privileged (owner/developer/admin emails) for bypassing plan gates
   const isPrivileged = () => {
@@ -39,6 +39,9 @@ function Analytics() {
   }, [period]);
 
   const loadAnalytics = async () => {
+    // Don't load if period is empty (placeholder selected)
+    if (!period) return;
+    
     setLoading(true);
     try {
       const [analyticsRes, cacheRes] = await Promise.all([
@@ -100,15 +103,17 @@ function Analytics() {
           <h1>Analytics</h1>
           <p className="subtitle">Track your interview performance</p>
         </div>
-        <select
-          className="input period-selector"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-        >
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </select>
+        <label className="period-label">Select period:
+          <select
+            className="input period-selector"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </label>
       </div>
 
       {/* Key Metrics */}

@@ -55,6 +55,20 @@ th /* Analytics Page Styles */
   background: #ffffff;
 }
 
+.period-selector option:disabled {
+  color: #999999;
+  font-style: italic;
+}
+
+.period-label {
+  color: #ffffff;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;

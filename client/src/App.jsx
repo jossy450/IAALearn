@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { canAccess } from './store/subscriptionStore';
 import Layout from './components/Layout';
 import api from './services/api';
 import { initializePushNotifications } from './services/pushNotifications';
+import { trackPageView, setUserId } from './services/firebaseAnalytics';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -28,6 +29,8 @@ import SubscriptionPage from './pages/SubscriptionPage';
 import CheckoutReturn from './pages/CheckoutReturn';
 import FAQ from './pages/FAQ';
 import Feedback from './pages/Feedback';
+import MockInterview from './pages/MockInterview';
+import Referral from './pages/Referral';
 
 // Wrapper component to check auth status
 function ProtectedRoute({ children }) {
@@ -65,7 +68,7 @@ const isPrivilegedUser = (user) => {
  */
 function PlanRoute({ children, requiredPlan }) {
   const { subscription, user } = useAuthStore();
-  const plan = subscription?.plan || subscription?.status || 'trial';
+  const plan = subscription?.plan || subscription?.status || 'free';
 
   // Allow privileged/owner/dev accounts to bypass plan gating
   if (isPrivilegedUser(user)) {
@@ -76,6 +79,24 @@ function PlanRoute({ children, requiredPlan }) {
     return <Navigate to="/subscription" replace state={{ requiredPlan }} />;
   }
   return children;
+}
+
+function PageViewTracker() {
+  const location = useLocation();
+  const { user } = useAuthStore();
+
+  useEffect(() => {
+    const pageName = location.pathname.split('/').filter(Boolean).pop() || 'home';
+    trackPageView(pageName, location.pathname);
+  }, [location]);
+
+  useEffect(() => {
+    if (user?.id) {
+      setUserId(String(user.id));
+    }
+  }, [user]);
+
+  return null;
 }
 
 function App() {
@@ -137,6 +158,7 @@ function App() {
   return (
     <Router>
       <StealthManager />
+      <PageViewTracker />
       <Routes>
         <Route path="/login" element={token ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={token ? <Navigate to="/" /> : <Register />} />
@@ -172,12 +194,12 @@ function App() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="stealth" element={
-            <PlanRoute requiredPlan="basic">
+            <PlanRoute requiredPlan="plus">
               <StealthSettings />
             </PlanRoute>
           } />
           <Route path="mobile" element={
-            <PlanRoute requiredPlan="basic">
+            <PlanRoute requiredPlan="plus">
               <Mobile />
             </PlanRoute>
           } />
@@ -185,6 +207,8 @@ function App() {
           <Route path="faq" element={<FAQ />} />
           <Route path="feedback" element={<Feedback />} />
           <Route path="admin/users" element={<UserManagement />} />
+          <Route path="mock-interview" element={<MockInterview />} />
+          <Route path="referral" element={<Referral />} />
         </Route>
       </Routes>
     </Router>

@@ -7,7 +7,7 @@ import { getDeviceId } from "./deviceId";
 // - Native (Android/iOS) needs an absolute host because there is no same-origin /api.
 const rawBaseEnv = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
 const isNative = (Capacitor.isNativePlatform?.() ?? false) || Capacitor.getPlatform() !== "web";
-const fallbackBase = "https://iaalearn-cloud.fly.dev";
+const fallbackBase = "https://iaalearn-1.fly.dev";
 
 export const getApiRoot = () => (isNative ? (rawBaseEnv || fallbackBase) : "");
 

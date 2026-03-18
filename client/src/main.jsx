@@ -2,30 +2,47 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import capacitorService from './services/capacitor';
 
-// Global error logging - attach after DOM ready to avoid initialization issues
-if (typeof window !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', () => {
-    window.addEventListener('error', (event) => {
-      // eslint-disable-next-line no-console
-      console.error('GlobalError', event.error?.message || event.message || event);
-    });
-    window.addEventListener('unhandledrejection', (event) => {
-      // eslint-disable-next-line no-console
-      console.error('UnhandledRejection', event.reason?.message || event.reason || event);
-    });
-  });
+// Global error handling - prevent crashes
+window.onerror = function(msg, url, line, col, error) {
+  console.log('Error:', msg, 'at line:', line);
+  return true;
+};
+
+window.onunhandledrejection = function(event) {
+  console.log('Unhandled rejection:', event.reason);
+  event.preventDefault();
+};
+
+// Initialize plugins with error handling
+setTimeout(() => {
+  // Initialize Capacitor plugins (non-blocking)
+  import('./services/capacitor').then(({ default: capacitorService }) => {
+    capacitorService.initialize().catch(() => {});
+  }).catch(() => {});
+  
+  // Initialize Firebase Analytics (non-blocking)
+  import('./services/firebaseAnalytics').then(({ initializeAnalytics, trackSession }) => {
+    initializeAnalytics().then(() => {
+      trackSession();
+    }).catch(() => {});
+  }).catch(() => {});
+  
+  // Initialize Push Notifications (non-blocking)
+  import('./services/pushNotifications').then(({ initializePushNotifications }) => {
+    initializePushNotifications().catch(() => {});
+  }).catch(() => {});
+}, 100);
+
+// Render app
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+} catch(e) {
+  console.error('Render error:', e);
+  document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;"><h1>IAALearn</h1><p>Loading...</p></div>';
 }
-
-// Initialize Capacitor (non-blocking)
-capacitorService.initialize().catch((err) => {
-  console.warn('Capacitor initialization skipped or failed:', err);
-});
-
-// Render immediately, don't wait for Capacitor
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);

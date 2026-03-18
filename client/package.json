@@ -1,6 +1,6 @@
 {
-  "name": "interview-assistant-client",
-  "version": "2.7.0",
+  "name": "iaalearn-app",
+  "version": "2.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "capacitor:sync": "npx cap sync"
   },
   "dependencies": {
+    "@capacitor-community/firebase-analytics": "^5.0.0",
     "@capacitor-community/speech-recognition": "^5.1.0",
     "@capacitor/android": "^5.6.0",
     "@capacitor/app": "^5.0.6",
@@ -36,6 +37,7 @@
     "@supabase/supabase-js": "^2.39.7",
     "axios": "^1.6.5",
     "date-fns": "^3.3.1",
+    "firebase": "^12.10.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^2.5.2",
     "lucide-react": "^0.312.0",
@@ -55,6 +57,8 @@
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "vite": "^5.4.11",
     "vite-plugin-pwa": "^0.17.5"

@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import pushNotifications from '../services/pushNotifications';
 import { authAPI } from '../services/api';
 import { Eye, EyeOff, User, Mail, Lock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { trackSignup, trackButtonClick } from '../services/firebaseAnalytics';
 import './Auth.css';
 
 function Register() {
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
     fullName: ''
   });
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -45,6 +48,14 @@ function Register() {
     setPasswordStrength({ score, checks });
   }, [formData.password]);
 
+  // Get referral code from URL
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      setReferralCode(ref);
+    }
+  }, [searchParams]);
+
   const getStrengthLabel = (score) => {
     if (score === 0) return { text: '', color: '' };
     if (score <= 2) return { text: 'Weak', color: 'strength-weak' };
@@ -73,10 +84,14 @@ function Register() {
 
     try {
       const { confirmPassword, ...registrationData } = formData;
+      if (referralCode) {
+        registrationData.referralCode = referralCode;
+      }
       const response = await authAPI.register(registrationData);
       const { token, user } = response.data;
       setAuth(token, user);
       try { pushNotifications.flushPendingPushToken(); } catch (_) {}
+      trackSignup('email');
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed. Please try again.');

@@ -1,0 +1,1 @@
+-- Removed per-user index to avoid confusion (we use per-plan uniqueness instead, already applied on Supabase).

@@ -1,5 +1,25 @@
 const db = require('../database/connection');
 
+// Helper: upsert an active subscription window idempotently
+async function upsertActiveSubscription({ userId, plan, startDate, endDate, paymentMethod }) {
+  // First, deactivate any existing active subscriptions for this user
+  await db.query(
+    `UPDATE subscriptions SET status = 'inactive', updated_at = NOW() 
+     WHERE user_id = $1 AND status = 'active'`,
+    [userId]
+  );
+  
+  // Insert new subscription as active
+  await db.query(
+    `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
+     VALUES ($1, $2, 'active', $3, $4, $5, false)`,
+    [userId, plan, startDate, endDate, paymentMethod]
+  );
+
+  // Update users table subscription_status
+  await db.query(`UPDATE users SET subscription_status = 'active' WHERE id = $1`, [userId]).catch(() => {});
+}
+
 // Get subscription status for user
 async function getSubscriptionStatus(req, res) {
   const userId = req.user.id;
@@ -10,7 +30,9 @@ async function getSubscriptionStatus(req, res) {
   }
   try {
     const result = await db.query(
-      'SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY end_date DESC LIMIT 1',
+      `SELECT * FROM subscriptions 
+       WHERE user_id = $1 AND status = 'active' AND end_date > NOW()
+       ORDER BY end_date DESC LIMIT 1`,
       [userId]
     );
     res.json(result.rows[0] || null);
@@ -77,15 +99,15 @@ async function createSubscription(req, res) {
     if (!paymentVerified) {
       return res.status(400).json({ error: 'Payment not verified.' });
     }
-    if (process.env.DEMO_MODE === 'true') {
-      // Skip persisting payments in demo mode.
-      return res.json({ success: true, subscriptionEnds: endDate });
-    }
-    await db.query(
-      `INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method, trial_used)
-       VALUES ($1, $2, 'active', $3, $4, $5, false)`,
-      [userId, plan, now, endDate, payment_method]
-    );
+
+    // Idempotent upsert to avoid duplicate rows on retries/webhooks
+    await upsertActiveSubscription({
+      userId,
+      plan,
+      startDate: now,
+      endDate,
+      paymentMethod: payment_method,
+    });
     res.json({ success: true, subscriptionEnds: endDate });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create subscription.' });
