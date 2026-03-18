@@ -453,6 +453,7 @@ const sendSmsOtp = async (to, code, channel = 'sms') => {
   // Try Ycloud
   if (ycloudEnabled) {
     try {
+      console.log(`[Ycloud] Sending to ${normalizedPhone} with sender ${process.env.YCLOUD_SENDER_ID}`);
       const ycloudResponse = await fetch('https://api.ycloud.com/v2/sms', {
         method: 'POST',
         headers: {
@@ -461,7 +462,7 @@ const sendSmsOtp = async (to, code, channel = 'sms') => {
         },
         body: JSON.stringify({
           sender_id: process.env.YCLOUD_SENDER_ID,
-          recipient: normalizedPhone,
+          to: normalizedPhone,
           message: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`
         })
       });
@@ -471,8 +472,10 @@ const sendSmsOtp = async (to, code, channel = 'sms') => {
         return { provider: 'ycloud', success: true };
       }
       const errData = await ycloudResponse.text();
+      console.log(`[Ycloud] Error response: ${errData}`);
       errors.push(`Ycloud: ${ycloudResponse.status} - ${errData}`);
     } catch (err) {
+      console.log(`[Ycloud] Exception: ${err.message}`);
       errors.push(`Ycloud: ${err.message}`);
     }
   }
