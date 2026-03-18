@@ -461,9 +461,9 @@ const sendSmsOtp = async (to, code, channel = 'sms') => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          sender_id: process.env.YCLOUD_SENDER_ID,
+          senderId: process.env.YCLOUD_SENDER_ID,
           to: normalizedPhone,
-          message: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`
+          text: `Your Mightysky verification code is ${code}. It expires in 10 minutes.`
         })
       });
       
