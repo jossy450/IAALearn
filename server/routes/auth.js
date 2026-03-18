@@ -735,12 +735,15 @@ router.post('/request-otp', async (req, res, next) => {
 
     // Dispatch OTP
     let smsResult = null;
+    console.log(`[OTP] Sending via ${method} - SMTP enabled: ${smtpEnabled}, Primary provider: ${primaryProvider}`);
     try {
       if (method === 'email') {
         if (!smtpEnabled) {
-          console.warn('SMTP not configured; OTP will not be emailed. Falling back to response display in dev.');
+          console.warn('SMTP not configured; OTP will not be emailed.');
         } else {
+          console.log(`[OTP] Attempting to send email to ${normalizedEmail}`);
           await sendEmailOtp(normalizedEmail, otpCode);
+          console.log(`[OTP] Email sent successfully to ${normalizedEmail}`);
         }
       } else if (method === 'sms' || method === 'whatsapp') {
         // Check if any SMS provider is configured
@@ -748,11 +751,14 @@ router.post('/request-otp', async (req, res, next) => {
           console.warn('No SMS provider configured; OTP shown in response (DEMO MODE).');
           console.log(`📱 [DEMO] ${method.toUpperCase()} OTP for ${phone}: ${otpCode}`);
         } else {
+          console.log(`[OTP] Attempting to send SMS via ${primaryProvider} to ${phone}`);
           smsResult = await sendSmsOtp(phone, otpCode, method === 'whatsapp' ? 'whatsapp' : 'sms');
+          console.log(`[OTP] SMS sent successfully via ${primaryProvider}`);
         }
       }
     } catch (sendErr) {
-      console.error('Failed to send OTP:', sendErr.message || sendErr);
+      console.error('[OTP] Failed to send OTP:', sendErr.message || sendErr);
+      console.error('[OTP] Stack:', sendErr.stack);
       return res.status(500).json({ error: 'Failed to send verification code' });
     }
 
