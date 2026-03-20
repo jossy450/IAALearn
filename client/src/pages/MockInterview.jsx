@@ -346,6 +346,8 @@ function MockInterview() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedback, setFeedback] = useState([]);
   const [overallScore, setOverallScore] = useState(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [demoAnswers, setDemoAnswers] = useState([]);
   
   const completeInterview = async () => {
     try {
@@ -370,6 +372,100 @@ function MockInterview() {
     setUserAnswer('');
     setAnswerSuggestion(null);
     setShowFeedback(false);
+    setIsDemoMode(false);
+    setDemoAnswers([]);
+  };
+
+  const startDemoInterview = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.post('/mock-interview/demo/session', { persona });
+      setSession(res.data);
+      setIsDemoMode(true);
+      setDemoAnswers([]);
+      setQuestionNumber(1);
+      setShowSetup(false);
+      setUserAnswer('');
+      
+      const qRes = await api.get(`/mock-interview/demo/question?persona=${persona}&questionNumber=1`);
+      setCurrentQuestion(qRes.data.question);
+      setTotalQuestions(qRes.data.totalQuestions || 5);
+    } catch (error) {
+      console.error('Failed to start demo:', error);
+      alert('Failed to start demo. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getDemoSuggestion = async () => {
+    if (!currentQuestion) return;
+    setIsLoading(true);
+    try {
+      const res = await api.post('/mock-interview/demo/suggest-answer', {
+        question: currentQuestion,
+        persona
+      });
+      setAnswerSuggestion(res.data.suggestion);
+      setShowSuggestion(true);
+    } catch (error) {
+      console.error('Failed to get suggestion:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitDemoAnswer = async () => {
+    if (!userAnswer.trim()) {
+      alert('Please provide an answer');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const res = await api.post('/mock-interview/demo/assess-answer', {
+        question: currentQuestion,
+        answer: userAnswer,
+        persona
+      });
+      
+      const assessment = res.data;
+      const newAnswer = {
+        question: currentQuestion,
+        answer: userAnswer,
+        assessment
+      };
+      
+      setDemoAnswers(prev => [...prev, newAnswer]);
+      setAnswerAssessments(prev => ({ ...prev, [questionNumber]: assessment }));
+      setLatestAssessment({ questionNumber, assessment });
+      
+      if (questionNumber >= totalQuestions) {
+        const completeRes = await api.post('/mock-interview/demo/complete', {
+          answers: [...demoAnswers, newAnswer].map(a => ({
+            question: a.question,
+            answer: a.answer
+          })),
+          persona
+        });
+        setFeedback(completeRes.data.feedback || []);
+        setOverallScore(completeRes.data.overallScore);
+        setShowFeedback(true);
+      } else {
+        const nextNum = questionNumber + 1;
+        setQuestionNumber(nextNum);
+        
+        const qRes = await api.get(`/mock-interview/demo/question?persona=${persona}&questionNumber=${nextNum}`);
+        setCurrentQuestion(qRes.data.question);
+        setUserAnswer('');
+        setShowSuggestion(false);
+        setAnswerSuggestion(null);
+      }
+    } catch (error) {
+      console.error('Failed to submit demo answer:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const closeFeedback = () => {
@@ -418,6 +514,21 @@ function MockInterview() {
               Upgrade Now
             </button>
             <p className="muted">Includes Pro features: advanced analytics, unlimited docs, voice & avatar options.</p>
+            
+            <div className="demo-section">
+              <div className="demo-divider">
+                <span>OR</span>
+              </div>
+              <button 
+                className="demo-btn"
+                onClick={startDemoInterview}
+                disabled={isLoading}
+              >
+                <Play size={20} />
+                {isLoading ? 'Starting Demo...' : 'Try Demo (No Login Required)'}
+              </button>
+              <p className="demo-note">Try the mock interview without signing up. Your progress won't be saved.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -610,6 +721,13 @@ function MockInterview() {
   // Active interview
   return (
     <div className="mock-interview-container">
+      {isDemoMode && (
+        <div className="demo-banner">
+          <span>Demo Mode</span>
+          <span>Your progress won't be saved. <a href="/register">Sign up</a> to save your progress.</span>
+          <button onClick={endInterview}>Exit Demo</button>
+        </div>
+      )}
       <div className="mock-interview-active">
         <div className="interview-header">
           <div className="interviewer-info">
@@ -707,7 +825,7 @@ function MockInterview() {
           <div className="suggestion-section">
             <button 
               className="suggestion-btn"
-              onClick={getAnswerSuggestion}
+              onClick={isDemoMode ? getDemoSuggestion : getAnswerSuggestion}
               disabled={isLoading}
             >
               <Lightbulb size={20} />
@@ -748,7 +866,7 @@ function MockInterview() {
             
             <button 
               className="submit-btn"
-              onClick={submitAnswer}
+              onClick={isDemoMode ? submitDemoAnswer : submitAnswer}
               disabled={isLoading || !userAnswer.trim()}
             >
               {questionNumber >= totalQuestions ? 'Finish Interview' : 'Next Question'}
@@ -807,8 +925,16 @@ function MockInterview() {
             </div>
             
             <button className="close-feedback-btn" onClick={closeFeedback}>
-              Back to Dashboard
+              {isDemoMode ? 'Try Again' : 'Back to Dashboard'}
             </button>
+            {isDemoMode && (
+              <button 
+                className="signup-prompt-btn"
+                onClick={() => navigate('/register')}
+              >
+                Sign Up to Save Your Progress
+              </button>
+            )}
           </div>
         </div>
       )}

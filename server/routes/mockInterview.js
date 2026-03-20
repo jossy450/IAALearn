@@ -573,4 +573,119 @@ mockInterviewRouter.get('/personas', authenticate, async (req, res) => {
   res.json({ personas: INTERVIEW_PERSONAS });
 });
 
+// Demo mode: Get personas without authentication
+mockInterviewRouter.get('/demo/personas', (req, res) => {
+  res.json({ personas: INTERVIEW_PERSONAS });
+});
+
+// Demo mode: Start a demo interview without authentication
+mockInterviewRouter.post('/demo/session', async (req, res) => {
+  try {
+    const { persona = 'professional' } = req.body;
+    const personaConfig = INTERVIEW_PERSONAS[persona] || INTERVIEW_PERSONAS.professional;
+    
+    // Generate a unique demo session ID
+    const demoSessionId = `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    res.json({
+      sessionId: demoSessionId,
+      persona: personaConfig,
+      status: 'demo_in_progress',
+      questionNumber: 1,
+      greeting: personaConfig.greeting,
+      isDemo: true
+    });
+  } catch (error) {
+    console.error('Error starting demo interview:', error);
+    res.status(500).json({ error: 'Failed to start demo interview' });
+  }
+});
+
+// Demo mode: Get a question without authentication
+mockInterviewRouter.get('/demo/question', async (req, res) => {
+  try {
+    const { persona = 'professional', questionNumber = 1 } = req.query;
+    const num = clampQuestionNumber(questionNumber);
+    const question = await generateInterviewQuestion(null, persona, num, { name: 'Demo User' });
+
+    res.json({
+      question,
+      questionNumber: num,
+      totalQuestions: TOTAL_QUESTIONS,
+      isDemo: true
+    });
+  } catch (error) {
+    console.error('Error getting demo question:', error);
+    res.status(500).json({ error: 'Failed to get question' });
+  }
+});
+
+// Demo mode: Get AI answer suggestion without authentication
+mockInterviewRouter.post('/demo/suggest-answer', async (req, res) => {
+  try {
+    const { question, persona = 'professional' } = req.body;
+    const suggestion = await generateAnswerSuggestion(question, persona, { name: 'Demo User' });
+
+    res.json({ suggestion, isDemo: true });
+  } catch (error) {
+    console.error('Error generating demo suggestion:', error);
+    res.status(500).json({ error: 'Failed to generate suggestion' });
+  }
+});
+
+// Demo mode: Assess answer without authentication
+mockInterviewRouter.post('/demo/assess-answer', async (req, res) => {
+  try {
+    const { question, answer, persona = 'professional' } = req.body;
+    const assessment = await assessAnswer(question || 'Interview Question', answer || '', persona);
+
+    res.json({ 
+      ...assessment, 
+      isDemo: true,
+      message: 'Sign up to save your progress and access detailed feedback!'
+    });
+  } catch (error) {
+    console.error('Error assessing demo answer:', error);
+    res.status(500).json({ error: 'Failed to assess answer' });
+  }
+});
+
+// Demo mode: Complete demo interview
+mockInterviewRouter.post('/demo/complete', async (req, res) => {
+  try {
+    const { answers = [], persona = 'professional' } = req.body;
+    
+    // Generate feedback for each answer
+    const feedbackResults = [];
+    for (let i = 0; i < answers.length; i++) {
+      const { question, answer } = answers[i];
+      const assessment = await assessAnswer(question, answer, persona);
+      feedbackResults.push({
+        questionNumber: i + 1,
+        question,
+        userAnswer: answer,
+        feedback: `Score: ${assessment.score}/100\n\n${assessment.summary}\n\nAdvice: ${assessment.advice}`,
+        score: assessment.score
+      });
+    }
+
+    // Calculate average score
+    const scores = feedbackResults.filter(f => f.score > 0).map(f => f.score);
+    const avgScore = scores.length > 0 
+      ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
+      : 'N/A';
+
+    res.json({
+      success: true,
+      message: 'Demo interview completed! Sign up to save your progress.',
+      feedback: feedbackResults,
+      overallScore: avgScore,
+      isDemo: true
+    });
+  } catch (error) {
+    console.error('Error completing demo interview:', error);
+    res.status(500).json({ error: 'Failed to complete demo interview' });
+  }
+});
+
 module.exports = mockInterviewRouter;

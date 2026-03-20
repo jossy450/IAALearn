@@ -409,6 +409,44 @@ const sendEmailOtp = async (to, code) => {
   });
 };
 
+const sendPasswordResetEmail = async (to, resetToken) => {
+  if (!transporter) throw new Error('Email not configured');
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const resetUrl = `${process.env.CLIENT_URL || 'https://iaalearn-1.fly.dev'}/reset-password?token=${resetToken}`;
+  await transporter.sendMail({
+    from,
+    to,
+    subject: 'Reset Your Password - IAA Learn',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 30px; text-align: center;">
+          <h1 style="color: #fff; margin: 0;">IAA Learn</h1>
+          <p style="color: #94a3b8; margin: 10px 0 0;">Interview Answer Assistant</p>
+        </div>
+        <div style="padding: 30px; background: #f8fafc;">
+          <h2 style="color: #1a1a2e; margin-top: 0;">Password Reset Request</h2>
+          <p>You requested a password reset for your IAA Learn account.</p>
+          <p>Click the button below to reset your password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #38bdf8, #0ea5e9); color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold;">Reset Password</a>
+          </div>
+          <p style="color: #64748b; font-size: 14px;">Or copy and paste this link into your browser:</p>
+          <p style="color: #38bdf8; font-size: 14px; word-break: break-all;">${resetUrl}</p>
+          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>Security Notice:</strong></p>
+            <ul style="margin: 10px 0 0; padding-left: 20px; color: #92400e; font-size: 14px;">
+              <li>This link expires in 1 hour</li>
+              <li>If you didn't request this, please ignore this email</li>
+              <li>Never share this link with anyone</li>
+            </ul>
+          </div>
+          <p style="color: #64748b; font-size: 12px; margin-top: 30px;">This email was sent by IAA Learn. If you need help, contact support@mightyskytech.com</p>
+        </div>
+      </div>
+    `
+  });
+};
+
 // ── Multi-Provider SMS OTP ────────────────────────────────────────────────
 const sendSmsOtp = async (to, code, channel = 'sms') => {
   const errors = [];
@@ -631,7 +669,7 @@ router.post('/register', async (req, res, next) => {
           if (referrerId !== user.id) {
             await query(
               `INSERT INTO referral_rewards (referrer_id, referred_id, referral_code, reward_type, reward_value)
-               VALUES ($1, $2, $3, 'trial_days', 7)`,
+               VALUES ($1, $2, $3, 'trial_days', 3)`,
               [referrerId, user.id, referralCode.toUpperCase()]
             );
             
@@ -669,13 +707,13 @@ router.post('/request-otp', async (req, res, next) => {
       return res.status(400).json({ error: 'Valid email is required' });
     }
 
-    if (!['email', 'sms', 'whatsapp'].includes(method)) {
-      return res.status(400).json({ error: 'deliveryMethod must be email, sms, or whatsapp' });
+    if (!['email'].includes(method)) {
+      return res.status(400).json({ error: 'deliveryMethod must be email' });
     }
 
-    // Require phone for sms/whatsapp
-    if ((method === 'sms' || method === 'whatsapp') && !phone) {
-      return res.status(400).json({ error: 'Phone number is required for SMS/WhatsApp delivery' });
+    // SMS/WhatsApp temporarily disabled
+    if (method === 'sms' || method === 'whatsapp') {
+      return res.status(400).json({ error: 'SMS and WhatsApp delivery are temporarily unavailable' });
     }
 
     // Check if user exists & capture phone if provided
@@ -1239,7 +1277,7 @@ router.get('/status', (_req, res) => {
         },
       },
       otp: {
-        channels: ['email', 'sms', 'whatsapp'],
+        channels: ['email'],
         codeDigits: 6,
         ttlMinutes: 10,
         maxAttempts: 5,
@@ -1432,13 +1470,15 @@ router.post('/forgot-password', async (req, res, next) => {
         [resetTokenHash, resetTokenExpiry, user.id]
       );
 
-      // In production, send email here
-      // For now, log the token (remove in production)
-      console.log(`Password reset token for ${normalizedEmail}: ${resetToken}`);
-      
-      // TODO: Send email with reset link
-      // const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
-      // await sendEmail(user.email, 'Password Reset', resetUrl);
+      // Send password reset email
+      try {
+        await sendPasswordResetEmail(user.email, resetToken);
+        console.log(`Password reset email sent to ${user.email}`);
+      } catch (emailError) {
+        console.error(`Failed to send password reset email to ${user.email}:`, emailError.message);
+        // Log the reset link for debugging
+        console.log(`Password reset link for ${user.email}: ${process.env.CLIENT_URL || 'https://iaalearn-1.fly.dev'}/reset-password?token=${resetToken}`);
+      }
     }
 
     // Always return success to prevent email enumeration

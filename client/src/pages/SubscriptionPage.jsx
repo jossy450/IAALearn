@@ -360,7 +360,7 @@ export default function SubscriptionPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
             <Gift size={32} style={{ color: '#f59e0b' }} />
             <div>
-              <h3 style={{ margin: 0, color: '#fff', fontWeight: 800 }}>7-Day Free Trial</h3>
+              <h3 style={{ margin: 0, color: '#fff', fontWeight: 800 }}>3-Day Free Trial</h3>
               <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>
                 Full access · No credit card required
               </p>
@@ -368,14 +368,14 @@ export default function SubscriptionPage() {
           </div>
           {isTrial ? (
             <div style={pageStyles.trialActive}>
-              ✅ Trial active · {subscription?.days_remaining || '7'} days remaining
+              ✅ Trial active · {subscription?.days_remaining || '3'} days remaining
             </div>
           ) : (
             <button onClick={handleStartTrial} disabled={trialLoading} style={pageStyles.trialBtn}>
               {trialLoading ? 'Starting…' : 'Start Free Trial'}
             </button>
           )}
-          {trialMsg === 'success' && <p style={{ color: '#10b981', marginTop: '0.75rem', fontWeight: 600 }}>Trial started! Enjoy full access for 7 days.</p>}
+          {trialMsg === 'success' && <p style={{ color: '#10b981', marginTop: '0.75rem', fontWeight: 600 }}>Trial started! Enjoy full access for 3 days.</p>}
           {trialMsg === 'error'   && <p style={{ color: '#ef4444', marginTop: '0.75rem' }}>Could not start trial. You may have already used it.</p>}
         </div>
       )}

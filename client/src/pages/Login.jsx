@@ -106,7 +106,7 @@ function Login() {
   // sessionConflict = { pendingToken, user, device, since }
   
   // OTP State
-  const [useOtp, setUseOtp] = useState(true);
+  const [useOtp, setUseOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
@@ -137,10 +137,6 @@ function Login() {
       setError('Please enter your email address');
       return;
     }
-    if ((formData.deliveryMethod === 'sms' || formData.deliveryMethod === 'whatsapp') && !formData.phone) {
-      setError('Please enter your phone number for SMS/WhatsApp delivery');
-      return;
-    }
     
     setError('');
     setOtpLoading(true);
@@ -148,8 +144,7 @@ function Login() {
     try {
       const response = await authAPI.requestOtp({ 
         email: formData.email,
-        deliveryMethod: formData.deliveryMethod,
-        phone: formData.phone
+        deliveryMethod: 'email'
       });
       
       setOtpSent(true);
@@ -327,10 +322,10 @@ function Login() {
 
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <div className="auth-card auth-card-compact">
         <div className="auth-header">
-          <div className="auth-logo">
-            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '70px', height: '70px'}} />
+          <div className="auth-logo auth-logo-small">
+            <img src="/mightysky-logo.svg" alt="Mightysky" style={{width: '50px', height: '50px'}} />
           </div>
           <h1 className="auth-title">Mightysky</h1>
           <p className="auth-tagline">Interview Answer Assistant</p>
@@ -369,35 +364,7 @@ function Login() {
             />
           </div>
 
-          {useOtp && (
-            <div className="form-group">
-              <label className="label">Delivery Method</label>
-              <div className="delivery-options" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {['email', 'sms', 'whatsapp'].map((method) => (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, deliveryMethod: method })}
-                    className={`btn btn-outline btn-small ${formData.deliveryMethod === method ? 'active' : ''}`}
-                  >
-                    {method.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              {(formData.deliveryMethod === 'sms' || formData.deliveryMethod === 'whatsapp') && (
-                <input
-                  type="tel"
-                  className="input input-with-icon"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Enter phone with country code (e.g., +14155552671)"
-                  required
-                  disabled={otpSent}
-                  style={{ marginTop: '8px' }}
-                />
-              )}
-            </div>
-          )}
+
 
           {!useOtp && (
             <div className="form-group">
@@ -558,6 +525,12 @@ function Login() {
         <p className="auth-footer">
           Don't have an account? <Link to="/register">Register</Link>
         </p>
+        
+        <div className="auth-legal-links">
+          <Link to="/api/privacy" target="_blank">Privacy Policy</Link>
+          <span>•</span>
+          <Link to="/api/disclaimer" target="_blank">Disclaimer</Link>
+        </div>
       </div>
 
       {/* ── Session Conflict Modal ─────────────────────────────────────────── */}

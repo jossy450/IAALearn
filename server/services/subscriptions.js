@@ -45,7 +45,7 @@ async function getSubscriptionStatus(req, res) {
 async function startTrial(req, res) {
   const userId = req.user.id;
   const now = new Date();
-  const endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h trial
+  const endDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // 3-day trial
   try {
     if (process.env.DEMO_MODE === 'true') {
       // Don't persist in demo mode; return a fake trial end date.

@@ -3,6 +3,7 @@ npm-debug.log
 .git
 .gitignore
 .env
+!PRIVACY_POLICY.md
 *.md
 .vscode
 .idea

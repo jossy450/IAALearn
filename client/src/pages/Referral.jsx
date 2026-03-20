@@ -143,7 +143,7 @@ function Referral() {
         <ol>
           <li><strong>Share your link</strong> with friends and colleagues</li>
           <li><strong>They sign up</strong> using your referral code</li>
-          <li><strong>You both earn</strong> 7 free days of premium!</li>
+          <li><strong>You both earn</strong> 3 free days of premium!</li>
         </ol>
       </div>
     </div>

@@ -74,6 +74,16 @@
     grid-template-columns: 1fr;
     gap: 1rem;
   }
+  .dashboard {
+    padding: 0.75rem;
+  }
+  .dashboard-header {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .dashboard-header h1 {
+    font-size: 1.5rem;
+  }
 }
 
 /* Simple options row below the header */

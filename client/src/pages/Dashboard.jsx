@@ -21,6 +21,21 @@ function Dashboard() {
     sessionType: 'general'
   });
   
+  // Collapsible sections state
+  const [collapsedSections, setCollapsedSections] = useState({
+    payment: false,
+    stats: false,
+    sessions: false
+  });
+
+  // Toggle section collapse
+  const toggleSection = (section) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+  
   // Document upload state
   const [cvFile, setCvFile] = useState(null);
   const [jobDescFile, setJobDescFile] = useState(null);
@@ -444,128 +459,154 @@ function Dashboard() {
         <button className="option-btn" onClick={() => navigate('/mobile')}>Mobile Mode</button>
         <button className="option-btn" onClick={() => navigate('/stealth')}>Stealth Mode</button>
       </div>
-      <div className="dashboard-content">
-        <div className="payment-history-section">
-          <div className="payment-title">Payment History</div>
-          {paymentHistory.length === 0 ? (
-            <p style={{ color: '#fff', margin: '1rem 0' }}>No payments yet.</p>
-          ) : (
-            <table className="payment-table">
-              <thead>
-                <tr>
-                  <th>DATE</th>
-                  <th>METHOD</th>
-                  <th>AMOUNT</th>
-                  <th>STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.map((p, idx) => (
-                  <tr key={idx}>
-                    <td>{new Date(p.date).toLocaleString()}</td>
-                    <td className="payment-method">{p.method}</td>
-                    <td className="payment-amount">{p.amount ? `$${p.amount}` : 'N/A'}</td>
-                    <td className="payment-status">{p.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+      
+      {/* Collapsible Payment History Section */}
+      <div className={`collapsible-section ${collapsedSections.payment ? 'collapsed' : 'expanded'}`}>
+        <div className="collapsible-header" onClick={() => toggleSection('payment')}>
+          <span>Payment History</span>
+          <span className="collapse-icon">{collapsedSections.payment ? '▼' : '▲'}</span>
         </div>
-      </div>
-
-      {/* Analytics Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#dbeafe' }}>
-            <Calendar size={24} color="#3b82f6" />
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{analytics?.sessionStats?.total_sessions || 0}</div>
-            <div className="stat-label">Total Sessions</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#d1fae5' }}>
-            <TrendingUp size={24} color="#10b981" />
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{analytics?.sessionStats?.total_questions || 0}</div>
-            <div className="stat-label">Questions Answered</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#fce7f3' }}>
-            <Clock size={24} color="#ec4899" />
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">
-              {formatDuration(analytics?.sessionStats?.avg_duration)}
+        <div className="collapsible-content">
+          <div className="dashboard-content">
+            <div className="payment-history-section">
+              {paymentHistory.length === 0 ? (
+                <p style={{ color: '#fff', margin: '1rem 0' }}>No payments yet.</p>
+              ) : (
+                <table className="payment-table">
+                  <thead>
+                    <tr>
+                      <th>DATE</th>
+                      <th>METHOD</th>
+                      <th>AMOUNT</th>
+                      <th>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentHistory.map((p, idx) => (
+                      <tr key={idx}>
+                        <td>{new Date(p.date).toLocaleString()}</td>
+                        <td className="payment-method">{p.method}</td>
+                        <td className="payment-amount">{p.amount ? `$${p.amount}` : 'N/A'}</td>
+                        <td className="payment-status">{p.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
-            <div className="stat-label">Avg Duration</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#e0e7ff' }}>
-            <TrendingUp size={24} color="#6366f1" />
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">
-              {Math.round(analytics?.responseStats?.avg_response_time || 0)}ms
-            </div>
-            <div className="stat-label">Avg Response Time</div>
           </div>
         </div>
       </div>
 
-      {/* Recent Sessions */}
-      <div className="card">
-        <h2 className="card-title">Recent Sessions</h2>
-        {sessions.length === 0 ? (
-          <div className="empty-state">
-            <p>No sessions yet. Create your first session to get started!</p>
-          </div>
-        ) : (
-          <div className="sessions-list">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className="session-item"
-                onClick={() => navigate(`/session/${session.id}`)}
-              >
-                <div className="session-info">
-                  <h3>{session.title}</h3>
-                  <div className="session-meta">
-                    {session.company_name && <span>{session.company_name}</span>}
-                    {session.position && <span>• {session.position}</span>}
-                  </div>
-                </div>
-                <div className="session-stats">
-                  <div className="stat-badge">
-                    {session.question_count || session.total_questions || 0} questions
-                  </div>
-                  <div className="stat-badge">
-                    {session.status}
-                  </div>
-                  <button
-                    className="session-delete-btn"
-                    title="Delete session"
-                    aria-label={`Delete session ${session.title}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteSession(session.id);
-                    }}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
+      {/* Collapsible Analytics Stats Section */}
+      <div className={`collapsible-section ${collapsedSections.stats ? 'collapsed' : 'expanded'}`}>
+        <div className="collapsible-header" onClick={() => toggleSection('stats')}>
+          <span>Statistics</span>
+          <span className="collapse-icon">{collapsedSections.stats ? '▼' : '▲'}</span>
+        </div>
+        <div className="collapsible-content">
+          {/* Analytics Cards */}
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: '#dbeafe' }}>
+                <Calendar size={24} color="#3b82f6" />
               </div>
-            ))}
+              <div className="stat-content">
+                <div className="stat-value">{analytics?.sessionStats?.total_sessions || 0}</div>
+                <div className="stat-label">Total Sessions</div>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: '#d1fae5' }}>
+                <TrendingUp size={24} color="#10b981" />
+              </div>
+              <div className="stat-content">
+                <div className="stat-value">{analytics?.sessionStats?.total_questions || 0}</div>
+                <div className="stat-label">Questions Answered</div>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: '#fce7f3' }}>
+                <Clock size={24} color="#ec4899" />
+              </div>
+              <div className="stat-content">
+                <div className="stat-value">
+                  {formatDuration(analytics?.sessionStats?.avg_duration)}
+                </div>
+                <div className="stat-label">Avg Duration</div>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-icon" style={{ background: '#e0e7ff' }}>
+                <TrendingUp size={24} color="#6366f1" />
+              </div>
+              <div className="stat-content">
+                <div className="stat-value">
+                  {Math.round(analytics?.responseStats?.avg_response_time || 0)}ms
+                </div>
+                <div className="stat-label">Avg Response Time</div>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* Collapsible Recent Sessions Section */}
+      <div className={`collapsible-section ${collapsedSections.sessions ? 'collapsed' : 'expanded'}`}>
+        <div className="collapsible-header" onClick={() => toggleSection('sessions')}>
+          <span>Recent Sessions</span>
+          <span className="collapse-icon">{collapsedSections.sessions ? '▼' : '▲'}</span>
+        </div>
+        <div className="collapsible-content">
+          {/* Recent Sessions */}
+          <div className="card">
+            {sessions.length === 0 ? (
+              <div className="empty-state">
+                <p>No sessions yet. Create your first session to get started!</p>
+              </div>
+            ) : (
+              <div className="sessions-list">
+                {sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="session-item"
+                    onClick={() => navigate(`/session/${session.id}`)}
+                  >
+                    <div className="session-info">
+                      <h3>{session.title}</h3>
+                      <div className="session-meta">
+                        {session.company_name && <span>{session.company_name}</span>}
+                        {session.position && <span>• {session.position}</span>}
+                      </div>
+                    </div>
+                    <div className="session-stats">
+                      <div className="stat-badge">
+                        {session.question_count || session.total_questions || 0} questions
+                      </div>
+                      <div className="stat-badge">
+                        {session.status}
+                      </div>
+                      <button
+                        className="session-delete-btn"
+                        title="Delete session"
+                        aria-label={`Delete session ${session.title}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSession(session.id);
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* New Session Modal */}

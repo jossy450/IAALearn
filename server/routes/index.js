@@ -7,6 +7,8 @@ const optimizedAnswersRoutes = require('./optimizedAnswers');
 const cacheRoutes = require('./cache');
 const analyticsRoutes = require('./analytics');
 const privacyRoutes = require('./privacy');
+const privacySettingsRoutes = require('./privacySettings');
+const disclaimerRoutes = require('./disclaimer');
 const mobileRoutes = require('./mobile');
 const smartAIRoutes = require('./smartAI');
 const transferRoutes = require('./transfer');
@@ -31,7 +33,9 @@ router.use('/answers', answersRoutes); // Legacy answer routes
 router.use('/answers-optimized', optimizedAnswersRoutes); // Optimized answer routes with streaming
 router.use('/cache', cacheRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/privacy-settings', privacySettingsRoutes);
 router.use('/privacy', privacyRoutes);
+router.use('/disclaimer', disclaimerRoutes);
 router.use('/mobile', mobileRoutes);
 router.use('/smart-ai', smartAIRoutes);
 router.use('/documents', documentsRoutes); // Document upload/management routes
@@ -68,6 +72,7 @@ router.get('/', (req, res) => {
       cache: '/api/cache',
       analytics: '/api/analytics',
       privacy: '/api/privacy',
+      privacySettings: '/api/privacy-settings',
       mobile: '/api/mobile',
       smartAI: '/api/smart-ai',
       documents: '/api/documents',
