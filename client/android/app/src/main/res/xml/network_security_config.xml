@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Base configuration: no cleartext traffic allowed by default -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Trust system CAs -->
+            <certificates src="system" />
+            <!-- Trust user installed CAs for development -->
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Allow cleartext only for known trusted domains -->
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- Fly.io domains -->
+        <domain includeSubdomains="true">fly.dev</domain>
+        <domain includeSubdomains="true">iaalearn-1.fly.dev</domain>
+        <domain includeSubdomains="true">iaalearn-cloud.fly.dev</domain>
+        
+        <!-- Google/Firebase -->
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">firebaseapp.com</domain>
+        <domain includeSubdomains="true">googleusercontent.com</domain>
+        
+        <!-- Stripe -->
+        <domain includeSubdomains="true">stripe.com</domain>
+        
+        <!-- Hugging Face -->
+        <domain includeSubdomains="true">huggingface.co</domain>
+        
+        <!-- Supabase -->
+        <domain includeSubdomains="true">supabase.co</domain>
+    </domain-config>
+</network-security-config>

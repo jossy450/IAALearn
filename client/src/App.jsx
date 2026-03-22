@@ -31,6 +31,8 @@ import FAQ from './pages/FAQ';
 import Feedback from './pages/Feedback';
 import MockInterview from './pages/MockInterview';
 import Referral from './pages/Referral';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import Disclaimer from './pages/Disclaimer';
 
 // Wrapper component to check auth status
 function ProtectedRoute({ children }) {
@@ -162,6 +164,8 @@ function App() {
       <Routes>
         <Route path="/login" element={token ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={token ? <Navigate to="/" /> : <Register />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/forgot-password" element={token ? <Navigate to="/" /> : <ForgotPassword />} />
         <Route path="/reset-password" element={token ? <Navigate to="/" /> : <ResetPassword />} />
         <Route path="/google-auth" element={<GoogleAuth />} />
@@ -192,7 +196,9 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="session/:id" element={<InterviewSession />} />
           <Route path="analytics" element={<Analytics />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="settings" element={
+            (user?.role === 'owner' || user?.role === 'power_user' || user?.email === 'jossy450@gmail.com' || user?.email === 'admin@admin.com' || user?.email === 'mightyjosing@gmail.com') ? <Settings /> : <Navigate to="/" />
+          } />
           <Route path="stealth" element={
             <PlanRoute requiredPlan="plus">
               <StealthSettings />
@@ -206,7 +212,9 @@ function App() {
           <Route path="subscription" element={<SubscriptionPage />} />
           <Route path="faq" element={<FAQ />} />
           <Route path="feedback" element={<Feedback />} />
-          <Route path="admin/users" element={<UserManagement />} />
+          <Route path="admin/users" element={
+            (user?.role === 'owner' || user?.role === 'power_user' || user?.email === 'jossy450@gmail.com' || user?.email === 'admin@admin.com' || user?.email === 'mightyjosing@gmail.com') ? <UserManagement /> : <Navigate to="/" />
+          } />
           <Route path="mock-interview" element={<MockInterview />} />
           <Route path="referral" element={<Referral />} />
         </Route>

@@ -527,9 +527,9 @@ function Login() {
         </p>
         
         <div className="auth-legal-links">
-          <Link to="/api/privacy" target="_blank">Privacy Policy</Link>
+          <Link to="/privacy">Privacy Policy</Link>
           <span>•</span>
-          <Link to="/api/disclaimer" target="_blank">Disclaimer</Link>
+          <Link to="/disclaimer">Disclaimer</Link>
         </div>
       </div>
 

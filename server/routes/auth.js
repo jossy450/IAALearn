@@ -979,19 +979,6 @@ router.post('/login', async (req, res, next) => {
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    // Validate device_id if user has one stored
-    if (user.device_id && deviceId && user.device_id !== deviceId) {
-      return res.status(403).json({ 
-        error: 'Device not authorized. Please contact administrator.' 
-      });
-    }
-
-    // Update device_id if not set
-    if (!user.device_id && deviceId) {
-      await query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
-      user.device_id = deviceId;
-    }
-
     await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
     const token = createToken(user.id, user.email);

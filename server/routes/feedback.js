@@ -1,8 +1,79 @@
 const express = require('express');
+const nodemailer = require('nodemailer');
 const { query } = require('../database/connection');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
+
+const smtpEnabled = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const transporter = smtpEnabled
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+  : null;
+
+const sendFeedbackEmail = async (feedbackData) => {
+  if (!transporter) {
+    console.log('SMTP not configured, skipping feedback email');
+    return;
+  }
+  
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const toEmail = process.env.FEEDBACK_EMAIL || 'iaalearnfeedback@gmail.com';
+  const typeLabels = {
+    feedback: 'General Feedback',
+    bug: 'Bug Report',
+    feature: 'Feature Request',
+    support: 'Support Request'
+  };
+  
+  await transporter.sendMail({
+    from,
+    to: toEmail,
+    subject: `[IAA Learn] ${typeLabels[feedbackData.type] || feedbackData.type}: ${feedbackData.subject}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center;">
+          <h1 style="color: #fff; margin: 0;">IAA Learn Feedback</h1>
+        </div>
+        <div style="padding: 20px; background: #f8fafc;">
+          <h2 style="color: #1a1a2e; margin-top: 0;">${feedbackData.subject}</h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; width: 120px;">Type:</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${typeLabels[feedbackData.type] || feedbackData.type}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">User:</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${feedbackData.userEmail || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">Rating:</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${feedbackData.rating ? '⭐'.repeat(feedbackData.rating) : 'No rating'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">Contact:</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${feedbackData.contactEmail || 'Not provided'}</td>
+            </tr>
+          </table>
+          <div style="margin-top: 20px; padding: 15px; background: #fff; border-left: 4px solid #38bdf8;">
+            <h3 style="margin-top: 0;">Message:</h3>
+            <p style="white-space: pre-wrap;">${feedbackData.message}</p>
+          </div>
+          <p style="color: #64748b; font-size: 12px; margin-top: 20px;">
+            Submitted via IAA Learn on ${new Date(feedbackData.createdAt).toLocaleString()}
+          </p>
+        </div>
+      </div>
+    `
+  });
+};
 
 // Submit feedback
 router.post('/', authenticate, async (req, res, next) => {
@@ -40,16 +111,20 @@ router.post('/', authenticate, async (req, res, next) => {
       [userId, type, subject, message, rating || null, email || null]
     );
 
-    // Log this action for audit purposes
-    await query(
-      `INSERT INTO document_audit_logs (user_id, action, details)
-       VALUES ($1, $2, $3)`,
-      [userId, 'feedback_submitted', JSON.stringify({
-        feedbackId: result.rows[0].id,
-        type,
-        subject
-      })]
-    );
+    // Get user email for notification
+    const userResult = await query('SELECT email FROM users WHERE id = $1', [userId]);
+    const userEmail = userResult.rows[0]?.email;
+
+    // Send email notification
+    sendFeedbackEmail({
+      type,
+      subject,
+      message,
+      rating,
+      contactEmail: email || null,
+      userEmail,
+      createdAt: result.rows[0].created_at
+    }).catch(err => console.error('Failed to send feedback email:', err));
 
     res.status(201).json({
       success: true,

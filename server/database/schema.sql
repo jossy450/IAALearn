@@ -323,3 +323,56 @@ CREATE INDEX IF NOT EXISTS idx_mock_interview_answers_session_id ON mock_intervi
 -- Ensure new columns exist when upgrading
 ALTER TABLE mock_interview_answers ADD COLUMN IF NOT EXISTS question_text TEXT;
 ALTER TABLE mock_interview_answers ADD COLUMN IF NOT EXISTS feedback TEXT;
+
+-- Feedback table for user feedback submissions
+CREATE TABLE IF NOT EXISTS feedback (
+  id SERIAL PRIMARY KEY,
+  user_id UUID,
+  type VARCHAR(50) NOT NULL CHECK (type IN ('feedback', 'bug', 'feature', 'support')),
+  subject VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  contact_email VARCHAR(255),
+  status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'in_progress', 'resolved', 'closed')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add foreign key if users table exists and has UUID id (ignore if already exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id' AND data_type = 'uuid') THEN
+    ALTER TABLE feedback ADD CONSTRAINT feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Indexes for feedback table
+CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+
+-- Referral System
+-- Add referral fields to users table (ignore if already exists)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_count INTEGER DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);
+
+-- Create referral rewards table
+CREATE TABLE IF NOT EXISTS referral_rewards (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    referrer_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    referred_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    referral_code VARCHAR(20) NOT NULL,
+    reward_type VARCHAR(50) DEFAULT 'trial_days',
+    reward_value INTEGER DEFAULT 3,
+    is_claimed BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    claimed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards(referred_id);

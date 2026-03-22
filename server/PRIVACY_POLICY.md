@@ -1,27 +1,30 @@
 # Privacy Policy
 
-<b>IAA Learn</b> ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.
+IAA Learn ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.
 
 ---
 
 ## 1. Information We Collect
 
 ### Personal Information
-- <b>Account Information</b>: Email address and name when you register
-- <b>CV and Resume</b>: Documents you upload for personalized interview preparation
-- <b>Job Descriptions</b>: Job postings you submit for tailored questions
-- <b>Interview Responses</b>: Your answers during mock interview sessions
+
+- **Account Information**: Email address and name when you register
+- **CV and Resume**: Documents you upload for personalized interview preparation
+- **Job Descriptions**: Job postings you submit for tailored questions
+- **Interview Responses**: Your answers during mock interview sessions
 
 ### Device Information
-- <b>Device Type</b>: Mobile device model and operating system
-- <b>Push Notification Token</b>: For sending push notifications
-- <b>Usage Data</b>: App interactions and feature usage (via Firebase Analytics)
+
+- **Device Type**: Mobile device model and operating system
+- **Push Notification Token**: For sending push notifications
+- **Usage Data**: App interactions and feature usage (via Firebase Analytics)
 
 ---
 
 ## 2. How We Use Your Information
 
 We use the information we collect to:
+
 - Provide and maintain our services
 - Personalize interview questions based on your CV and job descriptions
 - Send push notifications for interview reminders and updates
@@ -33,10 +36,10 @@ We use the information we collect to:
 
 ## 3. Data Storage and Security
 
-- <b>Authentication</b>: Managed securely via Supabase
-- <b>File Storage</b>: CVs and documents stored securely in cloud storage
-- <b>Data Encryption</b>: All data transmitted over HTTPS is encrypted
-- <b>Access Control</b>: Only authorized personnel can access user data
+- **Authentication**: Managed securely via Supabase
+- **File Storage**: CVs and documents stored securely in cloud storage
+- **Data Encryption**: All data transmitted over HTTPS is encrypted
+- **Access Control**: Only authorized personnel can access user data
 
 We implement reasonable security measures to protect your personal information. However, no method of transmission over the Internet or electronic storage is 100% secure.
 
@@ -46,10 +49,10 @@ We implement reasonable security measures to protect your personal information. 
 
 We use the following third-party services:
 
-- <b>Supabase</b>: User authentication and database
-- <b>Firebase (Google)</b>: Analytics and crash reporting
-- <b>Ycloud/Telnyx</b>: SMS notifications (if enabled)
-- <b>Fly.io</b>: Cloud hosting
+- **Supabase**: User authentication and database
+- **Firebase (Google)**: Analytics and crash reporting
+- **Ycloud/Telnyx**: SMS notifications (if enabled)
+- **Fly.io**: Cloud hosting
 
 These services have their own privacy policies governing their use of your information.
 
@@ -58,6 +61,7 @@ These services have their own privacy policies governing their use of your infor
 ## 5. Data Sharing
 
 We do not sell, trade, or rent your personal information to third parties. We may share information:
+
 - With your consent
 - To comply with legal obligations
 - To protect our rights and prevent fraud
@@ -68,6 +72,7 @@ We do not sell, trade, or rent your personal information to third parties. We ma
 ## 6. Your Rights
 
 You have the right to:
+
 - Access your personal information
 - Correct inaccurate data
 - Delete your account and associated data
@@ -87,6 +92,7 @@ Our app is not intended for children under 13 years of age. We do not knowingly 
 ## 8. Push Notifications
 
 We may send push notifications to:
+
 - Remind you of scheduled practice sessions
 - Notify you of new features
 - Alert you to account-related information
@@ -105,12 +111,12 @@ We may update this Privacy Policy from time to time. We will notify you of any c
 
 If you have questions about this Privacy Policy, please contact us:
 
-<b>Email</b>: support@mightyskytech.com
+**Email**: support@mightyskytech.com
 
-<b>Company</b>: Mighty Sky Tech
+**Company**: Mighty Sky Tech
 
-<b>Website</b>: https://mightyskytech.com
+**Website**: https://mightyskytech.com
 
 ---
 
-<b>Last Updated: March 2024</b>
+**Last Updated: March 2026**

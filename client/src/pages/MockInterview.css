@@ -1,13 +1,14 @@
 .mock-interview-container {
   min-height: 100vh;
   background: linear-gradient(160deg, #0f172a, #1e293b);
-  padding: 2rem;
+  padding: clamp(1rem, 3vw, 2rem);
   color: #fff;
 }
 
 .mock-interview-setup {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
+  width: 100%;
 }
 
 .demo-banner {
@@ -63,21 +64,21 @@
 }
 
 .setup-header h1 {
-  font-size: 2.5rem;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
   font-weight: 800;
   margin-bottom: 0.5rem;
 }
 
 .subtitle {
   color: #94a3b8;
-  font-size: 1.1rem;
+  font-size: clamp(1rem, 2.5vw, 1.1rem);
 }
 
 .setup-form {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  padding: 2rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
 }
 
 .form-group {
@@ -93,7 +94,7 @@
 
 .persona-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   margin-top: 1rem;
 }
@@ -275,8 +276,10 @@
 
 /* Active Interview Styles */
 .mock-interview-active {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
+  width: 100%;
+  padding: 0 clamp(0.25rem, 2vw, 0.75rem);
 }
 
 .interview-header {
@@ -284,9 +287,11 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
-  padding: 1.5rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
   background: rgba(255, 255, 255, 0.05);
   border-radius: 16px;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .interviewer-info {
@@ -345,7 +350,7 @@
 /* Question Section */
 .question-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -548,6 +553,7 @@
   display: flex;
   gap: 1rem;
   margin-top: 1rem;
+  flex-wrap: wrap;
 }
 
 .mic-btn {
@@ -741,7 +747,7 @@
   background: linear-gradient(160deg, #1e293b, #0f172a);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
-  padding: 2rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
   max-width: 800px;
   width: 100%;
   max-height: 90vh;
@@ -907,6 +913,10 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .mock-interview-active {
+    padding: 0;
+  }
+
   .question-section {
     grid-template-columns: 1fr;
   }

@@ -13,12 +13,18 @@ import useStealthStore from '../store/stealthStore';
 import { trackSessionStart, trackEvent } from '../services/firebaseAnalytics';
 import './InterviewSession.css';
 
-let SpeechRecognition = null;
-if (typeof window !== 'undefined') {
-  import('@capacitor-community/speech-recognition').then(module => {
-    SpeechRecognition = module;
-  }).catch(() => {});
-}
+// Capacitor Speech Recognition - loaded lazily
+let CapacitorSpeechRecognition = null;
+const loadCapacitorSpeechRecognition = async () => {
+  if (CapacitorSpeechRecognition) return CapacitorSpeechRecognition;
+  try {
+    CapacitorSpeechRecognition = await import('@capacitor-community/speech-recognition');
+    return CapacitorSpeechRecognition;
+  } catch (e) {
+    console.warn('Capacitor Speech Recognition not available:', e.message);
+    return null;
+  }
+};
 
 function InterviewSession() {
   const { id } = useParams();
@@ -112,7 +118,7 @@ function InterviewSession() {
         console.warn('Media API check failed:', error);
       }
     };
-    
+     
     requestMicPermission();
   }, []);
 
@@ -120,8 +126,26 @@ function InterviewSession() {
     loadSession();
   }, [id]);
 
+  // ─── Auto-start recording on Android when autoListen is enabled ───
+  useEffect(() => {
+    // On Android native with autoListen enabled, auto-start recording when session loads
+    const timer = setTimeout(() => {
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android' && autoListen && session && !isRecording && !loading) {
+        console.log('🎤 Auto-starting recording on Android...');
+        startRecording();
+      }
+    }, 500); // Small delay to ensure session is fully loaded
+    return () => clearTimeout(timer);
+  }, [session, autoListen, isRecording, loading]);
+
   // ─── Auto-listen: start/stop continuous speech recognition when checkbox toggled ───
   useEffect(() => {
+    // Only use Web Speech API on web (non-native) platforms
+    if (Capacitor.isNativePlatform()) {
+      // On native platforms, the recording and speech recognition is handled in startRecording
+      return;
+    }
+    
     if (autoListen) {
       startAutoListen();
     } else {
@@ -136,6 +160,11 @@ function InterviewSession() {
 
   // ─── startAutoListen: intelligent continuous recognition with silence detection ───
   const startAutoListen = async () => {
+    // Skip on native platforms - recording handles speech recognition there
+    if (Capacitor.isNativePlatform()) {
+      return;
+    }
+    
     const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!WebSpeechRecognition) {
       showToast('⚠️ Auto-listen requires Chrome or Edge browser.', 'warning');
@@ -504,355 +533,215 @@ function InterviewSession() {
       console.log('🎤 Starting recording...');
       console.log('Platform:', Capacitor.getPlatform());
       console.log('Is native platform:', Capacitor.isNativePlatform());
+      console.log('autoListen:', autoListen);
       
       trackEvent('recording_start', { session_id: id, platform: Capacitor.getPlatform() });
       
-      const isAndroid = Capacitor.getPlatform() === 'android' || /android/i.test(navigator.userAgent);
       const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const useAutoListenSpeechToText = !!autoListen && !!WebSpeechRecognition;
       
-      // On Android native, use the Capacitor AudioRecorder plugin instead of web getUserMedia
-      if (Capacitor.isNativePlatform() && isAndroid) {
-        console.log('🎤 Using native AudioRecorder plugin on Android...');
-        console.log('🎤 Calling startNativeRecording()...');
+      // On Android native, use MediaRecorder via WebView
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+        console.log('🎤 Using MediaRecorder on Android (via WebView)...');
         try {
-          const result = await startNativeRecording();
+          await startNativeRecording();
           console.log('✅ Native recording started successfully');
-          console.log('📁 Start result:', JSON.stringify(result));
           setIsRecording(true);
+          setIsAutoListening(true);
           setLoadingStep('recording');
 
-          // Auto-listen toggle controls live speech-to-text preview.
-          // Recording still works even when this is disabled.
+          // Try to start speech recognition for live preview (optional, non-blocking)
           if (autoListen) {
             try {
               console.log('🎤 Starting native Speech Recognition for live transcription...');
+              const SpeechRecognition = await loadCapacitorSpeechRecognition();
               
-              // Check and request permissions
-              const permStatus = await SpeechRecognition.checkPermissions();
-              if (permStatus.speechRecognition !== 'granted') {
-                const reqStatus = await SpeechRecognition.requestPermissions();
-                if (reqStatus.speechRecognition !== 'granted') {
-                  console.warn('Speech recognition permission not granted');
+              if (SpeechRecognition) {
+                const permStatus = await SpeechRecognition.checkPermissions();
+                if (permStatus.speechRecognition !== 'granted') {
+                  await SpeechRecognition.requestPermissions();
                 }
-              }
-              
-              // Check availability
-              const available = await SpeechRecognition.available();
-              if (!available.available) {
-                console.warn('Native speech recognition not available on this device');
-                return; // Still continue with recording, just no live preview
-              }
-              
-              // Set up listener for partial results
-              let liveTranscript = '';
-              await SpeechRecognition.addListener('partialResults', (data) => {
-                if (data.matches && data.matches.length > 0) {
-                  // Show the best match as interim result
-                  setRecordedQuestion(liveTranscript + data.matches[0]);
-                }
-              });
-              
-              // Start listening with continuous mode
-              await SpeechRecognition.start({
-                language: 'en-US',
-                maxResults: 3,
-                partialResults: true,
-                popup: false // Don't show Google's popup
-              });
-              
-              // Store reference for cleanup
-              speechRecognitionRef.current = { native: true };
-              console.log('✅ Native speech recognition started');
-              
-            } catch (speechErr) {
-              console.warn('Could not start native speech recognition (non-fatal):', speechErr);
-              // Continue without live preview - server transcription will still work
-            }
-          }
-          
-          return;
-        } catch (err) {
-          console.error('❌ Failed to start native recording:', err);
-          const msg = typeof err === 'string' ? err : (err?.message || 'Unknown error');
-          showToast(`❌ Could not start microphone recording: ${msg}`, 'error');
-          setLoadingStep(null);
-          setIsRecording(false);
-          return;
-        }
-      }
-      
-      // Fallback: use MediaRecorder via getUserMedia (web / non-native)
-      if (isAndroid || !useAutoListenSpeechToText) {
-        console.log('🎤 Using MediaRecorder (web)...');
-        
-        // Check if mediaDevices is available
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          console.error('❌ getUserMedia not available on this device');
-          showToast('❌ Audio input not supported on this device.', 'error');
-          setLoadingStep(null);
-          setIsRecording(false);
-          return;
-        }
-        
-        let stream = null;
-        try {
-          console.log('Requesting audio stream...');
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          console.log('✅ Got audio stream:', stream.id);
-          
-          const preferredTypes = [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/ogg;codecs=opus',
-            'audio/ogg',
-            'audio/mp4'
-          ];
-          const selectedType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
-          console.log('Selected audio format:', selectedType || 'default');
-          
-          const mediaRecorder = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : undefined);
-          mediaRecorderRef.current = mediaRecorder;
-          recordingMimeTypeRef.current = selectedType || mediaRecorder.mimeType || 'audio/webm';
-          audioChunksRef.current = [];
-
-          mediaRecorder.ondataavailable = (event) => {
-            console.log('Data available, chunk size:', event.data.size);
-            if (event.data.size > 0) {
-              audioChunksRef.current.push(event.data);
-            }
-          };
-
-          mediaRecorder.onstop = async () => {
-            const mimeType = recordingMimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
-            const format = resolveFormatFromMime(mimeType);
-            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-            
-            console.log('Recording stopped. Total chunks:', audioChunksRef.current.length, 'Total size:', audioBlob.size, 'bytes');
-            
-            // Validate audio blob
-            if (audioBlob.size === 0) {
-              showToast('❌ No audio recorded. Check microphone is working.', 'error');
-              stream.getTracks().forEach(track => track.stop());
-              setLoadingStep(null);
-              setIsRecording(false);
-              return;
-            }
-            
-            if (audioBlob.size < 100) {
-              showToast('❌ Recording too short. Speak for at least 1-2 seconds.', 'error');
-              stream.getTracks().forEach(track => track.stop());
-              setLoadingStep(null);
-              setIsRecording(false);
-              return;
-            }
-            
-            console.log('✅ Audio recorded, transcribing...');
-            setLoadingStep('transcribing');
-            
-            await transcribeAudio(audioBlob, format);
-            stream.getTracks().forEach(track => track.stop());
-          };
-
-          mediaRecorder.onerror = (event) => {
-            console.error('MediaRecorder error:', event.error);
-            if (stream) stream.getTracks().forEach(track => track.stop());
-            setIsRecording(false);
-            setLoadingStep(null);
-            showToast(`❌ Recording error: ${event.error}`, 'error');
-          };
-
-          mediaRecorder.start();
-          setIsRecording(true);
-          setLiveTranscript('');
-          console.log('✅ Recording started');
-          // Start live speech-to-text preview alongside MediaRecorder
-          startManualLivePreview();
-          return;
-        } catch (error) {
-          console.error('Failed to start recording:', error.name, error.message);
-          if (stream) stream.getTracks().forEach(track => track.stop());
-          setLoadingStep(null);
-          setIsRecording(false);
-          
-          if (error.name === 'NotAllowedError') {
-            // Check actual permission state if Permissions API is available
-            try {
-              if (navigator.permissions && navigator.permissions.query) {
-                const status = await navigator.permissions.query({ name: 'microphone' });
-                console.log('Permissions API microphone state:', status.state);
                 
-                if (status.state !== 'denied') {
-                  // Permission is not explicitly denied ("granted" or "prompt")
-                  // Show a lightweight error with details, without the big settings dialog
-                  showToast(
-                    `❌ Could not access microphone: ${error.name || ''} ${error.message || ''}`.trim(),
-                    'error'
-                  );
+                const available = await SpeechRecognition.available();
+                if (available.available) {
+                  await SpeechRecognition.removeAllListeners();
+                  
+                  await SpeechRecognition.addListener('partialResults', (data) => {
+                    if (data.matches && data.matches.length > 0) {
+                      const transcript = data.matches[0] || '';
+                      setRecordedQuestion(transcript);
+                      setLiveTranscript('🎤 ' + transcript);
+                    }
+                  });
+                  
+                  await SpeechRecognition.start({
+                    language: 'en-US',
+                    maxResults: 3,
+                    partialResults: true,
+                    popup: false
+                  });
+                  
+                  speechRecognitionRef.current = { native: true, plugin: SpeechRecognition };
+                  console.log('✅ Native speech recognition started');
+                  showToast('Listening... Speak your interview question', 'success');
                   return;
+                } else {
+                  console.warn('Speech recognition not available on this device');
                 }
               }
-            } catch (permErr) {
-              console.warn('Permission API check failed:', permErr);
+            } catch (speechErr) {
+              console.warn('Speech recognition error (non-fatal):', speechErr.message);
             }
-
-            // At this point, permission is actually denied
-            console.log('Microphone permission denied - showing settings option');
-            const openSettings = window.confirm(
-              'Microphone permission denied.\n\n' +
-              'Enable it in:\nSettings > Apps > Interview Assistant > Permissions > Microphone\n\n' +
-              'Tap OK to open Settings.'
-            );
             
-            if (openSettings) {
-              console.log('Opening app settings...');
-              try {
-                await App.openSettings();
-              } catch (settingsError) {
-                console.error('Could not open settings:', settingsError);
-              }
-            }
-          } else if (error.name === 'NotFoundError') {
-            showToast('❌ No microphone found on this device.', 'error');
-          } else if (error.name === 'NotSupportedError') {
-            showToast('❌ Secure context required. This app must be accessed via HTTPS or localhost.', 'error');
-          } else {
-            console.error('Unknown microphone error:', error);
-            showToast(
-              `❌ Microphone error: ${error.name || ''} ${error.message || ''}`.trim(),
-              'error'
-            );
+            // Even if speech recognition fails, recording continues
+            showToast('Recording started - server transcription will be used', 'info');
           }
+          
+          return;
+        } catch (recordingError) {
+          console.error('❌ Native recording failed:', recordingError);
+          showToast(`❌ Recording failed: ${recordingError.message || 'Unknown error'}`, 'error');
+          setLoadingStep(null);
+          setIsRecording(false);
+          setIsAutoListening(false);
           return;
         }
       }
       
-      // Web Speech API for desktop (faster, no transcription needed)
+      // Web fallback: use MediaRecorder via getUserMedia
+      const useAutoListenSpeechToText = !!autoListen && !!WebSpeechRecognition;
+      
+      // If Web Speech API is available, use it directly (no MediaRecorder needed)
       if (useAutoListenSpeechToText) {
         console.log('🎤 Using Web Speech API (desktop)...');
-        try {
-          // Use Web Speech API to record interviewer's question
-          const recognition = new WebSpeechRecognition();
-          speechRecognitionRef.current = recognition;
-          recognition.lang = 'en-US';
-          recognition.continuous = true;  // Allow continuous listening for longer questions
-          recognition.interimResults = true;
-          recognition.maxAlternatives = 1;
-          
-          let finalTranscript = '';
-          let recordingTimeout;
-          
-          recognition.onstart = () => {
-            console.log('🎤 Recording interviewer question...');
-            setIsRecording(true);
-            setLoadingStep('recording');
-            // Set a timeout for recording (60 seconds max for longer questions)
-            recordingTimeout = setTimeout(() => {
-              console.log('Recording timeout - stopping');
-              recognition.stop();
-            }, 60000);
-          };
-          
-          recognition.onresult = (event) => {
-            console.log('onresult event:', { resultIndex: event.resultIndex, resultsLength: event.results.length });
-            let interimTranscript = '';
-            
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              const transcript = event.results[i][0].transcript;
-              console.log(`Result ${i}: isFinal=${event.results[i].isFinal}, transcript="${transcript}"`);
-              
-              if (event.results[i].isFinal) {
-                finalTranscript += transcript + ' ';
-              } else {
-                interimTranscript += transcript;
-              }
-            }
-            
-            // Show real-time transcription of interviewer's question
-            const currentText = finalTranscript + interimTranscript;
-            console.log('Updating question display:', currentText);
-            setRecordedQuestion(currentText);
-          };
-          
-          recognition.onerror = (event) => {
-            console.error('Web Speech API error:', event.error);
-            clearTimeout(recordingTimeout);
-            setIsRecording(false);
-            setLoadingStep(null);
-            
-            // Handle specific errors gracefully
-            if (event.error === 'network') {
-              showToast(`⚠️ Network issue. Try again.`, 'warning');
-            } else if (event.error === 'no-speech') {
-              showToast(`⚠️ No speech detected. Try again.`, 'warning');
+        const recognition = new WebSpeechRecognition();
+        speechRecognitionRef.current = recognition;
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        
+        let finalTranscript = '';
+        
+        recognition.onstart = () => {
+          console.log('🎤 Listening for interview question...');
+          setIsRecording(true);
+          setIsAutoListening(true);
+          setLoadingStep('recording');
+        };
+        
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + ' ';
             } else {
-              showToast(`⚠️ Recording failed: ${event.error}. Please try again.`, 'error');
+              interimTranscript += transcript;
             }
-            
-            // Don't return - let function continue
-          };
-          
-          recognition.onend = () => {
-            clearTimeout(recordingTimeout);
-            console.log('🎤 Question recording ended');
-            setIsRecording(false);
-            setLoadingStep(null);
-            
-            const trimmedQuestion = finalTranscript.trim();
-            console.log('Final transcript:', { trimmedQuestion, finalTranscript });
-            
-            if (trimmedQuestion) {
-              console.log('Auto-analyzing question:', trimmedQuestion);
-              setRecordedQuestion(trimmedQuestion);
-              // Auto-analyze the question
-              setLoadingStep('analyzing');
-              analyzQuestion(trimmedQuestion);
-            } else {
-              console.warn('No speech detected, showing error');
-              showToast('❌ No speech detected. Please speak clearly and try again.', 'error');
-            }
-          };
-          
-          console.log('Starting Web Speech Recognition...');
-          recognition.start();
-          return;
-        } catch (err) {
-          console.error('Failed to initialize Web Speech API:', err);
-          setIsRecording(false);
-          setLoadingStep(null);
-          showToast('❌ Speech recognition not supported. Trying alternative method...', 'warning');
-          // Fallback: continue to try MediaRecorder as alternative
-          // Don't return - let code continue to next condition
-        }
+          }
+          const fullTranscript = finalTranscript + interimTranscript;
+          setRecordedQuestion(fullTranscript);
+          setLiveTranscript('🎤 ' + fullTranscript);
+        };
+        
+        recognition.onerror = (event) => {
+          console.warn('Speech recognition error:', event.error);
+          if (event.error !== 'no-speech') {
+            showToast(`Speech error: ${event.error}`, 'error');
+          }
+        };
+        
+        recognition.onend = () => {
+          if (finalTranscript.trim()) {
+            setRecordedQuestion(finalTranscript.trim());
+          }
+        };
+        
+        recognition.start();
+        return;
       }
       
+      // Use MediaRecorder as fallback
+      console.log('🎤 Using MediaRecorder (web)...');
+      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('❌ getUserMedia not available on this device');
+        showToast('❌ Audio input not supported on this device.', 'error');
+        setLoadingStep(null);
+        setIsRecording(false);
+        return;
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Got audio stream:', stream.id);
+      
+      const preferredTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4'
+      ];
+      const selectedType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      console.log('Selected audio format:', selectedType || 'default');
+      
+      const mediaRecorder = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : undefined);
+      mediaRecorderRef.current = mediaRecorder;
+      recordingMimeTypeRef.current = selectedType || mediaRecorder.mimeType || 'audio/webm';
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        console.log('Data available, chunk size:', event.data.size);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const mimeType = recordingMimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
+        const format = resolveFormatFromMime(mimeType);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        console.log('Recording stopped. Total chunks:', audioChunksRef.current.length, 'Total size:', audioBlob.size, 'bytes');
+        
+        if (audioBlob.size < 100) {
+          showToast('❌ Recording too short. Speak for at least 1-2 seconds.', 'error');
+          stream.getTracks().forEach(track => track.stop());
+          setLoadingStep(null);
+          setIsRecording(false);
+          return;
+        }
+        
+        console.log('✅ Audio recorded, transcribing...');
+        setLoadingStep('transcribing');
+        await transcribeAudio(audioBlob, format);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event.error);
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+        setLoadingStep(null);
+        showToast(`❌ Recording error: ${event.error}`, 'error');
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setLiveTranscript('');
+      console.log('✅ Recording started');
+      startManualLivePreview();
     } catch (error) {
       console.error('Failed to start recording:', error);
       setLoadingStep(null);
       setIsRecording(false);
-      
-      let errorMsg = 'Recording failed';
-      
-      // Detect specific error types
       if (error.name === 'NotAllowedError' || error.message?.includes('Permission')) {
-        const openSettings = window.confirm(
-          'Microphone permission is required.\n\n' +
-          'Tap OK to open Settings and enable microphone access.'
-        );
-        
-        if (openSettings) {
-          await openAppSettings();
-        }
-        return;
-      } else if (error.name === 'NotFoundError' || error.message?.includes('no audio input')) {
-        errorMsg = '❌ No microphone found. Check if microphone is connected or available on this device.';
-      } else if (error.name === 'NotSupportedError') {
-        errorMsg = '❌ Recording not supported in your browser. Try a different browser or device.';
-      } else if (error.message?.includes('getUserMedia')) {
-        errorMsg = '❌ Could not access microphone. Check permissions and try again.';
+        showToast('❌ Microphone permission required', 'error');
+      } else if (error.name === 'NotFoundError') {
+        showToast('❌ No microphone found', 'error');
+      } else {
+        showToast(`❌ Recording error: ${error.message || error.name}`, 'error');
       }
-      
-      showToast(errorMsg, 'error');
     }
   };
 
@@ -868,13 +757,15 @@ function InterviewSession() {
         console.log('🛑 Inside Android stop block');
         setIsRecording(false);
         
-        // Stop native speech recognition - DON'T await, it can hang if already stopped
-        // Just fire and forget with a timeout
+        // Stop native speech recognition - cleanup any running instance
         console.log('🛑 Stopping SpeechRecognition (fire and forget)...');
         try {
-          // Don't await - just try to stop and ignore result
-          SpeechRecognition.stop().catch(() => {});
-          SpeechRecognition.removeAllListeners().catch(() => {});
+          // Use the loaded plugin reference
+          const loadedPlugin = speechRecognitionRef.current?.plugin;
+          if (loadedPlugin) {
+            await loadedPlugin.stop().catch(() => {});
+            await loadedPlugin.removeAllListeners().catch(() => {});
+          }
         } catch (e) {
           // Ignore all errors
         }
@@ -886,66 +777,13 @@ function InterviewSession() {
         const result = await stopNativeRecording();
         console.log('📁 Native recorder result:', JSON.stringify(result));
         
-        const filePath = result?.filePath;
-        const webPath = result?.webPath;
-        console.log('📁 FilePath:', filePath);
-        console.log('🌐 WebPath:', webPath);
-
-        if (!filePath && !webPath) {
-          console.error('❌ No file path returned from native recorder');
-          showToast('❌ No audio file from native recorder.', 'error');
-          setLoadingStep(null);
-          return;
-        }
-
-        let audioBlob = null;
-
-        // On Android, prefer webPath fetch FIRST (most reliable in Capacitor WebView)
-        // The webPath is a special Capacitor URL that works directly without file system issues
-        if (webPath) {
-          try {
-            console.log('🌐 Trying webPath fetch (preferred on Android):', webPath);
-            const response = await fetch(webPath);
-            console.log('📡 Fetch response status:', response.status, response.statusText);
-            if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
-            const rawBlob = await response.blob();
-            console.log('✅ Raw blob from webPath - size:', rawBlob.size, 'type:', rawBlob.type);
-            // Re-type to audio/mp4 for M4A files (Capacitor may return audio/mpeg incorrectly)
-            audioBlob = new Blob([rawBlob], { type: 'audio/mp4' });
-            console.log('✅ Re-typed blob - size:', audioBlob.size, 'type:', audioBlob.type);
-          } catch (webErr) {
-            console.warn('⚠️ webPath fetch failed:', webErr.message);
-          }
-        }
-
-        // Fallback: Read via Filesystem API if webPath failed
-        // Note: For absolute paths, we must NOT use a directory option
-        if (!audioBlob && filePath) {
-          try {
-            console.log('📂 Trying Filesystem read (fallback) with absolute path:', filePath);
-            // For absolute paths from native recorder, don't use any directory option
-            const fsResult = await Filesystem.readFile({ path: filePath });
-            console.log('📂 Filesystem read success, data length:', fsResult.data?.length);
-
-            const base64Data = fsResult.data;
-            if (base64Data) {
-              console.log('🔄 Converting base64 to blob...');
-              const binaryString = atob(base64Data);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-              }
-              audioBlob = new Blob([bytes], { type: 'audio/mp4' });
-            }
-          } catch (fsErr) {
-            console.warn('⚠️ Filesystem read failed:', fsErr.message || fsErr);
-          }
-        }
+        // The blob should be directly returned by nativeAudioRecorder
+        const audioBlob = result?.blob;
 
         // Validate blob
         if (!audioBlob) {
-          console.error('❌ Failed to create audio blob from both webPath and Filesystem');
-          showToast('❌ Failed to read recorded audio file.', 'error');
+          console.error('❌ No audio blob returned from native recorder');
+          showToast('❌ Failed to get recorded audio.', 'error');
           setLoadingStep(null);
           return;
         }
@@ -963,7 +801,14 @@ function InterviewSession() {
         }
 
         console.log('🎯 Sending to transcription API - size:', audioBlob.size, 'type:', audioBlob.type);
-        await transcribeAudio(audioBlob, 'm4a');
+        const mimeType = result?.mimeType || audioBlob.type || 'audio/webm';
+        let format = 'webm';
+        if (mimeType.includes('wav')) format = 'wav';
+        else if (mimeType.includes('ogg')) format = 'ogg';
+        else if (mimeType.includes('mp3') || mimeType.includes('mpeg')) format = 'mp3';
+        else if (mimeType.includes('m4a') || mimeType.includes('mp4')) format = 'm4a';
+        console.log('🎤 Detected format:', format, 'from mimeType:', mimeType);
+        await transcribeAudio(audioBlob, format);
         return;
       } catch (err) {
         console.error('❌ Native recording error:', err);
@@ -1095,10 +940,9 @@ function InterviewSession() {
     setLoading(true);
     setLoadingStep('transcribing');
     try {
-      console.log('Transcribing interviewer question audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type, 'format:', format);
+      console.log('🎤 Transcribing audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type, 'format:', format);
 
       // Ensure blob has proper MIME type for the format
-      let finalBlob = audioBlob;
       const mimeTypes = {
         'webm': 'audio/webm',
         'wav': 'audio/wav',
@@ -1109,59 +953,72 @@ function InterviewSession() {
         'm4a': 'audio/mp4',
         'aac': 'audio/aac'
       };
-      const mimeType = mimeTypes[format] || 'audio/mp4';
-      // Always re-create blob with correct type for Android
-      finalBlob = new Blob([audioBlob], { type: mimeType });
-      console.log('Final blob MIME type:', mimeType, 'size:', finalBlob.size);
+      const mimeType = mimeTypes[format] || 'audio/webm';
+      const finalBlob = new Blob([audioBlob], { type: mimeType });
+      console.log('🎤 Final blob:', mimeType, finalBlob.size, 'bytes');
+
+      if (finalBlob.size < 1000) {
+        throw new Error('Recording too short. Please speak for at least 2-3 seconds.');
+      }
 
       const formData = new FormData();
       formData.append('audio', finalBlob, `question.${format}`);
       formData.append('format', format);
-      console.log('FormData prepared with blob size:', finalBlob.size, 'type:', finalBlob.type);
 
       // Get auth token
       const token = getAuthToken();
+      console.log('🎤 Token available:', !!token);
       
-      // Build API URL - use native fetch to bypass Capacitor HTTP plugin issues
+      // Build API URL
       const apiBase = (getApiRoot() || '').replace(/\/$/, '');
       const url = `${apiBase}/api/transcription/transcribe`;
+      console.log('🎤 Transcription URL:', url);
       
-      console.log('Sending FormData to:', url);
-      
-      // Use native fetch (not axios) for reliable FormData upload on Android
-      const fetchResponse = await fetch(url, {
+      // Use native fetch for FormData upload on Android
+      const fetchOptions = {
         method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          // DO NOT set Content-Type - let browser set multipart/form-data with boundary
-        },
         body: formData,
-      });
+      };
       
-      console.log('Fetch response status:', fetchResponse.status);
-      
-      if (!fetchResponse.ok) {
-        const errData = await fetchResponse.json().catch(() => ({}));
-        console.error('Transcription error response:', errData);
-        throw new Error(errData.message || errData.error || `HTTP ${fetchResponse.status}`);
+      // Add auth header if token exists
+      if (token) {
+        fetchOptions.headers = {
+          'Authorization': `Bearer ${token}`,
+        };
       }
       
-      const data = await fetchResponse.json();
+      console.log('🎤 Sending request to server...');
+      const fetchResponse = await fetch(url, fetchOptions);
+      
+      console.log('🎤 Response status:', fetchResponse.status, fetchResponse.statusText);
+      
+      // Get response body for error details
+      const responseText = await fetchResponse.text();
+      console.log('🎤 Response body:', responseText.substring(0, 500));
+      
+      if (!fetchResponse.ok) {
+        let errData = {};
+        try {
+          errData = JSON.parse(responseText);
+        } catch {}
+        throw new Error(errData.message || errData.error || `Server error: ${fetchResponse.status}`);
+      }
+      
+      const data = JSON.parse(responseText);
       const transcribedText = data.text;
 
-      console.log('Transcription successful:', transcribedText);
+      console.log('🎤 Transcription successful:', transcribedText);
       if (!transcribedText || !transcribedText.trim()) {
-        throw new Error('Transcription returned empty text. Please try again with clearer audio.');
+        throw new Error('No speech detected. Please speak louder or try again.');
       }
 
       const cleaned = transcribedText.trim();
       setRecordedQuestion(cleaned);
-      // Automatically ask AI for perfect answer based on the transcribed question
       await analyzQuestion(cleaned);
 
       setLoadingStep(null);
     } catch (error) {
-      console.error('Transcription failed:', error);
+      console.error('🎤 Transcription failed:', error);
       setLoadingStep(null);
       setLoading(false);
       const errorMessage = error.message || 'Unknown error';

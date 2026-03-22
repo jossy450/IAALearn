@@ -114,6 +114,12 @@ a:hover {
   padding: 0 1.25rem;
 }
 
+/* Helper: mobile-safe padding wrapper */
+.mobile-wrap {
+  width: 100%;
+  padding-inline: clamp(1rem, 4vw, 1.5rem);
+}
+
 .btn {
   padding: 0.65rem 1.2rem;
   border-radius: 12px;
@@ -289,4 +295,108 @@ a:hover {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* Mobile-specific touch optimizations */
+@media (max-width: 768px) {
+  /* Prevent text selection on UI elements */
+  button, 
+  .nav-item, 
+  .bottom-nav-item,
+  .option-btn {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  
+  /* Touch feedback */
+  .btn,
+  button,
+  a {
+    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.2);
+  }
+  
+  /* Prevent zoom on input focus */
+  input, 
+  textarea, 
+  select {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+  
+  /* Smooth scrolling */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Better scrollbar on mobile */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  /* Improve touch targets */
+  .btn {
+    min-height: 48px;
+    padding: 0.875rem 1.5rem;
+  }
+  
+  /* Card adjustments */
+  .card {
+    padding: 1rem;
+    border-radius: 12px;
+  }
+  
+  /* Modal full screen on mobile */
+  .modal {
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Form inputs */
+  .input {
+    padding: 1rem;
+    font-size: 16px;
+    min-height: 48px;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: max(0px)) {
+  .layout.mobile-layout {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+}
+
+/* Improve readability on small screens */
+@media (max-width: 480px) {
+  body {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  
+  h1 { font-size: 1.75rem !important; }
+  h2 { font-size: 1.5rem !important; }
+  h3 { font-size: 1.25rem !important; }
+  
+  .btn {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.95rem;
+  }
+}
+
+/* Landscape mode adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+  .mobile-header {
+    height: 48px;
+  }
+  
+  .main-content {
+    padding-top: 48px;
+  }
+  
+  .bottom-nav {
+    height: 56px;
+  }
 }

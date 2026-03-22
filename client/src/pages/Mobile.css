@@ -1,17 +1,24 @@
 .mobile-page {
   max-width: 900px;
   margin: 0 auto;
+  padding-bottom: 1rem;
 }
 
 .mobile-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
 }
 
 .mobile-header h1 {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  color: var(--gray-900);
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
+}
+
+.mobile-header .subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
 }
 
 .mobile-content {
@@ -154,13 +161,35 @@
 }
 
 @media (max-width: 768px) {
+  .mobile-page {
+    padding: 0.5rem 0;
+  }
+  
+  .mobile-header h1 {
+    font-size: 1.5rem;
+  }
+  
   .mobile-content {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 
+  .mobile-instructions {
+    padding: 1.25rem;
+  }
+  
+  .mobile-instructions h3 {
+    font-size: 1.1rem;
+  }
+
+  .connection-section {
+    padding: 1.5rem;
+  }
+  
   .connection-code {
     font-size: 2rem;
     letter-spacing: 0.25rem;
+    padding: 0.875rem 1.5rem;
   }
 
   .mobile-session-item {
@@ -171,5 +200,20 @@
 
   .btn-small {
     width: 100%;
+  }
+  
+  .btn-large {
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+    min-height: 48px;
+  }
+  
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .feature-item {
+    padding: 1.25rem;
   }
 }

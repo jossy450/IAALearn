@@ -47,7 +47,13 @@ const upload = multer({
 // Transcribe audio file - optimized with OpenAI Whisper
 router.post('/transcribe', authenticate, upload.single('audio'), async (req, res, next) => {
   try {
+    console.log('🎤 Transcription request received');
+    console.log('   User:', req.user?.id || req.user?.email || 'unknown');
+    console.log('   File:', req.file ? `${req.file.size} bytes, ${req.file.mimetype}` : 'NO FILE');
+    console.log('   Body:', JSON.stringify(req.body));
+    
     if (!req.file) {
+      console.error('❌ No audio file in request');
       return res.status(400).json({ 
         error: 'No audio file provided',
         details: 'Please record audio before submitting'
@@ -62,6 +68,7 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     
     // Check minimum audio size (at least 1KB for valid audio)
     if (req.file.size < 1000) {
+      console.error('❌ Audio too short:', req.file.size, 'bytes');
       return res.status(400).json({
         error: 'Audio too short',
         message: 'Please record at least 1 second of audio',
@@ -71,6 +78,19 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     
     console.log(`🎤 Transcribing audio: ${req.file.size} bytes, format: ${format}, language: ${language}`);
 
+    // Check available providers
+    const providers = freeNeuralTranscriptionService.getAvailableProviders();
+    console.log('🎤 Available providers:', providers.map(p => p.name).join(', ') || 'NONE');
+    
+    if (providers.length === 0) {
+      console.error('❌ No transcription providers configured!');
+      return res.status(500).json({
+        error: 'Transcription service not configured',
+        message: 'No transcription providers are available. Please contact support.',
+        details: 'Server configuration issue - no STT providers configured'
+      });
+    }
+
     const result = await freeNeuralTranscriptionService.transcribeAudio(req.file.buffer, format, language);
 
     console.log(`✅ Transcription successful with ${result.provider}: "${result.text.substring(0, 50)}..." (${result.duration}ms)`);
@@ -78,6 +98,7 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     res.json(result);
   } catch (error) {
     console.error('❌ Transcription error:', error.message);
+    console.error('   Stack:', error.stack);
 
     const status = error.statusCode || 500;
     const providers = freeNeuralTranscriptionService.getAvailableProviders().map(p => p.name);

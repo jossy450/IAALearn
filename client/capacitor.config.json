@@ -1,35 +1,31 @@
 {
-  "appId": "com.interviewassistant.app",
-  "appName": "Interview Assistant",
+  "appId": "com.iaalearn.app",
+  "appName": "IAA Learn",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",
     "iosScheme": "capacitor"
   },
   "android": {
-    "buildOptions": {
-      "keystorePath": "release.keystore",
-      "keystoreAlias": "interview-assistant-key"
-    },
-    "backgroundColor": "#3b82f6",
+    "backgroundColor": "#081226",
     "allowMixedContent": false,
     "captureInput": true,
     "webContentsDebuggingEnabled": false
   },
   "ios": {
     "contentInset": "automatic",
-    "backgroundColor": "#3b82f6"
+    "backgroundColor": "#081226"
   },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 2000,
-      "backgroundColor": "#3b82f6",
+      "backgroundColor": "#081226",
       "androidSplashResourceName": "splash",
       "showSpinner": false
     },
     "StatusBar": {
       "style": "dark",
-      "backgroundColor": "#3b82f6"
+      "backgroundColor": "#081226"
     },
     "Keyboard": {
       "resize": "body",

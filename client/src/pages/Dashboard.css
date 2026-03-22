@@ -76,13 +76,38 @@
   }
   .dashboard {
     padding: 0.75rem;
+    padding-bottom: 1.5rem; /* Space for bottom nav */
   }
   .dashboard-header {
     padding: 1rem;
     margin-bottom: 1rem;
+    border-radius: 12px;
   }
   .dashboard-header h1 {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
+    text-align: center;
+  }
+  .dashboard-header .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 48px;
+  }
+  .dashboard-options {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.5rem;
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  .dashboard-options .option-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 0.6rem 1rem;
+    min-height: 44px;
+    font-size: 0.85rem;
   }
 }
 

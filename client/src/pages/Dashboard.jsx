@@ -447,10 +447,30 @@ function Dashboard() {
     );
   }
 
+  // Extract first name from user data
+  const getDisplayName = () => {
+    if (!user) return 'User';
+    // Try full_name first
+    if (user.full_name) {
+      const parts = user.full_name.trim().split(' ');
+      return parts[0]; // Return first name
+    }
+    // Try name field
+    if (user.name) {
+      const parts = user.name.trim().split(' ');
+      return parts[0]; // Return first name
+    }
+    // Try email prefix
+    if (user.email) {
+      return user.email.split('@')[0];
+    }
+    return 'User';
+  };
+
   return (
     <div className="dashboard modern-ui">
       <div className="dashboard-header">
-        <h1>Welcome, {user?.name || 'User'}!</h1>
+        <h1>Welcome, {getDisplayName()}!</h1>
         <button className="btn btn-primary" onClick={() => setShowNewSession(true)}>New Session</button>
       </div>
       <div className="dashboard-options">

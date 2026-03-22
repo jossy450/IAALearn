@@ -9,51 +9,70 @@ router.get('/', (req, res) => {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <meta name="theme-color" content="#ffffff">
   <title>Disclaimer - IAA Learn</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      min-height: 100vh;
+      background: #ffffff !important;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
       line-height: 1.6;
-      color: #333;
-      background: #f5f5f5;
+      color: #1a1a2e;
+      background: #ffffff !important;
       padding: 20px;
+      -webkit-text-size-adjust: 100%;
     }
     .container {
       max-width: 800px;
       margin: 0 auto;
-      background: white;
+      background: #ffffff;
       padding: 40px;
       border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
     h1 {
       color: #1a1a2e;
-      margin-bottom: 10px;
-      font-size: 2em;
+      margin-bottom: 20px;
+      font-size: 1.8em;
+      font-weight: 700;
     }
     h2 {
       color: #1a1a2e;
       margin-top: 30px;
       margin-bottom: 15px;
-      font-size: 1.4em;
+      font-size: 1.3em;
+      font-weight: 600;
     }
-    p { margin-bottom: 15px; }
+    p { 
+      margin-bottom: 15px; 
+      color: #333333;
+    }
     ul { margin-left: 20px; margin-bottom: 15px; }
-    li { margin-bottom: 8px; }
-    a { color: #4a90d9; text-decoration: none; }
+    li { margin-bottom: 8px; color: #333333; }
+    strong { color: #1a1a2e; font-weight: 600; }
+    a { color: #2563eb; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .updated {
       margin-top: 40px;
       padding-top: 20px;
-      border-top: 1px solid #eee;
-      color: #888;
+      border-top: 1px solid #e0e0e0;
+      color: #666666;
       font-size: 0.9em;
     }
+    hr {
+      border: none;
+      border-top: 1px solid #e0e0e0;
+      margin: 30px 0;
+    }
     @media (max-width: 600px) {
+      body { padding: 10px; }
       .container { padding: 20px; }
       h1 { font-size: 1.5em; }
+      h2 { font-size: 1.2em; }
     }
   </style>
 </head>

@@ -24,6 +24,8 @@ import {
   Menu,
   X,
   Gift,
+  PlusCircle,
+  User,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -57,6 +59,15 @@ function Layout() {
   }, [isMobileViewport, forceDesktop]);
 
   const isMobileLayout = useMemo(() => isMobileViewport && !forceDesktop, [isMobileViewport, forceDesktop]);
+
+  // Bottom navigation items for mobile
+  const bottomNavItems = [
+    { path: '/', icon: LayoutDashboard, label: 'Home' },
+    { path: '/mobile', icon: Smartphone, label: 'Mobile' },
+    { path: '/mock-interview', icon: Headphones, label: 'Interview' },
+    { path: '/analytics', icon: BarChart3, label: 'Analytics' },
+    { path: '/subscription', icon: Monitor, label: 'Plans' },
+  ];
 
   const handleLogout = async () => {
     try {
@@ -97,6 +108,8 @@ function Layout() {
     );
   };
 
+  const isAdminOrPowerUser = user?.role === 'owner' || user?.role === 'power_user' || user?.email === 'jossy450@gmail.com' || user?.email === 'admin@admin.com' || user?.email === 'mightyjosing@gmail.com';
+  
   const navItems = [
     { path: '/',            icon: LayoutDashboard, label: 'Dashboard',          requiredPlan: null },
     { path: '/subscription',icon: Monitor,         label: 'Subscription',       requiredPlan: null },
@@ -106,8 +119,8 @@ function Layout() {
     { path: '/mock-interview', icon: Headphones,  label: 'Mock Interview',     requiredPlan: null },
     { path: '/faq',         icon: HelpCircle,      label: 'FAQ',                requiredPlan: null },
     { path: '/feedback',    icon: MessageSquare,   label: 'Feedback',           requiredPlan: null },
-    { path: '/settings',    icon: Settings,        label: 'Settings',           requiredPlan: null },
-    ...((isPrivileged() || user?.role === 'admin' || user?.role === 'power_user') ? [{ path: '/admin/users', icon: Users, label: 'Users', requiredPlan: null }] : []),
+    ...(isAdminOrPowerUser ? [{ path: '/settings', icon: Settings, label: 'Settings', requiredPlan: null }] : []),
+    ...(isAdminOrPowerUser ? [{ path: '/admin/users', icon: Users, label: 'Users', requiredPlan: null }] : []),
   ];
 
   const handleNavClick = (path) => {
@@ -218,6 +231,28 @@ function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
+
+      {/* Bottom Navigation for Mobile */}
+      {isMobileLayout && (
+        <nav className="bottom-nav">
+          <div className="bottom-nav-items">
+            {bottomNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              return (
+                <button
+                  key={item.path}
+                  className={`bottom-nav-item ${isActive ? 'active' : ''}`}
+                  onClick={() => handleNavClick(item.path)}
+                >
+                  <Icon size={22} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

@@ -1,207 +1,428 @@
 .referral-page {
-  max-width: 600px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 20px;
+  padding: clamp(1rem, 4vw, 2rem);
+  padding-bottom: clamp(1.5rem, 5vw, 2.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .referral-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 1.5rem;
+  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.referral-icon {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  color: white;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
 }
 
 .referral-header h1 {
-  margin: 15px 0 10px;
-  font-size: 1.8rem;
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  color: var(--text-primary);
 }
 
 .referral-header p {
-  color: #666;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin: 0;
 }
 
 .referral-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 30px;
-  color: white;
-  margin-bottom: 20px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(139, 92, 246, 0.18) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: clamp(1.25rem, 4vw, 1.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
 }
 
 .referral-card h2 {
-  margin: 0 0 20px;
-  font-size: 1.2rem;
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .referral-code-display {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 15px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 14px;
+  padding: 1.25rem;
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .referral-code {
-  font-size: 2rem;
-  font-weight: bold;
-  letter-spacing: 4px;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: 6px;
+  color: #e0ecff;
+  text-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+  font-family: 'Space Grotesk', 'Courier New', monospace;
 }
 
 .referral-url-box {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  align-items: stretch;
 }
 
 .referral-url-input {
   flex: 1;
-  padding: 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  background: white;
-  color: #333;
-}
-
-.copy-btn, .share-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--border-weak);
+  border-radius: 12px;
+  font-size: 0.92rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  min-width: 0;
 }
 
 .copy-btn {
-  background: white;
-  color: #667eea;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.95rem 1.05rem;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.25);
+}
+
+.copy-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.32);
+}
+
+.share-buttons {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .share-btn {
   width: 100%;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  background: #4ade80;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.share-native {
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
   color: white;
 }
 
-.copy-btn:hover, .share-btn:hover {
+.share-native:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.3);
+}
+
+.share-native:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.quick-share {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.quick-share-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.95rem;
+  border: 1px solid var(--border-weak);
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.quick-share-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+}
+
+.quick-share-btn.whatsapp {
+  background: rgba(37, 211, 102, 0.1);
+  border-color: rgba(37, 211, 102, 0.3);
+  color: #25D366;
+}
+
+.quick-share-btn.whatsapp:hover {
+  background: rgba(37, 211, 102, 0.2);
+}
+
+.quick-share-btn.email {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.3);
 }
 
 .referral-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .stat-box {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-weak);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  width: 100%;
+}
+
+.stat-box.highlight {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+  border-color: rgba(37, 99, 235, 0.3);
 }
 
 .stat-box svg {
-  color: #667eea;
-  margin-bottom: 10px;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
 }
 
 .stat-value {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #333;
+  font-size: clamp(1.8rem, 5vw, 2.5rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 0.35rem;
 }
 
 .stat-label {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9rem;
-  margin-top: 5px;
 }
 
 .referral-history {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 30px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--surface);
+  border: 1px solid var(--border-weak);
+  border-radius: 16px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
 }
 
 .referral-history h2 {
-  margin: 0 0 15px;
-  font-size: 1.2rem;
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  color: var(--text-primary);
 }
 
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.75rem;
 }
 
 .history-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  gap: 0.875rem;
+  padding: 0.95rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.history-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
 }
 
 .history-info {
-  display: flex;
-  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
-.history-email {
-  font-weight: 500;
+.history-name {
+  display: block;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .history-date {
+  display: block;
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-secondary);
+  margin-top: 2px;
 }
 
-.reward-claimed {
-  color: #10b981;
+.history-status {
+  flex-shrink: 0;
+}
+
+.status-joined {
+  color: #22d3ee;
   font-weight: 600;
+  font-size: 0.85rem;
 }
 
-.reward-pending {
-  color: #f59e0b;
-  font-weight: 600;
+.referral-tips {
+  background: var(--surface);
+  border: 1px solid var(--border-weak);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
 }
 
-.referral-how-it-works {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.referral-how-it-works h2 {
-  margin: 0 0 15px;
-  font-size: 1.2rem;
-}
-
-.referral-how-it-works ol {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.referral-how-it-works li {
-  margin-bottom: 10px;
-  color: #555;
-}
-
-.referral-how-it-works strong {
-  color: #333;
-}
-
-.loading {
+.referral-tips h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  color: var(--text-primary);
   text-align: center;
-  padding: 40px;
-  color: #666;
+}
+
+.tips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.tip-card {
+  text-align: center;
+  padding: 1rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.tip-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.tip-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.tip-card p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--text-secondary);
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .referral-page {
+    padding: 0.85rem;
+    padding-bottom: 1.5rem;
+  }
+  
+  .referral-card {
+    padding: 1.1rem;
+  }
+  
+  .referral-code {
+    font-size: 1.5rem;
+    letter-spacing: 4px;
+  }
+  
+  .referral-url-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .copy-btn {
+    justify-content: center;
+    width: 100%;
+  }
+  
+  .quick-share {
+    grid-template-columns: 1fr;
+  }
+  
+  .tips-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  
+  .tip-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    text-align: left;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+  }
+  
+  .tip-icon {
+    margin-bottom: 0;
+    font-size: 1.5rem;
+  }
+  
+  .stat-box {
+    min-width: auto;
+    width: 100%;
+    padding: 1.25rem;
+  }
 }

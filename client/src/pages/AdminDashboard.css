@@ -1,8 +1,8 @@
 .admin-layout {
   display: flex;
-  height: 100vh;
+  min-height: 100vh;
   background: #f9fafb;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .admin-sidebar {
@@ -112,16 +112,18 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
+  min-height: 0;
 }
 
 .admin-topbar {
-  padding: 1.5rem 2rem;
+  padding: 1.25rem 1.5rem;
   background: white;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .admin-topbar h1 {
@@ -236,7 +238,7 @@
 }
 
 .admin-overview {
-  padding: 2rem;
+  padding: 1.5rem;
   flex: 1;
   overflow: auto;
 }
@@ -356,7 +358,7 @@
 }
 
 .admin-users {
-  padding: 2rem;
+  padding: 1.5rem;
   flex: 1;
   overflow: auto;
 }
@@ -457,7 +459,7 @@
 }
 
 .admin-analytics {
-  padding: 2rem;
+  padding: 1.5rem;
   flex: 1;
   overflow: auto;
 }
@@ -611,7 +613,7 @@
   }
 
   .admin-topbar {
-    padding: 1.25rem 1rem;
+    padding: 1rem;
     flex-direction: column;
     align-items: stretch;
   }
@@ -628,6 +630,12 @@
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-overview,
+  .admin-users,
+  .admin-analytics {
+    padding: 1rem;
   }
 
   .section-header {

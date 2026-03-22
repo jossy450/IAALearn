@@ -55,6 +55,12 @@ class FreeNeuralTranscriptionService {
     const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY; // Only use if explicitly xAI key
     const openaiKey = process.env.OPENAI_API_KEY;
     
+    console.log('🔍 Transcription provider check:');
+    console.log('   GROQ_API_KEY:', groqKey ? '***' + groqKey.slice(-4) : 'NOT SET');
+    console.log('   OPENAI_API_KEY:', openaiKey ? '***' + openaiKey.slice(-4) : 'NOT SET');
+    console.log('   XAI_API_KEY:', xaiKey ? '***' + xaiKey.slice(-4) : 'NOT SET');
+    console.log('   HUGGINGFACE_API_KEY:', process.env.HUGGINGFACE_API_KEY ? 'SET' : 'NOT SET');
+    
     // GROQ Whisper is fastest and free - prioritize it first if key is available
     if (groqKey) {
       providers.push({
