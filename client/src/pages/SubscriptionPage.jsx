@@ -201,19 +201,38 @@ function PaymentModal({ plan, onClose, onSuccess }) {
   const [clientSecret, setClientSecret] = useState('');
   const [loadingIntent, setLoadingIntent] = useState(true);
   const [intentError, setIntentError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+
+  const RETRY_CONFIG = { maxRetries: 5, initialDelayMs: 500 };
+
+  const createPaymentIntent = async (attempt = 0) => {
+    try {
+      const res = await api.post('/subscriptions/stripe/create-payment-intent', { plan: plan.id });
+      setClientSecret(res.data.clientSecret);
+      setLoadingIntent(false);
+      setRetryCount(0);
+    } catch (err) {
+      const isRateLimit = err?.response?.status === 429 || err?.response?.data?.retryAfter;
+      
+      if (isRateLimit && attempt < RETRY_CONFIG.maxRetries) {
+        const delay = RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt);
+        const nextAttempt = attempt + 1;
+        console.log(`Rate limited, retrying in ${delay}ms (attempt ${nextAttempt}/${RETRY_CONFIG.maxRetries})`);
+        setRetryCount(nextAttempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return createPaymentIntent(nextAttempt);
+      }
+      
+      setIntentError(err?.response?.data?.error || err.message || 'Failed to initialise payment.');
+      setLoadingIntent(false);
+      setRetryCount(0);
+    }
+  };
 
   useEffect(() => {
     setLoadingIntent(true);
     setIntentError('');
-    api.post('/subscriptions/stripe/create-payment-intent', { plan: plan.id })
-      .then(res => {
-        setClientSecret(res.data.clientSecret);
-        setLoadingIntent(false);
-      })
-      .catch(err => {
-        setIntentError(err?.response?.data?.error || err.message || 'Failed to initialise payment.');
-        setLoadingIntent(false);
-      });
+    createPaymentIntent();
   }, [plan.id]);
 
   const appearance = {
@@ -242,7 +261,9 @@ function PaymentModal({ plan, onClose, onSuccess }) {
         {loadingIntent && (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
             <div style={{ ...formStyles.spinner, margin: '0 auto 1rem', width: 32, height: 32, borderWidth: 3 }} />
-            Preparing secure payment…
+            {retryCount > 0 
+              ? `Retrying (attempt ${retryCount}/${RETRY_CONFIG.maxRetries})…` 
+              : 'Preparing secure payment…'}
           </div>
         )}
 
@@ -250,7 +271,14 @@ function PaymentModal({ plan, onClose, onSuccess }) {
           <div style={{ padding: '1.5rem', color: '#ef4444', textAlign: 'center' }}>
             {intentError}
             <br />
-            <button onClick={onClose} style={{ ...formStyles.cancelBtn, marginTop: '1rem' }}>Go back</button>
+            <button onClick={() => {
+              setIntentError('');
+              setRetryCount(0);
+              createPaymentIntent();
+            }} style={{ ...formStyles.payBtn, marginTop: '1rem', background: '#635bff' }}>
+              Try Again
+            </button>
+            <button onClick={onClose} style={{ ...formStyles.cancelBtn, marginTop: '0.5rem', display: 'block', margin: '0.5rem auto 0' }}>Cancel</button>
           </div>
         )}
 

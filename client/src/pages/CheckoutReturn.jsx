@@ -3,6 +3,25 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { CheckCircle, XCircle, Loader } from 'lucide-react';
 
+const RETRY_CONFIG = { maxRetries: 5, initialDelayMs: 500 };
+
+async function fetchWithRetry(url, attempt = 0) {
+  try {
+    const res = await api.get(url);
+    return res.data;
+  } catch (err) {
+    const isRateLimit = err?.response?.status === 429 || err?.response?.data?.retryAfter;
+    
+    if (isRateLimit && attempt < RETRY_CONFIG.maxRetries) {
+      const delay = RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt);
+      console.log(`Rate limited, retrying session-status in ${delay}ms (attempt ${attempt + 1}/${RETRY_CONFIG.maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(url, attempt + 1);
+    }
+    throw err;
+  }
+}
+
 /**
  * Stripe redirects here after checkout with ?session_id=xxx
  * We verify the session server-side and show success/failure.
@@ -16,18 +35,14 @@ function CheckoutReturn() {
   const [plan, setPlan] = useState('');
   const [email, setEmail] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
-  useEffect(() => {
-    if (!sessionId) {
-      setStatus('error');
-      setErrorMsg('No session ID found. Payment may not have completed.');
-      return;
-    }
-
-    api
-      .get(`/subscriptions/stripe/session-status?session_id=${sessionId}`)
-      .then((res) => {
-        const data = res.data;
+  const verifyPayment = () => {
+    setStatus('loading');
+    setRetryCount(0);
+    
+    fetchWithRetry(`/subscriptions/stripe/session-status?session_id=${sessionId}`)
+      .then((data) => {
         if (data.paid) {
           setPlan(data.plan || 'subscription');
           setEmail(data.customer_email || '');
@@ -45,6 +60,15 @@ function CheckoutReturn() {
             'Failed to verify payment. Please contact support.'
         );
       });
+  };
+
+  useEffect(() => {
+    if (!sessionId) {
+      setStatus('error');
+      setErrorMsg('No session ID found. Payment may not have completed.');
+      return;
+    }
+    verifyPayment();
   }, [sessionId]);
 
   return (
@@ -87,11 +111,11 @@ function CheckoutReturn() {
             <h2 style={{ ...styles.title, color: '#ef4444' }}>Payment Not Confirmed</h2>
             <p style={styles.subtitle}>{errorMsg}</p>
             <div style={styles.actions}>
-              <button style={styles.btnPrimary} onClick={() => navigate('/subscription')}>
-                Try Again
+              <button style={styles.btnPrimary} onClick={verifyPayment}>
+                Retry Verification
               </button>
-              <button style={styles.btnSecondary} onClick={() => navigate('/')}>
-                Go to Dashboard
+              <button style={styles.btnSecondary} onClick={() => navigate('/subscription')}>
+                Try Again Later
               </button>
             </div>
           </>

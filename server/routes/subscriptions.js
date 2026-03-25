@@ -5,6 +5,37 @@ const { getSubscriptionStatus, startTrial, createSubscription, cancelSubscriptio
 const { createCheckoutSession, retrieveCheckoutSession, constructWebhookEvent } = require('../services/stripe');
 const db = require('../database/connection');
 
+const RETRY_CONFIG = {
+  maxRetries: 5,
+  initialDelayMs: 500,
+  maxDelayMs: 8000,
+};
+
+async function withRetry(fn, context = 'operation') {
+  let lastError;
+  for (let attempt = 0; attempt < RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      
+      const isRateLimit = err.type === 'StripeRateLimitError' || err.statusCode === 429 || err.code === 'RATE_LIMITED';
+      
+      if (!isRateLimit || attempt === RETRY_CONFIG.maxRetries - 1) {
+        throw err;
+      }
+      
+      const delay = Math.min(
+        RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt),
+        RETRY_CONFIG.maxDelayMs
+      );
+      console.log(`${context}: Rate limited (${err.type || err.code || '429'}), retrying in ${delay}ms (attempt ${attempt + 1}/${RETRY_CONFIG.maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
+
 // ── Plan limits (mirrors client/src/store/subscriptionStore.js) ───────────────
 const PLAN_LIMITS = {
   free:      { maxDocUploadsPerSession: 3, unlimitedDocUploads: false, advancedAnalytics: false, sessionRecording: false, customAI: false, sessionExport: false, stealthMode: true, stealthModeLimit: 3, mobileApp: false, teamCollaboration: false, apiAccess: false },
@@ -168,12 +199,14 @@ router.post('/stripe/create-payment-intent', authenticate, async (req, res) => {
 
   try {
     const { createPaymentIntent } = require('../services/stripe');
-    const intent = await createPaymentIntent({
-      amount:   PLAN_AMOUNTS[plan],
-      currency: 'gbp',
-      metadata: { userId: String(req.user.id), plan },
-      description: PLAN_LABELS[plan],
-    });
+    const intent = await withRetry(async () => {
+      return await createPaymentIntent({
+        amount:   PLAN_AMOUNTS[plan],
+        currency: 'gbp',
+        metadata: { userId: String(req.user.id), plan },
+        description: PLAN_LABELS[plan],
+      });
+    }, 'create-payment-intent');
     res.json({ clientSecret: intent.client_secret, amount: PLAN_AMOUNTS[plan], plan });
   } catch (err) {
     console.error('PaymentIntent error:', err.message);
@@ -233,13 +266,15 @@ router.post('/stripe/create-checkout-session', authenticate, async (req, res) =>
   const cancelUrl  = `${clientUrl}/subscription?cancelled=1`;
 
   try {
-    const session = await createCheckoutSession({
-      plan,
-      userId:    req.user.id,
-      userEmail: req.user.email,
-      successUrl,
-      cancelUrl,
-    });
+    const session = await withRetry(async () => {
+      return await createCheckoutSession({
+        plan,
+        userId:    req.user.id,
+        userEmail: req.user.email,
+        successUrl,
+        cancelUrl,
+      });
+    }, 'create-checkout-session');
     res.json({ url: session.url, sessionId: session.id });
   } catch (err) {
     console.error('Stripe checkout session error:', err.message);
@@ -256,7 +291,9 @@ router.get('/stripe/session-status', authenticate, async (req, res) => {
   if (!session_id) return res.status(400).json({ error: 'session_id is required.' });
 
   try {
-    const session = await retrieveCheckoutSession(session_id);
+    const session = await withRetry(async () => {
+      return await retrieveCheckoutSession(session_id);
+    }, 'session-status');
 
     // Verify the session belongs to this user
     if (session.metadata?.userId && session.metadata.userId !== String(req.user.id)) {
@@ -357,12 +394,14 @@ router.post('/pay-per-interview/create-payment-intent', authenticate, async (req
   
   try {
     const { createPaymentIntent } = require('../services/stripe');
-    const intent = await createPaymentIntent({
-      amount: CREDIT_PRICE * credits,
-      currency: 'gbp',
-      metadata: { userId: String(req.user.id), credits: String(credits), type: 'pay_per_interview' },
-      description: `${credits} interview credit${credits > 1 ? 's' : ''}`,
-    });
+    const intent = await withRetry(async () => {
+      return await createPaymentIntent({
+        amount: CREDIT_PRICE * credits,
+        currency: 'gbp',
+        metadata: { userId: String(req.user.id), credits: String(credits), type: 'pay_per_interview' },
+        description: `${credits} interview credit${credits > 1 ? 's' : ''}`,
+      });
+    }, 'pay-per-interview-payment-intent');
     res.json({ clientSecret: intent.client_secret, amount: CREDIT_PRICE * credits, credits });
   } catch (err) {
     console.error('pay-per-interview error:', err.message);

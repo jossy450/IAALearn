@@ -33,6 +33,7 @@ import MockInterview from './pages/MockInterview';
 import Referral from './pages/Referral';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Disclaimer from './pages/Disclaimer';
+import SpeechDebugPage from './pages/SpeechDebugPage';
 
 // Wrapper component to check auth status
 function ProtectedRoute({ children }) {
@@ -217,6 +218,7 @@ function App() {
           } />
           <Route path="mock-interview" element={<MockInterview />} />
           <Route path="referral" element={<Referral />} />
+          <Route path="speech-debug" element={<SpeechDebugPage />} />
         </Route>
       </Routes>
     </Router>

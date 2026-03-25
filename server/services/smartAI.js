@@ -512,6 +512,47 @@ Questions covered: ${session.questions?.length || 0}`
     return null; // no strong signal from question alone
   }
 
+  // Extract and validate person specification criteria
+  extractPersonSpecCriteria(personSpec = '') {
+    if (!personSpec) return [];
+    
+    const criteria = [];
+    const lines = personSpec.split(/[•\n\r,]/);
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.length > 10 && trimmed.length < 200) {
+        criteria.push(trimmed);
+      }
+    }
+    
+    return criteria.slice(0, 10);
+  }
+
+  // Extract key requirements from job description
+  extractJobRequirements(jobDescription = '') {
+    if (!jobDescription) return [];
+    
+    const requirements = [];
+    const patterns = [
+      /(?:must have|required|essential|minimum|need to have)[:\s]+([^.]+)/gi,
+      /(?:experience with|knowledge of|proficiency in|skills? in)[:\s]+([^.]+)/gi,
+      /(?:ability to|capable of|competent in)[:\s]+([^.]+)/gi,
+    ];
+    
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(jobDescription)) !== null) {
+        const requirement = match[1].trim();
+        if (requirement.length > 5) {
+          requirements.push(requirement);
+        }
+      }
+    }
+    
+    return requirements.slice(0, 8);
+  }
+
   // Generate perfect answer based on interviewer question + CV + Job Description + Person Spec + AI Instructions
   async generatePerfectAnswer(question, userId, context, onChunk) {
     const client = getLLMClient();
@@ -537,6 +578,22 @@ Questions covered: ${session.questions?.length || 0}`
       const normalizedPosition = (position || '').trim();
       const normalizedCompany = (company || '').trim();
       const normalizedQuestion = (question || '').trim();
+
+      // Extract criteria from person specification and job description
+      const personSpecCriteria = this.extractPersonSpecCriteria(normalizedPersonSpecification);
+      const jobRequirements = this.extractJobRequirements(normalizedJobDescription);
+      
+      const personSpecSection = normalizedPersonSpecification
+        ? `\n\nPERSON SPECIFICATION / JOB CRITERIA (ADDRESS THESE IN YOUR ANSWER):\n${normalizedPersonSpecification}`
+        : '';
+      
+      const criteriaSection = personSpecCriteria.length > 0
+        ? `\n\nKEY CRITERIA TO ADDRESS (from person spec - must be demonstrated in answer):\n${personSpecCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}`
+        : '';
+
+      const jobRequirementsSection = jobRequirements.length > 0
+        ? `\n\nKEY REQUIREMENTS (from job description - demonstrate these skills/experience):\n${jobRequirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`
+        : '';
 
       // ── Session type resolution ──────────────────────────────────────────────
       // Priority: explicit user selection > question-level detection > role-level detection
@@ -746,12 +803,15 @@ Grounding checklist (required):
 2. Include at least one explicit job/person-spec/role-grounded detail.
 3. Include company and role if provided.
 4. If a metric exists in provided data, include it naturally.
-5. Remove vague filler statements before finalizing.`
+5. Remove vague filler statements before finalizing.
+6. DEMONSTRATE the criteria/skills from the person specification in your answer.
+7. Connect your experience directly to the requirements of **${normalizedPosition || 'the role'}**.`
         : `
 Grounding checklist (required):
 1. No context provided: generate strongest general professional answer.
 2. Keep claims realistic and adaptable.
-3. Do not invent personal metrics or specific achievements.`;
+3. Do not invent personal metrics or specific achievements.
+4. Demonstrate transferable skills relevant to ${normalizedPosition || 'the role'}.`;
 
       // Behavior policy requested by user:
       // 1) Candidate instructions first (if provided)
@@ -783,9 +843,9 @@ Priority policy:
       }
 
       // Build person specification section
-      let personSpecSection = '';
+      let personSpecSectionContent = '';
       if (normalizedPersonSpecification) {
-        personSpecSection = `
+        personSpecSectionContent = `
 
 Person Specification (required competencies/criteria):
 ${normalizedPersonSpecification}`;
@@ -925,11 +985,25 @@ TARGET LENGTH: 90-160 words (adjust per question complexity).`;
           break;
       }
 
-      const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, concise, and tailored.
+      const systemPrompt = `You are an expert interview coach. Produce a PERFECT answer that is factual, direct, concise, and TAILORED TO THE ROLE.
 
-TECHNICAL CONTEXT FOR ROLE:
-Position: ${normalizedPosition || 'General'}
-Company: ${normalizedCompany || 'Unknown'}
+═══════════════════════════════════════════════════════════════════════════════
+🎯 PRIMARY FOCUS: ${normalizedPosition || 'THE TARGET ROLE'}
+═══════════════════════════════════════════════════════════════════════════════
+
+The answer MUST demonstrate suitability for: **${normalizedPosition || 'this role'}**
+${normalizedCompany ? `at **${normalizedCompany}**` : ''}
+
+${personSpecSection}
+
+${criteriaSection}
+
+${jobRequirementsSection}
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INTERVIEW GUIDANCE
+═══════════════════════════════════════════════════════════════════════════════
+
 Session Type: ${normalizedSessionType.toUpperCase()}${technicalKeywordsText}
 
 ${sessionTypeGuidance}
@@ -937,9 +1011,10 @@ ${sessionTypeGuidance}
 ${tailoringPolicy}
 
 Hard constraints:
-- Never contradict provided instructions/context.
-- Never invent candidate-specific facts, experience, tools, or metrics that were not provided.
+- NEVER contradict provided instructions/context.
+- NEVER invent candidate-specific facts, experience, tools, or metrics that were not provided.
 - If details are missing, use clear professional wording that is still useful and realistic.
+- ANSWER MUST ADDRESS THE PERSON SPECIFICATION CRITERIA when provided.
 
 ${questionSpecificBlueprint}
 
@@ -958,10 +1033,22 @@ ${numericGuardrail}
 ${standardWriteupInstructions}`;
 
       const userPrompt = `
-Interview Question: "${question}"
+═══════════════════════════════════════════════════════════════════════════════
+📝 INTERVIEW QUESTION
+═══════════════════════════════════════════════════════════════════════════════
+"${question}"
 
-Company: ${normalizedCompany || 'Unknown'}
-Position: ${normalizedPosition || 'Unknown'}
+═══════════════════════════════════════════════════════════════════════════════
+🎯 TARGET ROLE CONTEXT
+═══════════════════════════════════════════════════════════════════════════════
+Position: **${normalizedPosition || 'Unknown'}**
+Company: **${normalizedCompany || 'Unknown'}**${personSpecSection}
+${criteriaSection}
+${jobRequirementsSection}
+
+═══════════════════════════════════════════════════════════════════════════════
+📄 CANDIDATE PROFILE
+═══════════════════════════════════════════════════════════════════════════════
 
 Candidate Custom Instructions:
 ${hasAiInstructions ? normalizedAiInstructions : 'None provided'}
@@ -970,9 +1057,11 @@ Candidate's CV/Resume:
 ${normalizedCv || 'No CV provided'}
 
 Job Description:
-${normalizedJobDescription || 'No job description provided'}${personSpecSection}
+${normalizedJobDescription || 'No job description provided'}
 
-Grounding facts that can be used:
+═══════════════════════════════════════════════════════════════════════════════
+📌 GROUNDING FACTS
+═══════════════════════════════════════════════════════════════════════════════
 - Role target: ${normalizedPosition || 'Not provided'}
 - Company target: ${normalizedCompany || 'Not provided'}
 - CV facts: ${normalizedCv || 'Not provided'}
@@ -982,11 +1071,31 @@ Grounding facts that can be used:
 - Preferred anchor to humanize answer: ${primaryEmployerAnchor || 'Use the most specific valid work-history detail available'}
 - Target company should be used as future fit only (unless CV confirms it as past employer): ${targetCompanyProvided ? normalizedCompany : 'Not provided'}
 - Allowed numeric tokens: ${allowedNumericTokens.length ? allowedNumericTokens.join(', ') : 'None'}
+- Person spec criteria to address: ${personSpecCriteria.length ? personSpecCriteria.map(c => `"${c}"`).join(', ') : 'None detected'}
+- Job requirements to address: ${jobRequirements.length ? jobRequirements.map(r => `"${r}"`).join(', ') : 'None detected'}
 
-Provide the perfect answer the candidate should give:`;
+═══════════════════════════════════════════════════════════════════════════════
+
+Provide the PERFECT interview answer that:
+1. Addresses the question directly
+2. Demonstrates suitability for **${normalizedPosition || 'the role'}**
+3. Shows evidence of criteria/skills from person specification
+4. Uses relevant experience from CV
+
+Answer:`;
+
+      // Select model based on available API keys, with fallbacks
+      let model;
+      if (process.env.GROQ_API_KEY) {
+        model = 'llama-3.3-70b-versatile'; // Use Groq's fastest model
+      } else if (process.env.OPENAI_API_KEY) {
+        model = 'gpt-4o-mini'; // Use OpenAI's efficient model
+      } else {
+        throw new Error('No AI provider configured (set GROQ_API_KEY or OPENAI_API_KEY)');
+      }
 
       const stream = await client.chat.completions.create({
-        model: process.env.GROQ_API_KEY ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini',
+        model: model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

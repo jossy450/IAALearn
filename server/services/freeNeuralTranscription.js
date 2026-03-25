@@ -39,103 +39,113 @@ class FreeNeuralTranscriptionService {
 
   initializeProviders() {
     /**
-     * Build a list of available transcription providers. The order in which
-     * providers are added here determines their fallback priority: the first
-     * provider that succeeds will short‑circuit the rest. Providers that
-     * require API keys will only be included if the corresponding key is
-     * defined in the environment.
+     * Build a list of available transcription providers.
+     * FREE providers are tried FIRST, paid providers are fallbacks.
+     * The order determines fallback priority: first successful provider wins.
      */
     const providers = [];
 
-    // Detect configured API keys for paid/primary providers.
-    // NOTE: GROQ (groq.com) and xAI/Grok are DIFFERENT companies!
-    // - GROQ_API_KEY = Groq Inc (fast inference, has Whisper STT)
-    // - XAI_API_KEY = xAI/Grok (Elon Musk's AI company)
-    const groqKey = process.env.GROQ_API_KEY; // Groq Inc - has Whisper API
-    const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY; // Only use if explicitly xAI key
+    // Detect configured API keys
+    const groqKey = process.env.GROQ_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
+    const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY;
     
-    console.log('🔍 Transcription provider check:');
-    console.log('   GROQ_API_KEY:', groqKey ? '***' + groqKey.slice(-4) : 'NOT SET');
-    console.log('   OPENAI_API_KEY:', openaiKey ? '***' + openaiKey.slice(-4) : 'NOT SET');
-    console.log('   XAI_API_KEY:', xaiKey ? '***' + xaiKey.slice(-4) : 'NOT SET');
-    console.log('   HUGGINGFACE_API_KEY:', process.env.HUGGINGFACE_API_KEY ? 'SET' : 'NOT SET');
+    console.log('🔍 Transcription provider check (FREE first, then PAID):');
+    console.log('   GROQ_API_KEY:', groqKey ? '***' + groqKey.slice(-4) + ' (FREE - PRIMARY)' : 'NOT SET');
+    console.log('   HUGGINGFACE_API_KEY:', process.env.HUGGINGFACE_API_KEY ? 'SET (FREE)' : 'NOT SET');
+    console.log('   OPENAI_API_KEY:', openaiKey ? '***' + openaiKey.slice(-4) + ' (PAID - FALLBACK)' : 'NOT SET');
+    console.log('   XAI_API_KEY:', xaiKey ? '***' + xaiKey.slice(-4) + ' (PAID - FALLBACK)' : 'NOT SET');
     
-    // GROQ Whisper is fastest and free - prioritize it first if key is available
+    // ═══════════════════════════════════════════════════════════════
+    // FREE PROVIDERS - Tried FIRST (Priority 1-5)
+    // ═══════════════════════════════════════════════════════════════
+    
+    // 1. GROQ Whisper - FREE tier available (fastest)
     if (groqKey) {
       providers.push({
-        name: 'GROQ Whisper (FREE)',
+        name: 'GROQ Whisper ⭐ FREE',
         priority: 1,
         transcribe: this.transcribeGroqWhisper.bind(this),
-        requiresKey: true
+        requiresKey: true,
+        isFree: true
       });
     }
     
-    // OpenAI Whisper as fallback (reliable but slower)
-    if (openaiKey) {
-      providers.push({
-        name: 'OpenAI Whisper',
-        priority: providers.length + 1,
-        transcribe: this.transcribeOpenAI.bind(this),
-        requiresKey: true
-      });
-    }
-    
-    // xAI/Grok STT only if XAI_API_KEY is explicitly set (not GROQ_API_KEY)
-    if (xaiKey && xaiKey !== groqKey) {
-      providers.push({
-        name: 'xAI Grok STT',
-        priority: providers.length + 1,
-        transcribe: this.transcribeGrok.bind(this),
-        requiresKey: true
-      });
-    }
+    // 2. Hugging Face - FREE (no key needed for basic usage)
+    providers.push({
+      name: 'Hugging Face FREE',
+      priority: providers.length + 1,
+      transcribe: this.transcribeHuggingFace.bind(this),
+      requiresKey: false,
+      isFree: true
+    });
 
-    // Only use Hugging Face as a fallback when no primary key‑based
-    // providers are configured, or when explicitly enabled via env.
-    const hasPrimaryProvider = providers.length > 0;
-    const enableHFFallback = process.env.ENABLE_HF_FALLBACK === 'true';
-    if (!hasPrimaryProvider || enableHFFallback) {
-      providers.push({
-        name: 'Hugging Face (FREE)',
-        priority: providers.length + 1,
-        transcribe: this.transcribeHuggingFace.bind(this),
-        requiresKey: false
-      });
-    }
-
-    // 3. Coqui STT - FREE, open‑source (local or cloud). Requires model
-    // downloads and installation. Only include if module is available.
+    // 3. Coqui STT - FREE, open‑source (local)
     if (this.hasModule('coqui-stt')) {
       providers.push({
-        name: 'Coqui STT (FREE)',
+        name: 'Coqui STT FREE',
         priority: providers.length + 1,
         transcribe: this.transcribeCoqui.bind(this),
-        requiresKey: false
+        requiresKey: false,
+        isFree: true
       });
     }
 
-    // 4. Wav2Vec 2.0 (Facebook) - FREE, open‑source. Requires
-    // transformers.js and model download. Only include if available.
+    // 4. Wav2Vec 2.0 - FREE, open‑source
     if (this.hasModule('transformers')) {
       providers.push({
-        name: 'Wav2Vec 2.0 (FREE)',
+        name: 'Wav2Vec 2.0 FREE',
         priority: providers.length + 1,
         transcribe: this.transcribeWav2Vec.bind(this),
-        requiresKey: false
+        requiresKey: false,
+        isFree: true
       });
     }
 
-    // 5. Silero STT - FREE, lightweight. Note that this library is
-    // primarily for voice activity detection and not full transcription.
+    // 5. Silero STT - FREE, lightweight
     if (this.hasModule('silero-vad-js')) {
       providers.push({
-        name: 'Silero STT (FREE)',
+        name: 'Silero STT FREE',
         priority: providers.length + 1,
         transcribe: this.transcribeSilero.bind(this),
-        requiresKey: false
+        requiresKey: false,
+        isFree: true
       });
     }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // PAID PROVIDERS - Tried LAST as FALLBACKS
+    // ═══════════════════════════════════════════════════════════════
+    
+    // 6. OpenAI Whisper - PAID fallback (most reliable)
+    if (openaiKey) {
+      providers.push({
+        name: 'OpenAI Whisper 💰 PAID',
+        priority: providers.length + 1,
+        transcribe: this.transcribeOpenAI.bind(this),
+        requiresKey: true,
+        isFree: false
+      });
+    }
+    
+    // 7. xAI/Grok STT - PAID fallback
+    if (xaiKey && xaiKey !== groqKey) {
+      providers.push({
+        name: 'xAI Grok 💰 PAID',
+        priority: providers.length + 1,
+        transcribe: this.transcribeGrok.bind(this),
+        requiresKey: true,
+        isFree: false
+      });
+    }
+
+    // 6. Simple Fallback - Always available as last resort
+    providers.push({
+      name: 'Simple Fallback',
+      priority: providers.length + 1,
+      transcribe: this.transcribeSimpleFallback.bind(this),
+      requiresKey: false
+    });
 
     return providers;
   }
@@ -854,6 +864,42 @@ class FreeNeuralTranscriptionService {
    */
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Simple Fallback Transcription - Always works as last resort
+   * Returns a placeholder text when all other providers fail
+   */
+  async transcribeSimpleFallback(audioBuffer, format, language) {
+    try {
+      console.log('🔄 Simple Fallback processing...');
+      console.log(`   Audio size: ${audioBuffer.length} bytes, format: ${format}`);
+      
+      // Check if audio has any content (not just silence)
+      const sample = audioBuffer.slice(0, Math.min(1000, audioBuffer.length));
+      const avgAmplitude = sample.reduce((sum, val) => sum + Math.abs(val), 0) / sample.length;
+      
+      if (avgAmplitude < 5) {
+        console.log('   Audio appears to be silence or very quiet');
+        return {
+          text: '[No speech detected. Please speak louder.]',
+          confidence: 0.1
+        };
+      }
+      
+      // Return a placeholder message
+      console.log('   Audio detected, but no transcription available');
+      return {
+        text: '[Speech detected but transcription service unavailable. Please try again or check your microphone.]',
+        confidence: 0.3
+      };
+    } catch (error) {
+      console.error('Simple fallback error:', error);
+      return {
+        text: '[Transcription service error. Please try again.]',
+        confidence: 0
+      };
+    }
   }
 }
 

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Question Detector Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+        }
+        .result.question {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+        }
+        .result.not-question {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        .confidence-bar {
+            height: 20px;
+            background: #ddd;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f44336, #ff9800, #4CAF50);
+            transition: width 0.3s ease;
+        }
+        .test-cases {
+            margin-top: 30px;
+        }
+        .test-case {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .test-case:hover {
+            background: #f0f0f0;
+        }
+        .test-case.question {
+            border-left: 4px solid #4CAF50;
+        }
+        .test-case.not-question {
+            border-left: 4px solid #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Intelligent Question Detector Test</h1>
+        <p>This tool tests the intelligent question detection system for the IAALearn Android APK.</p>
+        
+        <div class="test-section">
+            <h2>Test Your Own Text</h2>
+            <textarea id="testInput" placeholder="Enter text to test if it's a question or side talk..."></textarea>
+            <button onclick="testInput()">Test Question Detection</button>
+            
+            <div id="testResult" class="result" style="display: none;">
+                <h3>Detection Result</h3>
+                <div id="resultText"></div>
+                <div class="confidence-bar">
+                    <div id="confidenceFill" class="confidence-fill" style="width: 0%;"></div>
+                </div>
+                <div id="confidenceText"></div>
+                <div id="reasonText"></div>
+                <div id="patternsText"></div>
+            </div>
+        </div>
+        
+        <div class="test-section test-cases">
+            <h2>Sample Test Cases</h2>
+            <p>Click on any test case to try it:</p>
+            
+            <div class="test-case question" onclick="useTestCase('What is your greatest strength?')">
+                <strong>✅ Clear Question:</strong> "What is your greatest strength?"
+            </div>
+            
+            <div class="test-case question" onclick="useTestCase('Can you tell me about a time you faced a challenge?')">
+                <strong>✅ Clear Question:</strong> "Can you tell me about a time you faced a challenge?"
+            </div>
+            
+            <div class="test-case question" onclick="useTestCase('Describe your experience with project management?')">
+                <strong>✅ Question with ?:</strong> "Describe your experience with project management?"
+            </div>
+            
+            <div class="test-case not-question" onclick="useTestCase('I think that\'s a good point')">
+                <strong>❌ Side Talk:</strong> "I think that's a good point"
+            </div>
+            
+            <div class="test-case not-question" onclick="useTestCase('Actually, from my experience, that approach works well')">
+                <strong>❌ Casual Talk:</strong> "Actually, from my experience, that approach works well"
+            </div>
+            
+            <div class="test-case not-question" onclick="useTestCase('I have five years of experience in software development')">
+                <strong>❌ Statement:</strong> "I have five years of experience in software development"
+            </div>
+            
+            <div class="test-case question" onclick="useTestCase('Tell me about yourself')">
+                <strong>✅ Interview Question:</strong> "Tell me about yourself"
+            </div>
+            
+            <div class="test-case question" onclick="useTestCase('Um, so, like, what do you do?')">
+                <strong>✅ Question with fillers:</strong> "Um, so, like, what do you do?"
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simplified version of the intelligent question detector for testing
+        function detectQuestion(text, context = {}) {
+            if (!text || text.trim().length < 3) {
+                return {
+                    isQuestion: false,
+                    confidence: 0,
+                    reason: 'Text too short',
+                    analysis: { patterns: [] }
+                };
+            }
+
+            const trimmed = text.trim();
+            const lowerText = trimmed.toLowerCase();
+            
+            let totalScore = 0;
+            const patterns = [];
+
+            // 1. Question mark
+            if (trimmed.endsWith('?')) {
+                totalScore += 30;
+                patterns.push('question_mark');
+            }
+
+            // 2. Question words at beginning
+            const questionWords = [
+                'what', 'how', 'why', 'when', 'where', 'who', 'which', 'whom', 'whose',
+                'can you', 'could you', 'would you', 'will you', 'do you', 'did you',
+                'have you', 'are you', 'is this', 'is that',
+                'tell me', 'explain', 'describe', 'give me', 'show me', 'walk me through'
+            ];
+
+            for (const word of questionWords) {
+                if (lowerText.startsWith(word)) {
+                    totalScore += 25;
+                    patterns.push(`question_word:${word}`);
+                    break;
+                }
+            }
+
+            // 3. Sentence structure patterns
+            const questionPatterns = [
+                /\b(do|does|did|is|are|was|were|have|has|had|can|could|will|would|shall|should|may|might|must)\s+\w+\s+\?/i,
+                /\b(what|how|why|when|where|who|which)\s+\w+\s+\?/i,
+                /\b(tell|explain|describe|give|show)\s+me\s+/i,
+                /\b(can|could|would|will)\s+you\s+/i
+            ];
+
+            for (const pattern of questionPatterns) {
+                if (pattern.test(trimmed)) {
+                    totalScore += 20;
+                    patterns.push('sentence_structure');
+                    break;
+                }
+            }
+
+            // 4. Length scoring
+            const wordCount = trimmed.split(/\s+/).length;
+            if (wordCount >= 4 && wordCount <= 25) {
+                totalScore += 15;
+                patterns.push('appropriate_length');
+            }
+
+            // 5. Context awareness
+            if (context.lastWasQuestion) {
+                totalScore -= 10;
+                patterns.push('follow_up_context');
+            }
+
+            // 6. Statement indicators (negative)
+            const statementIndicators = [
+                'i think', 'i believe', 'in my opinion', 'from my experience',
+                'the thing is', 'actually', 'basically', 'you know', 'i mean',
+                'let me tell you', 'as i said', 'to be honest'
+            ];
+
+            for (const indicator of statementIndicators) {
+                if (lowerText.includes(indicator)) {
+                    totalScore -= 10;
+                    patterns.push(`statement_indicator:${indicator}`);
+                    break;
+                }
+            }
+
+            // 7. Filler words
+            const fillerWords = ['um', 'uh', 'like', 'you know', 'i mean', 'so', 'well', 'actually'];
+            let fillerCount = 0;
+            for (const filler of fillerWords) {
+                const regex = new RegExp(`\\b${filler}\\b`, 'gi');
+                const matches = lowerText.match(regex);
+                if (matches) fillerCount += matches.length;
+            }
+
+            if (fillerCount > 2) {
+                totalScore -= fillerCount * 3;
+                patterns.push(`filler_words:${fillerCount}`);
+            }
+
+            // Calculate confidence
+            const confidence = Math.max(0, Math.min(100, totalScore));
+            const isQuestion = confidence >= 40;
+
+            // Determine reason
+            let reason = 'Does not match question patterns';
+            if (confidence < 20) reason = 'Unclear speech or incomplete thought';
+            else if (patterns.includes('question_mark')) reason = 'Contains question mark';
+            else if (patterns.some(p => p.startsWith('question_word:'))) reason = 'Starts with question word';
+            else if (patterns.includes('sentence_structure')) reason = 'Question sentence structure';
+            else if (patterns.includes('appropriate_length')) reason = 'Appropriate length for a question';
+            else if (isQuestion) reason = 'Multiple weak indicators combined';
+
+            return {
+                isQuestion,
+                confidence,
+                reason,
+                analysis: {
+                    patterns,
+                    wordCount,
+                    fillerCount
+                }
+            };
+        }
+
+        function testInput() {
+            const input = document.getElementById('testInput').value.trim();
+            if (!input) {
+                alert('Please enter some text to test');
+                return;
+            }
+
+            const result = detectQuestion(input);
+            const resultDiv = document.getElementById('testResult');
+            const resultClass = result.isQuestion ? 'question' : 'not-question';
+            
+            resultDiv.className = `result ${resultClass}`;
+            resultDiv.style.display = 'block';
+            
+            document.getElementById('resultText').innerHTML = 
+                `<strong>${result.isQuestion ? '✅ QUESTION DETECTED' : '❌ NOT A QUESTION'}</strong>`;
+            
+            document.getElementById('confidenceFill').style.width = `${result.confidence}%`;
+            document.getElementById('confidenceText').innerHTML = 
+                `<strong>Confidence:</strong> ${result.confidence}%`;
+            
+            document.getElementById('reasonText').innerHTML = 
+                `<strong>Reason:</strong> ${result.reason}`;
+            
+            document.getElementById('patternsText').innerHTML = 
+                `<strong>Patterns detected:</strong> ${result.analysis.patterns.join(', ') || 'None'}`;
+        }
+
+        function useTestCase(text) {
+            document.getElementById('testInput').value = text;
+            testInput();
+        }
+
+        // Initialize with a sample test
+        window.onload = function() {
+            useTestCase('What is your experience with React?');
+        };
+    </script>
+</body>
+</html>
