@@ -171,21 +171,17 @@
 
 .toast-container {
   position: fixed;
-  top: env(safe-area-inset-top, 50px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 999999;
+  top: 16px;
+  right: 16px;
+  z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: calc(100% - 32px);
-  max-width: 400px;
-  padding: 16px 16px 0;
-  box-sizing: border-box;
+  gap: 10px;
 }
 
 .toast {
-  width: 100%;
+  min-width: 280px;
+  max-width: 360px;
   padding: 14px 16px;
   border-radius: 10px;
   color: #111827;
@@ -193,20 +189,16 @@
   border: 1px solid #e5e7eb;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
   font-weight: 600;
-  font-size: 14px;
-  text-align: center;
   animation: slideIn 0.3s ease;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
 }
 
 @keyframes slideIn {
   from {
-    transform: translateY(-20px);
+    transform: translateX(400px);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateX(0);
     opacity: 1;
   }
 }
@@ -221,18 +213,6 @@
   border-color: #fecdd3;
   background: #fff1f2;
   color: #9f1239;
-}
-
-.toast-info {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #1e40af;
-}
-
-.toast-warning {
-  border-color: #fde68a;
-  background: #fefce8;
-  color: #92400e;
 }
 
 .interview-coaching-view {

@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import api from './services/api';
 import { initializePushNotifications } from './services/pushNotifications';
 import { trackPageView, setUserId } from './services/firebaseAnalytics';
+import { App as CapacitorApp } from '@capacitor/app';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -103,13 +104,50 @@ function PageViewTracker() {
 }
 
 function App() {
-  const { token, user, setSubscription } = useAuthStore();
+  const { token, user, setAuth, setSubscription } = useAuthStore();
   const [isHydrated, setIsHydrated] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Initialize push notifications on app mount (native platforms only)
     initializePushNotifications();
-  }, []);
+    
+    // Handle deep links (OAuth callback) on native platforms
+    const handleDeepLink = (url) => {
+      console.log('[DeepLink] Received:', url);
+      if (url && url.includes('/auth/callback')) {
+        // Extract token from URL and process OAuth callback
+        const urlObj = new URL(url);
+        const token = urlObj.searchParams.get('token');
+        const userParam = urlObj.searchParams.get('user');
+        const error = urlObj.searchParams.get('error');
+        
+        if (token) {
+          try {
+            const user = userParam ? JSON.parse(decodeURIComponent(userParam)) : {};
+            setAuth(token, user);
+            navigate('/');
+          } catch (e) {
+            console.error('[DeepLink] Error processing callback:', e);
+          }
+        } else if (error) {
+          console.error('[DeepLink] OAuth error:', error);
+          navigate('/login?error=' + encodeURIComponent(error));
+        }
+      }
+    };
+
+    // Listen for deep links
+    CapacitorApp.addListener('deepLink', handleDeepLink).catch(() => {
+      // Not on native platform or already handled
+    });
+    
+    // Check initial URL on Android
+    CapacitorApp.getLaunchUrl().then(({ url }) => {
+      if (url) handleDeepLink(url);
+    }).catch(() => {});
+
+  }, [navigate, setAuth]);
 
   // Fetch subscription status whenever the user logs in (token changes)
   useEffect(() => {

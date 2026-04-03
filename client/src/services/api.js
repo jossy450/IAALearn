@@ -48,26 +48,84 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle 401 errors by suggesting re-login
+// Toast notification helper for auth errors
+const showAuthToast = (message) => {
+  // Remove any existing auth toast
+  const existing = document.getElementById('auth-expired-toast');
+  if (existing) existing.remove();
+  
+  // Create toast element
+  const toast = document.createElement('div');
+  toast.id = 'auth-expired-toast';
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 12px 24px;
+    border-radius: 8px;
+    z-index: 999999;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideDown 0.3s ease;
+    max-width: 90%;
+    text-align: center;
+    border: 1px solid #fecaca;
+  `;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  // Auto-remove after 4 seconds
+  setTimeout(() => toast.remove(), 4000);
+};
+
+// Handle 401 errors - auto logout and redirect to login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.error('[API] 401 Unauthorized:', error.response.data);
+      const errorMsg = error.response.data?.error || '';
+      const details = error.response.data?.details || '';
+      const errorId = error.response.data?.errorId || '';
       
-      // Check if token exists but is invalid
-      const authStorage = localStorage.getItem("auth-storage");
-      if (authStorage) {
-        try {
-          const parsed = JSON.parse(authStorage);
-          if (parsed?.state?.token) {
-            console.warn('[API] Token exists but was rejected. User should re-login.');
-            // Token is stale/invalid - show user a message
-            // (actual notification handled by component catching the error)
-          }
-        } catch (err) {
-          console.error('[API] Error parsing auth-storage on 401:', err);
+      // Determine appropriate message based on error type
+      let message = 'Session expired. Please log in again.';
+      if (details.includes('jwt expired') || errorMsg.toLowerCase().includes('expired')) {
+        message = 'Your session has expired. Please log in again.';
+      } else if (errorMsg.includes('Invalid token') || details.includes('malformed')) {
+        message = 'Invalid session. Please log in again.';
+      } else if (errorMsg.includes('TokenRevokedError') || errorId.includes('revoked')) {
+        message = 'Your session was revoked. Please log in again.';
+      }
+      
+      console.warn('[API] 401 Unauthorized:', message);
+      
+      // Clear expired token from storage
+      localStorage.removeItem('auth-storage');
+      
+      // Show toast notification
+      showAuthToast(message);
+      
+      // Check if running on native platform
+      const isNative = (typeof Capacitor !== 'undefined' && Capacitor?.isNativePlatform?.()) ?? false;
+      
+      // On native platforms, don't auto-redirect - just show message
+      // User can manually navigate to login
+      if (!isNative) {
+        // Store current URL for redirect after re-login (if not on login/register page)
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/login' && currentPath !== '/register') {
+          sessionStorage.setItem('redirectAfterLogin', currentPath);
         }
+        
+        // Redirect to login after short delay (web only)
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1500);
       }
     }
     return Promise.reject(error);

@@ -3,7 +3,6 @@ import { Capacitor } from '@capacitor/core';
 let mediaRecorderInstance = null;
 let audioChunks = [];
 let currentMimeType = 'audio/webm';
-let currentStream = null;
 
 export async function startNativeRecording(options = {}) {
   const isNative = Capacitor.isNativePlatform();
@@ -19,13 +18,13 @@ export async function startNativeRecording(options = {}) {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        sampleRate: 16000
+        sampleRate: 44100
       } 
     });
-    currentStream = stream;
     
     // Determine best supported format
     const mimeTypes = [
+      'audio/mp4',
       'audio/webm;codecs=opus',
       'audio/webm',
       'audio/ogg;codecs=opus',
@@ -51,7 +50,7 @@ export async function startNativeRecording(options = {}) {
       }
     };
     
-    mediaRecorderInstance.start(1000); // Collect data every second
+    mediaRecorderInstance.start(500); // Collect data every 500ms
     console.log('🎤 Recording started with MediaRecorder');
     
     return { started: true, mimeType: currentMimeType };
@@ -63,30 +62,17 @@ export async function startNativeRecording(options = {}) {
 
 export async function stopNativeRecording(options = {}) {
   return new Promise((resolve, reject) => {
-    console.log('🛑 stopNativeRecording called');
-    console.log('   mediaRecorderInstance:', !!mediaRecorderInstance);
-    console.log('   state:', mediaRecorderInstance?.state);
-    
     if (!mediaRecorderInstance || mediaRecorderInstance.state === 'inactive') {
-      console.log('🛑 MediaRecorder not active or already stopped');
+      console.log('🛑 MediaRecorder not active');
       resolve({ filePath: null, webPath: null });
       return;
     }
     
     console.log('🛑 Stopping recording, current chunks:', audioChunks.length);
     
-    // Store reference to the recorder
-    const recorder = mediaRecorderInstance;
-    
-    // Handle onstop event - use arrow function to preserve 'this'
-    recorder.onstop = () => {
+    // Handle onstop event
+    mediaRecorderInstance.onstop = () => {
       console.log('📁 Recording stopped, chunks:', audioChunks.length);
-      
-      // Stop all tracks
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-        currentStream = null;
-      }
       
       if (audioChunks.length === 0) {
         console.error('❌ No audio chunks recorded');
@@ -105,8 +91,6 @@ export async function stopNativeRecording(options = {}) {
       
       if (blob.size < 1000) {
         console.warn('⚠️ Recording very small:', blob.size, 'bytes');
-        reject(new Error('Recording too short - please speak for at least 2-3 seconds'));
-        return;
       }
       
       resolve({
@@ -117,33 +101,28 @@ export async function stopNativeRecording(options = {}) {
     };
     
     // Handle errors
-    recorder.onerror = (event) => {
+    mediaRecorderInstance.onerror = (event) => {
       console.error('❌ MediaRecorder error:', event.error);
       audioChunks = [];
       mediaRecorderInstance = null;
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-        currentStream = null;
-      }
       reject(new Error(event.error || 'Recording error'));
     };
     
-    // Request final chunk and stop
-    try {
-      recorder.requestData();
-      setTimeout(() => {
-        try {
-          if (recorder.state !== 'inactive') {
-            recorder.stop();
-          }
-        } catch (stopErr) {
-          console.error('❌ Error stopping recorder:', stopErr);
-          reject(stopErr);
+    // Request final chunk before stopping
+    mediaRecorderInstance.requestData();
+    
+    // Stop after a short delay to ensure final data is captured
+    setTimeout(() => {
+      try {
+        mediaRecorderInstance.stop();
+        // Stop all tracks to release the microphone
+        if (mediaRecorderInstance.stream) {
+          mediaRecorderInstance.stream.getTracks().forEach(track => track.stop());
         }
-      }, 100);
-    } catch (err) {
-      console.error('❌ Error requesting data:', err);
-      reject(err);
-    }
+      } catch (stopErr) {
+        console.error('❌ Error stopping recorder:', stopErr);
+        reject(stopErr);
+      }
+    }, 200); // Wait 200ms for final data
   });
 }

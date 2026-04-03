@@ -11,23 +11,17 @@ import FloatingAnswer from '../components/FloatingAnswer';
 import ScreenShareDetector from '../components/ScreenShareDetector';
 import useStealthStore from '../store/stealthStore';
 import { trackSessionStart, trackEvent } from '../services/firebaseAnalytics';
-import { ConversationTracker, processContinuousSpeech } from '../services/intelligentQuestionDetector';
 import './InterviewSession.css';
 
 // Capacitor Speech Recognition - loaded lazily
 let CapacitorSpeechRecognition = null;
-let CapacitorSpeechRecognitionPlugin = null;
-
 const loadCapacitorSpeechRecognition = async () => {
-  if (CapacitorSpeechRecognitionPlugin) return CapacitorSpeechRecognitionPlugin;
+  if (CapacitorSpeechRecognition) return CapacitorSpeechRecognition;
   try {
-    console.log('🔊 Loading Capacitor Speech Recognition plugin...');
     CapacitorSpeechRecognition = await import('@capacitor-community/speech-recognition');
-    CapacitorSpeechRecognitionPlugin = CapacitorSpeechRecognition.SpeechRecognition;
-    console.log('🔊 Capacitor Speech Recognition loaded:', !!CapacitorSpeechRecognitionPlugin);
-    return CapacitorSpeechRecognitionPlugin;
+    return CapacitorSpeechRecognition;
   } catch (e) {
-    console.error('🔊 Capacitor Speech Recognition load failed:', e.message);
+    console.warn('Capacitor Speech Recognition not available:', e.message);
     return null;
   }
 };
@@ -49,13 +43,11 @@ function InterviewSession() {
   const [isScreenShareDetected, setIsScreenShareDetected] = useState(false); // Mobile mode requirement
   const [showQRTransfer, setShowQRTransfer] = useState(false);
   const [responseTime, setResponseTime] = useState(null);
-  const [autoListen, setAutoListen] = useState(true); // default ON — live auto-transcribe like a real conversation
+  const [autoListen, setAutoListen] = useState(false); // default OFF — manual recording mode
   const [isAnswerHidden, setIsAnswerHidden] = useState(false); // default reveal; user can hide
   const [showFloatingAnswer, setShowFloatingAnswer] = useState(false); // floating answer visibility
   const [liveTranscript, setLiveTranscript] = useState(''); // real-time interim transcript shown while listening
   const [isAutoListening, setIsAutoListening] = useState(false); // auto-listen mode currently active
-  const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
-  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const debounceTimerRef = useRef(null);
@@ -68,16 +60,10 @@ function InterviewSession() {
   const silenceTimerRef = useRef(null);       // fires when speech pauses long enough to submit
   const isProcessingRef = useRef(false);      // true while AI is generating an answer
   const pendingWhileProcessingRef = useRef(''); // speech captured while AI was busy
-  const mediaStreamRef = useRef(null);         // for auto-listen MediaRecorder
-  const autoListenRecorderRef = useRef(null);  // MediaRecorder instance
-  const autoListenChunksRef = useRef([]);      // audio chunks
-  const autoListenSilenceTimerRef = useRef(null); // silence detection timer
-  const isListeningRef = useRef(false);        // is auto-listen active
   const SILENCE_DELAY = 2500;                 // ms of silence before auto-submitting question
   const { setScreenRecording, stealthMode } = useStealthStore();
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
-  const conversationTrackerRef = useRef(new ConversationTracker());
 
   const parseSSEChunk = (chunkText = '') => {
     // Handle text/event-stream payloads like:
@@ -116,69 +102,116 @@ function InterviewSession() {
     }
   }, [sessionQuestions]);
 
-  // Check microphone permission on load
+  // Request microphone permission on load (browser will prompt)
   useEffect(() => {
-    const checkMicrophonePermission = async () => {
+    const requestMicPermission = async () => {
       try {
+        // On web/Android, requesting getUserMedia will prompt for permission
+        // We just log it to let the browser handle it
         console.log('📱 Running on platform:', Capacitor.getPlatform());
         
-        if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-          // On Android, check Capacitor Speech Recognition permission
-          const speechRecognition = await loadCapacitorSpeechRecognition();
-          if (speechRecognition) {
-            const hasPermission = await speechRecognition.hasPermission();
-            console.log('🔊 Android speech recognition permission:', hasPermission);
-            setHasMicrophonePermission(hasPermission.permission);
-          }
-        } else {
-          // On web, check if we can access microphone
-          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            try {
-              // Try to get a stream to check permission
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              stream.getTracks().forEach(track => track.stop());
-              setHasMicrophonePermission(true);
-              console.log('✅ Web microphone permission granted');
-            } catch (error) {
-              console.log('❌ Web microphone permission not granted:', error.message);
-              setHasMicrophonePermission(false);
-            }
-          }
+        // Try to get a dummy stream to trigger permission prompt early
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          console.log('✅ getUserMedia API available - permission prompt will appear when recording');
         }
       } catch (error) {
-        console.warn('Permission check failed:', error);
+        console.warn('Media API check failed:', error);
       }
     };
      
-    checkMicrophonePermission();
+    requestMicPermission();
   }, []);
 
   useEffect(() => {
     loadSession();
   }, [id]);
 
-  // ─── Auto-listen: start/stop continuous speech recognition ───
+  // ─── Auto-start recording on Android when autoListen is enabled ───
   useEffect(() => {
-    // Small delay to ensure functions are defined
+    // Debug logging
+    console.log('[AutoStart] Checking conditions:', {
+      platform: Capacitor.getPlatform(),
+      isNative: Capacitor.isNativePlatform(),
+      autoListen,
+      hasSession: !!session,
+      isRecording,
+      loading
+    });
+    
+    // On Android native with autoListen enabled, auto-start recording when session loads
     const timer = setTimeout(() => {
-      // Use same Web Speech API for both web and Android
-      if (autoListen) {
-        startAutoListen();
-      } else {
-        stopAutoListen();
+      const isAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+      
+      console.log('[AutoStart] After timeout:', {
+        isAndroid,
+        autoListen,
+        hasSession: !!session,
+        isRecording,
+        loading
+      });
+      
+      if (isAndroid && autoListen && session && !isRecording && !loading) {
+        console.log('🎤 Auto-starting recording on Android...');
+        // Use setTimeout to ensure we're in the next tick
+        setTimeout(() => {
+          startRecording();
+        }, 100);
       }
-    }, 100);
-    
+    }, 1000); // Longer delay to ensure session is fully loaded
     return () => clearTimeout(timer);
-  }, [autoListen, session, isAutoListening, loading]);
+  }, [session, autoListen, isRecording, loading]);
 
-
-  // ─── startAutoListen: Web Speech API for web, Android-specific for Android ───
-  const startAutoListen = async () => {
-    console.log('🎤 startAutoListen called');
-    console.log('   Platform:', Capacitor.getPlatform());
-    console.log('   Is Native:', Capacitor.isNativePlatform());
+  // Track if component is mounted
+  const isMountedRef = useRef(true);
+  
+  // ─── Auto-listen: start/stop continuous speech recognition when checkbox toggled ───
+  useEffect(() => {
+    // On native Android platforms, start/stop recording when autoListen toggles
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+      if (autoListen && session && !isRecording && !loading) {
+        console.log('[Auto-listen] Starting recording on Android...');
+        startRecording();
+      } else if (!autoListen && isRecording) {
+        console.log('[Auto-listen] Stopping recording on Android...');
+        stopRecording();
+      }
+      return;
+    }
     
+    // Only use Web Speech API on web (non-native) platforms
+    if (autoListen && isMountedRef.current) {
+      startAutoListen();
+    } else if (!autoListen) {
+      stopAutoListen();
+    }
+    // Cleanup on unmount
+    return () => {
+      isMountedRef.current = false;
+      stopAutoListen();
+    };
+  }, [autoListen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  // ─── startAutoListen: intelligent continuous recognition with silence detection ───
+  const startAutoListen = async () => {
+    // Skip on native platforms - recording handles speech recognition there
+    if (Capacitor.isNativePlatform()) {
+      return;
+    }
+    
+    // Prevent multiple instances
+    if (autoListenRecognitionRef.current) {
+      console.log('Auto-listen already running, skipping start');
+      return;
+    }
+    
+    const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!WebSpeechRecognition) {
+      showToast('⚠️ Auto-listen requires Chrome or Edge browser.', 'warning');
+      setAutoListen(false);
+      return;
+    }
+
     // Clean up any existing session
     if (autoListenRecognitionRef.current) {
       try { autoListenRecognitionRef.current.stop(); } catch (_) {}
@@ -188,371 +221,108 @@ function InterviewSession() {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
-    if (autoListenRecorderRef.current) {
-      try { autoListenRecorderRef.current.stop(); } catch (_) {}
-      autoListenRecorderRef.current = null;
-    }
 
     finalTranscriptRef.current = '';
     pendingWhileProcessingRef.current = '';
     isProcessingRef.current = false;
     setLiveTranscript('');
 
-    // Check if AI is processing - don't start if already processing
-    if (isProcessingRef.current) {
-      console.log('   AI is processing, skipping...');
-      return;
-    }
+    const launchRecognition = () => {
+      const recognition = new WebSpeechRecognition();
+      autoListenRecognitionRef.current = recognition;
+      recognition.lang = 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
 
-    // On Android native, use the Android-specific function
-    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-      console.log('🎤 Using Android speech recognition...');
-      await startAndroidSpeechRecognition();
-      return;
-    }
-
-    // Use Web Speech API for web browsers
-    const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (WebSpeechRecognition) {
-      console.log('🎤 Using Web Speech API for auto-listen');
-      startWebSpeechAutoListen(WebSpeechRecognition);
-      return;
-    }
-
-    // Fallback for other platforms - use MediaRecorder
-    console.log('🎤 Using MediaRecorder fallback');
-    await startMediaRecorderAutoListen();
-  };
-
-  // Web Speech API auto-listen for web browsers
-  const startWebSpeechAutoListen = (WebSpeechRecognition) => {
-    const recognition = new WebSpeechRecognition();
-    autoListenRecognitionRef.current = recognition;
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      console.log('🎤 Web Speech API started');
-      setIsAutoListening(true);
-      setIsRecording(true);
-      setLoadingStep('recording');
-      setLiveTranscript('🎤 Listening... Ask your interview question');
-    };
-
-    recognition.onresult = (event) => {
-      let interim = '';
-      let gotFinal = false;
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscriptRef.current += t + ' ';
-          gotFinal = true;
-        } else {
-          interim += t;
-        }
-      }
-
-      const combined = finalTranscriptRef.current + interim;
-
-      if (isProcessingRef.current) {
-        pendingWhileProcessingRef.current = combined;
-        setLiveTranscript('🎧 ' + combined);
-        return;
-      }
-
-      setLiveTranscript(combined);
-
-      // Silence detection - submit after 2.5 seconds of no new speech
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = setTimeout(() => {
-        const question = finalTranscriptRef.current.trim();
-        if (question && !isProcessingRef.current && question.split(/\s+/).length >= 3) {
-          console.log('🔇 Silence detected - auto-submitting:', question);
-          autoSubmitQuestion(question);
-        }
-      }, SILENCE_DELAY);
-    };
-
-    recognition.onerror = (event) => {
-      console.warn('Web Speech error:', event.error);
-      if (event.error === 'no-speech') return;
-      if (event.error === 'network') {
-        showToast('⚠️ Network issue with speech recognition', 'warning');
-      }
-    };
-
-    recognition.onend = () => {
-      console.log('🎤 Web Speech ended');
-      if (autoListenRecognitionRef.current && !isProcessingRef.current) {
-        setTimeout(() => {
-          try { recognition.start(); } catch (_) {}
-        }, 150);
-      }
-    };
-
-    try {
-      recognition.start();
-    } catch (err) {
-      console.error('Failed to start Web Speech:', err);
-      showToast('❌ Speech recognition failed', 'error');
-      setAutoListen(false);
-    }
-  };
-
-  // MediaRecorder fallback for Android
-  const startMediaRecorderAutoListen = async () => {
-    console.log('🎤 startMediaRecorderAutoListen - starting...');
-    
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('❌ getUserMedia not available');
-        showToast('❌ Audio input not supported', 'error');
-        setAutoListen(false);
-        return;
-      }
-      
-      console.log('🎤 Requesting microphone permission...');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: true,
-          sampleRate: 44100,
-          channelCount: 1
-        }
-      });
-      console.log('✅ Microphone permission granted');
-      
-      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
-      let mimeType = 'audio/webm';
-      for (const m of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(m)) {
-          mimeType = m;
-          console.log('   Using MIME:', mimeType);
-          break;
-        }
-      }
-      
-      mediaStreamRef.current = stream;
-      autoListenChunksRef.current = [];
-      isListeningRef.current = true;
-      
-      const recorder = new MediaRecorder(stream, { mimeType });
-      autoListenRecorderRef.current = recorder;
-      
-      recorder.ondataavailable = (event) => {
-        console.log('📦 Data available:', event.data.size, 'bytes');
-        if (event.data.size > 0) {
-          autoListenChunksRef.current.push(event.data);
-        }
+      recognition.onstart = () => {
+        console.log('🎤 Auto-listen session started');
+        setIsAutoListening(true);
+        setIsRecording(true);
+        setLoadingStep('recording');
       };
-      
-      recorder.onerror = (e) => {
-        console.error('❌ Recorder error:', e.error);
-      };
-      
-      recorder.start(1000);
-      console.log('✅ MediaRecorder started');
-      
-      setIsAutoListening(true);
-      setIsRecording(true);
-      setLoadingStep('recording');
-      setLiveTranscript('🎤 Listening... Ask your interview question');
-      showToast('Listening... Ask your interview question', 'success');
-      
-      // Process audio every 2 seconds
-      const processInterval = setInterval(async () => {
-        if (!isListeningRef.current) {
-          clearInterval(processInterval);
-          return;
-        }
-        
-        const chunks = autoListenChunksRef.current;
-        if (chunks.length === 0) {
-          console.log('   No audio chunks yet...');
-          return;
-        }
-        
-        const blob = new Blob(chunks, { type: mimeType });
-        console.log('   Processing blob:', blob.size, 'bytes');
-        autoListenChunksRef.current = [];
-        
-        if (blob.size < 1000) {
-          console.log('   Audio too small, skipping...');
-          return;
-        }
-        
-        setLoadingStep('transcribing');
-        
-        try {
-          const format = mimeType.includes('ogg') ? 'ogg' : 'webm';
-          const formData = new FormData();
-          formData.append('audio', blob, `question.${format}`);
-          formData.append('format', format);
-          
-          const token = getAuthToken();
-          const apiBase = (getApiRoot() || '').replace(/\/$/, '');
-          const url = `${apiBase}/api/transcription/transcribe`;
-          
-          console.log('   Transcribing...');
-          
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-            body: formData,
-          });
-          
-          if (!response.ok) {
-            console.error('   Server error:', response.status);
-            throw new Error(`Server error: ${response.status}`);
+
+      recognition.onresult = (event) => {
+        let interim = '';
+        let gotFinal = false;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const t = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscriptRef.current += t + ' ';
+            gotFinal = true;
+          } else {
+            interim += t;
           }
-          
-          const data = await response.json();
-          const text = (data.text || '').trim();
-          
-          console.log('   Transcription:', text);
-          setLoadingStep('recording');
-          
-          if (text && text.length > 0) {
-            finalTranscriptRef.current += text + ' ';
-            const combined = finalTranscriptRef.current.trim();
-            setLiveTranscript(combined);
-            
-            if (isQuestion(text)) {
-              console.log('   ✅ Question detected!');
-              if (!isProcessingRef.current && combined.split(/\s+/).length >= 3) {
-                autoSubmitQuestion(combined);
-              }
+        }
+
+        const combined = finalTranscriptRef.current + interim;
+
+        // If AI is currently processing, buffer new speech as potential next question
+        if (isProcessingRef.current) {
+          pendingWhileProcessingRef.current = combined;
+          setLiveTranscript('🎧 ' + combined); // prefix to show it's buffering
+          return;
+        }
+
+        setLiveTranscript(combined);
+
+        // ── Silence detection: reset timer on every new speech result ──
+        // Only arm the timer when we have at least a few words (avoid triggering on noise)
+        if (combined.trim().split(/\s+/).length >= 3) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            // Silence detected — question is complete, auto-submit
+            const question = finalTranscriptRef.current.trim();
+            if (question && !isProcessingRef.current) {
+              console.log('🔇 Silence detected — auto-submitting question:', question);
+              autoSubmitQuestion(question);
             }
-          }
-        } catch (e) {
-          console.error('   Transcription error:', e);
-          setLoadingStep('recording');
+          }, SILENCE_DELAY);
         }
-      }, 2000);
-      
-    } catch (error) {
-      console.error('❌ MediaRecorder auto-listen failed:', error);
-      showToast('❌ Auto-listen failed: ' + error.message, 'error');
-      setAutoListen(false);
-    }
-  };
-  
-  // Process auto-listen audio chunks
-  const processAutoListenChunk = async () => {
-    if (isProcessingRef.current || autoListenChunksRef.current.length === 0) {
-      return;
-    }
-    
-    // Get the latest chunk
-    const chunk = autoListenChunksRef.current[autoListenChunksRef.current.length - 1];
-    if (chunk.size < 100) {
-      return; // Too small, probably silence
-    }
-    
-    // Create blob from chunk
-    const blob = new Blob([chunk], { type: 'audio/webm' });
-    
-    try {
-      // Transcribe the chunk
-      const transcribedText = await transcribeAudioChunk(blob);
-      if (transcribedText && transcribedText.trim()) {
-        const text = transcribedText.trim();
-        console.log('🎤 Auto-listen transcribed:', text);
-        
-        // Update live transcript
-        setLiveTranscript(text);
-        finalTranscriptRef.current = text;
-        
-        // Start silence timer
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => {
-          // Silence detected - submit question
-          if (text && !isProcessingRef.current) {
-            console.log('🔇 Silence detected — auto-submitting question:', text);
-            autoSubmitQuestion(text);
-          }
-        }, SILENCE_DELAY);
-      }
-    } catch (error) {
-      console.warn('Auto-listen chunk transcription failed:', error);
-    }
-  };
-  
-  // Transcribe audio chunk using server API
-  const transcribeAudioChunk = async (audioBlob) => {
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'chunk.webm');
-      formData.append('format', 'webm');
-
-      const token = getAuthToken();
-      const apiBase = (getApiRoot() || '').replace(/\/$/, '');
-      const url = `${apiBase}/api/transcription/transcribe`;
-      
-      const fetchOptions = {
-        method: 'POST',
-        body: formData,
       };
-      
-      if (token) {
-        fetchOptions.headers = {
-          'Authorization': `Bearer ${token}`,
-        };
+
+      recognition.onerror = (event) => {
+        console.warn('Auto-listen error:', event.error);
+        if (event.error === 'no-speech') return; // normal silence, keep going
+        if (event.error === 'aborted') return;   // intentional stop
+        if (event.error === 'network') {
+          showToast('⚠️ Network issue with speech recognition. Retrying…', 'warning');
+        }
+      };
+
+      recognition.onend = () => {
+        console.log('🎤 Auto-listen recognition ended, autoListen=', autoListen);
+        // Restart automatically to keep continuous listening (Web Speech API stops after ~60s)
+        if (autoListenRecognitionRef.current) {
+          // Small delay to avoid rapid restart loops
+          setTimeout(() => {
+            if (autoListenRecognitionRef.current) {
+              try { recognition.start(); } catch (_) {}
+            }
+          }, 150);
+        } else {
+          setIsAutoListening(false);
+          setIsRecording(false);
+          setLoadingStep(null);
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch (err) {
+        console.error('Failed to start auto-listen:', err);
+        showToast('❌ Could not start auto-listen. Check microphone permissions.', 'error');
+        setAutoListen(false);
       }
-      
-      const fetchResponse = await fetch(url, fetchOptions);
-      
-      if (!fetchResponse.ok) {
-        throw new Error(`Server error: ${fetchResponse.status}`);
-      }
-      
-      const data = await fetchResponse.json();
-      
-      if (data.text && !data.text.startsWith('[')) {
-        return data.text;
-      }
-      
-      return '';
-    } catch (error) {
-      console.error('Transcription failed:', error);
-      return '';
-    }
+    };
+
+    launchRecognition();
   };
 
   // ─── autoSubmitQuestion: called when silence detected — submit to AI, keep listening ───
   const autoSubmitQuestion = (question) => {
     if (!question.trim() || isProcessingRef.current) return;
-
-    // Use intelligent question detection to filter out side talk
-    const detection = processContinuousSpeech(question, conversationTrackerRef.current);
-    
-    console.log('🤖 Question detection result:', {
-      text: question,
-      isQuestion: detection.isQuestion,
-      confidence: detection.confidence,
-      reason: detection.reason,
-      shouldRespond: detection.shouldRespond
-    });
-
-    // Only submit if it's likely a question with sufficient confidence
-    if (!detection.shouldRespond) {
-      console.log('🤖 Skipping - not a clear question:', detection.reason);
-      
-      // Show feedback to user about why it was skipped
-      if (detection.confidence > 20 && detection.confidence < 50) {
-        showToast(`💬 Heard: "${question.substring(0, 50)}..." (Not a clear question - ${detection.reason})`, 'info');
-      }
-      
-      // Reset for next listening cycle
-      finalTranscriptRef.current = '';
-      setLiveTranscript('');
-      return;
-    }
 
     console.log('🤖 Auto-submitting question to AI:', question);
     isProcessingRef.current = true;
@@ -662,198 +432,20 @@ function InterviewSession() {
 
   // ─── stopAutoListen: fully stops auto-listen mode ───
   const stopAutoListen = () => {
-    console.log('🛑 stopAutoListen called');
-    
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
-    
-    // Stop Web Speech API recognition if running
-    if (autoListenRecognitionRef.current) {
-      try {
-        autoListenRecognitionRef.current.stop();
-      } catch (error) {
-        console.warn('Error stopping Web Speech recognition:', error);
-      }
-      autoListenRecognitionRef.current = null;
-    }
-    
-    // Stop MediaRecorder if running
-    if (autoListenRecorderRef.current && autoListenRecorderRef.current.state !== 'inactive') {
-      try {
-        autoListenRecorderRef.current.stop();
-      } catch (error) {
-        console.warn('Error stopping MediaRecorder:', error);
-      }
-    }
-    
-    // Clean up stream
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-    
-    autoListenRecorderRef.current = null;
-    autoListenChunksRef.current = [];
+    if (!autoListenRecognitionRef.current) return;
+    try { autoListenRecognitionRef.current.stop(); } catch (_) {}
+    autoListenRecognitionRef.current = null;
     isProcessingRef.current = false;
     pendingWhileProcessingRef.current = '';
     finalTranscriptRef.current = '';
     setIsAutoListening(false);
-    // Only set isRecording to false if we're not in manual recording mode
-    if (!isRecording) {
-      setIsRecording(false);
-    }
-    setLoadingStep(null);
-    setLiveTranscript('');
-  };
-
-  // Helper to detect if text is a question
-  const isQuestion = (text) => {
-    if (!text || text.length < 5) return false;
-    const trimmed = text.trim().toLowerCase();
-    if (trimmed.endsWith('?')) return true;
-    const questionStarters = ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'can you', 'could you', 'would you', 'tell me', 'explain', 'describe', 'give me', 'show me', 'have you', 'are you', 'do you', 'if you'];
-    if (questionStarters.some(starter => trimmed.startsWith(starter))) return true;
-    return false;
-  };
-
-  const startAndroidSpeechRecognition = async () => {
-    console.log('🎤 startAndroidSpeechRecognition - auto-listen');
-    
-    if (isProcessingRef.current) {
-      console.log('   AI is processing, skipping...');
-      return;
-    }
-    
-    // Clean up
-    finalTranscriptRef.current = '';
-    isListeningRef.current = true;
-    
-    // Try Capacitor Speech Recognition first
-    try {
-      console.log('   Trying Capacitor Speech Recognition...');
-      const speechRecognition = await loadCapacitorSpeechRecognition();
-      
-      if (speechRecognition) {
-        const hasPermission = await speechRecognition.hasPermission();
-        
-        if (!hasPermission.permission) {
-          const requestResult = await speechRecognition.requestPermission();
-          if (!requestResult.permission) {
-            console.log('   Permission denied, using MediaRecorder');
-            await startMediaRecorderAutoListen();
-            return;
-          }
-        }
-        
-        // Use Capacitor Speech Recognition
-        await speechRecognition.start({
-          language: 'en-US',
-          maxResults: 5,
-          prompt: 'Ask your interview question',
-          partialResults: true,
-          popup: false
-        });
-        
-        console.log('✅ Capacitor Speech Recognition started');
-        
-        speechRecognition.addListener('partialResults', (data) => {
-          if (!isListeningRef.current) return;
-          const matches = data.matches || [];
-          if (matches.length > 0) {
-            const partialText = matches[0];
-            console.log('   Partial:', partialText);
-            setLiveTranscript(partialText);
-            
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            silenceTimerRef.current = setTimeout(() => {
-              const currentText = partialText.trim();
-              if (currentText.split(/\s+/).length >= 3 && !isProcessingRef.current) {
-                console.log('   🔇 Submitting:', currentText);
-                autoSubmitQuestion(currentText);
-              }
-            }, SILENCE_DELAY);
-          }
-        });
-        
-        speechRecognition.addListener('results', (data) => {
-          if (!isListeningRef.current) return;
-          const matches = data.matches || [];
-          if (matches.length > 0) {
-            const finalText = matches[0];
-            console.log('   Final:', finalText);
-            setLiveTranscript(finalText);
-            if (finalText.split(/\s+/).length >= 3 && !isProcessingRef.current) {
-              autoSubmitQuestion(finalText);
-            }
-          }
-        });
-        
-        speechRecognition.addListener('error', (error) => {
-          console.warn('   Speech error:', error);
-        });
-        
-        setIsAutoListening(true);
-        setIsRecording(true);
-        setLoadingStep('recording');
-        setLiveTranscript('🎤 Listening... Ask your interview question');
-        showToast('Listening... Ask your interview question', 'success');
-        return;
-      }
-    } catch (e) {
-      console.log('   Capacitor SR failed:', e.message, '- using MediaRecorder');
-    }
-    
-    // Fallback to MediaRecorder
-    await startMediaRecorderAutoListen();
-  };
-
-  const stopAndroidSpeechRecognition = async () => {
-    console.log('🛑 stopAndroidSpeechRecognition');
-    
-    isListeningRef.current = false;
-    
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    
-    // Stop Capacitor Speech Recognition if available
-    try {
-      const speechRecognition = await loadCapacitorSpeechRecognition();
-      if (speechRecognition) {
-        await speechRecognition.stop();
-        console.log('✅ Capacitor Speech Recognition stopped');
-      }
-    } catch (error) {
-      console.warn('Error stopping Capacitor Speech Recognition:', error);
-    }
-    
-    // Clean up old MediaRecorder references (for backward compatibility)
-    if (autoListenRecorderRef.current && autoListenRecorderRef.current.state !== 'inactive') {
-      try {
-        autoListenRecorderRef.current.stop();
-      } catch (e) {
-        console.warn('   Error stopping old recorder:', e);
-      }
-    }
-    autoListenRecorderRef.current = null;
-    mediaRecorderRef.current = null;
-    
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-    
-    autoListenChunksRef.current = [];
-    
-    setIsAutoListening(false);
     setIsRecording(false);
     setLoadingStep(null);
     setLiveTranscript('');
-    
-    console.log('✅ Auto-listen stopped');
   };
 
   // ─── startManualLivePreview: adds Web Speech live preview alongside MediaRecorder ───
@@ -914,57 +506,6 @@ function InterviewSession() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, type });
     toastTimerRef.current = setTimeout(() => setToast(null), 3200);
-  };
-
-  const requestMicrophonePermission = async () => {
-    setIsRequestingPermission(true);
-    try {
-      console.log('🎤 Requesting microphone permission...');
-      
-      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-        // On Android, use Capacitor Speech Recognition permission request
-        const speechRecognition = await loadCapacitorSpeechRecognition();
-        if (speechRecognition) {
-          const requestResult = await speechRecognition.requestPermission();
-          console.log('🔊 Permission request result:', requestResult);
-          
-          if (requestResult.permission) {
-            setHasMicrophonePermission(true);
-            showToast('✅ Microphone permission granted!', 'success');
-            
-            // Auto-start listening if auto-listen is enabled
-            if (autoListen) {
-              setTimeout(() => startAndroidSpeechRecognition(), 500);
-            }
-          } else {
-            showToast('❌ Microphone permission denied', 'error');
-          }
-        }
-      } else {
-        // On web, use getUserMedia to request permission
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(track => track.stop());
-            setHasMicrophonePermission(true);
-            showToast('✅ Microphone permission granted!', 'success');
-            
-            // Auto-start listening if auto-listen is enabled
-            if (autoListen) {
-              setTimeout(() => startAutoListen(), 500);
-            }
-          } catch (error) {
-            console.error('❌ Permission request failed:', error);
-            showToast('❌ Microphone permission denied', 'error');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Permission request error:', error);
-      showToast('❌ Failed to request microphone permission', 'error');
-    } finally {
-      setIsRequestingPermission(false);
-    }
   };
 
   const openAppSettings = async () => {
@@ -1035,19 +576,133 @@ function InterviewSession() {
       console.log('autoListen:', autoListen);
       
       trackEvent('recording_start', { session_id: id, platform: Capacitor.getPlatform() });
+      
+      const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      // On Android native, use MediaRecorder via WebView
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+        console.log('🎤 Using MediaRecorder on Android (via WebView)...');
+        try {
+          await startNativeRecording();
+          console.log('✅ Native recording started successfully');
+          setIsRecording(true);
+          setIsAutoListening(true);
+          setLoadingStep('recording');
 
-      // If auto-listen is enabled, use that instead of manual recording
-      if (autoListen) {
-        console.log('🎤 Auto-listen is ON, switching to auto-listen mode...');
-        // Make sure auto-listen is properly started
-        if (!isAutoListening) {
-          await startAutoListen();
+          // Try to start speech recognition for live preview (optional, non-blocking)
+          if (autoListen) {
+            try {
+              console.log('🎤 Starting native Speech Recognition for live transcription...');
+              const SpeechRecognition = await loadCapacitorSpeechRecognition();
+              
+              if (SpeechRecognition) {
+                const permStatus = await SpeechRecognition.checkPermissions();
+                if (permStatus.speechRecognition !== 'granted') {
+                  await SpeechRecognition.requestPermissions();
+                }
+                
+                const available = await SpeechRecognition.available();
+                if (available.available) {
+                  await SpeechRecognition.removeAllListeners();
+                  
+                  await SpeechRecognition.addListener('partialResults', (data) => {
+                    if (data.matches && data.matches.length > 0) {
+                      const transcript = data.matches[0] || '';
+                      setRecordedQuestion(transcript);
+                      setLiveTranscript('🎤 ' + transcript);
+                    }
+                  });
+                  
+                  await SpeechRecognition.start({
+                    language: 'en-US',
+                    maxResults: 3,
+                    partialResults: true,
+                    popup: false
+                  });
+                  
+                  speechRecognitionRef.current = { native: true, plugin: SpeechRecognition };
+                  console.log('✅ Native speech recognition started');
+                  showToast('Listening... Speak your interview question', 'success');
+                  return;
+                } else {
+                  console.warn('Speech recognition not available on this device');
+                }
+              }
+            } catch (speechErr) {
+              console.warn('Speech recognition error (non-fatal):', speechErr.message);
+            }
+            
+            // Even if speech recognition fails, recording continues
+            showToast('Recording started - server transcription will be used', 'info');
+          }
+          
+          return;
+        } catch (recordingError) {
+          console.error('❌ Native recording failed:', recordingError);
+          showToast(`❌ Recording failed: ${recordingError.message || 'Unknown error'}`, 'error');
+          setLoadingStep(null);
+          setIsRecording(false);
+          setIsAutoListening(false);
+          return;
         }
+      }
+      
+      // Web fallback: use MediaRecorder via getUserMedia
+      const useAutoListenSpeechToText = !!autoListen && !!WebSpeechRecognition;
+      
+      // If Web Speech API is available, use it directly (no MediaRecorder needed)
+      if (useAutoListenSpeechToText) {
+        console.log('🎤 Using Web Speech API (desktop)...');
+        const recognition = new WebSpeechRecognition();
+        speechRecognitionRef.current = recognition;
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        
+        let finalTranscript = '';
+        
+        recognition.onstart = () => {
+          console.log('🎤 Listening for interview question...');
+          setIsRecording(true);
+          setIsAutoListening(true);
+          setLoadingStep('recording');
+        };
+        
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + ' ';
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          const fullTranscript = finalTranscript + interimTranscript;
+          setRecordedQuestion(fullTranscript);
+          setLiveTranscript('🎤 ' + fullTranscript);
+        };
+        
+        recognition.onerror = (event) => {
+          console.warn('Speech recognition error:', event.error);
+          if (event.error !== 'no-speech') {
+            showToast(`Speech error: ${event.error}`, 'error');
+          }
+        };
+        
+        recognition.onend = () => {
+          if (finalTranscript.trim()) {
+            setRecordedQuestion(finalTranscript.trim());
+          }
+        };
+        
+        recognition.start();
         return;
       }
       
-      // For manual recording or web, use MediaRecorder
-      console.log('🎤 Using MediaRecorder for manual recording...');
+      // Use MediaRecorder as fallback
+      console.log('🎤 Using MediaRecorder (web)...');
       
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('❌ getUserMedia not available on this device');
@@ -1057,81 +712,71 @@ function InterviewSession() {
         return;
       }
       
-      // This will trigger the system permission dialog
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000
-        }
-      });
-      console.log('✅ Got audio stream');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Got audio stream:', stream.id);
       
-      // Determine best format
-      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
-      let mimeType = 'audio/webm';
-      for (const m of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(m)) {
-          mimeType = m;
-          break;
-        }
-      }
-      console.log('🎤 Using format:', mimeType);
+      const preferredTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4'
+      ];
+      const selectedType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      console.log('Selected audio format:', selectedType || 'default');
       
-      // Create recorder
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      recordingMimeTypeRef.current = mimeType;
+      const mediaRecorder = new MediaRecorder(stream, selectedType ? { mimeType: selectedType } : undefined);
+      mediaRecorderRef.current = mediaRecorder;
+      recordingMimeTypeRef.current = selectedType || mediaRecorder.mimeType || 'audio/webm';
       audioChunksRef.current = [];
-      
-      recorder.ondataavailable = (event) => {
-        console.log('📦 Chunk:', event.data.size, 'bytes');
+
+      mediaRecorder.ondataavailable = (event) => {
+        console.log('Data available, chunk size:', event.data.size);
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
-      
-      recorder.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        console.log('✅ Recording complete - size:', blob.size, 'bytes');
+
+      mediaRecorder.onstop = async () => {
+        const mimeType = recordingMimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
+        const format = resolveFormatFromMime(mimeType);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         
-        stream.getTracks().forEach(track => track.stop());
+        console.log('Recording stopped. Total chunks:', audioChunksRef.current.length, 'Total size:', audioBlob.size, 'bytes');
         
-        if (blob.size < 500) {
-          showToast('❌ Recording too short. Speak for at least 2-3 seconds.', 'error');
+        if (audioBlob.size < 100) {
+          showToast('❌ Recording too short. Speak for at least 1-2 seconds.', 'error');
+          stream.getTracks().forEach(track => track.stop());
           setLoadingStep(null);
           setIsRecording(false);
           return;
         }
         
-        console.log('✅ Transcribing...');
+        console.log('✅ Audio recorded, transcribing...');
         setLoadingStep('transcribing');
-        const format = mimeType.includes('ogg') ? 'ogg' : 'webm';
-        await transcribeAudio(blob, format);
+        await transcribeAudio(audioBlob, format);
+        stream.getTracks().forEach(track => track.stop());
       };
-      
-      recorder.onerror = (e) => {
-        console.error('❌ Recorder error:', e.error);
+
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event.error);
         stream.getTracks().forEach(track => track.stop());
         setIsRecording(false);
         setLoadingStep(null);
-        showToast('❌ Recording error', 'error');
+        showToast(`❌ Recording error: ${event.error}`, 'error');
       };
-      
-      recorder.start(); // Start without timeslice - collect all data until stopped
+
+      mediaRecorder.start();
       setIsRecording(true);
-      setIsAutoListening(false); // Explicitly set auto-listening to false when in manual mode
-      setLoadingStep('recording');
-      setLiveTranscript('🎤 Recording...');
-      console.log('✅ Manual recording started');
-      
+      setLiveTranscript('');
+      console.log('✅ Recording started');
+      startManualLivePreview();
     } catch (error) {
       console.error('Failed to start recording:', error);
       setLoadingStep(null);
       setIsRecording(false);
       if (error.name === 'NotAllowedError' || error.message?.includes('Permission')) {
-        showToast('❌ Microphone permission required. Please allow microphone access.', 'error');
+        showToast('❌ Microphone permission required', 'error');
       } else if (error.name === 'NotFoundError') {
         showToast('❌ No microphone found', 'error');
       } else {
@@ -1142,45 +787,75 @@ function InterviewSession() {
 
   const stopRecording = async () => {
     console.log('🛑 stopRecording called');
+    console.log('🛑 isNativePlatform:', Capacitor.isNativePlatform());
     console.log('🛑 platform:', Capacitor.getPlatform());
     
-    // On native Android, stop the MediaRecorder directly
+    // On native Android, stop the native recorder and send file for transcription
+    // Also stop speech recognition if it was running for live preview
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-      const recorder = mediaRecorderRef.current;
-      
-      console.log('🛑 Android MediaRecorder state:', recorder?.state);
-      
-      if (!recorder || recorder.state === 'inactive') {
-        console.error('❌ No active recording to stop');
+      try {
+        console.log('🛑 Inside Android stop block');
         setIsRecording(false);
+        
+        // Stop native speech recognition - cleanup any running instance
+        console.log('🛑 Stopping SpeechRecognition (fire and forget)...');
+        try {
+          // Use the loaded plugin reference
+          const loadedPlugin = speechRecognitionRef.current?.plugin;
+          if (loadedPlugin) {
+            await loadedPlugin.stop().catch(() => {});
+            await loadedPlugin.removeAllListeners().catch(() => {});
+          }
+        } catch (e) {
+          // Ignore all errors
+        }
+        console.log('🛑 SpeechRecognition stop fired');
+        
+        setLoadingStep('transcribing');
+
+        console.log('🎤 Stopping native recording...');
+        const result = await stopNativeRecording();
+        console.log('📁 Native recorder result:', JSON.stringify(result));
+        
+        // The blob should be directly returned by nativeAudioRecorder
+        const audioBlob = result?.blob;
+
+        // Validate blob
+        if (!audioBlob) {
+          console.error('❌ No audio blob returned from native recorder');
+          showToast('❌ Failed to get recorded audio.', 'error');
+          setLoadingStep(null);
+          return;
+        }
+
+        if (audioBlob.size === 0) {
+          console.error('❌ Audio blob is empty (0 bytes)');
+          showToast('❌ No audio recorded. Please try again.', 'error');
+          setLoadingStep(null);
+          return;
+        }
+
+        if (audioBlob.size < 1000) {
+          console.warn('⚠️ Audio blob is very small:', audioBlob.size, 'bytes');
+          showToast('⚠️ Recording seems too short. Trying anyway...', 'warning');
+        }
+
+        console.log('🎯 Sending to transcription API - size:', audioBlob.size, 'type:', audioBlob.type);
+        const mimeType = result?.mimeType || audioBlob.type || 'audio/webm';
+        let format = 'webm';
+        if (mimeType.includes('wav')) format = 'wav';
+        else if (mimeType.includes('ogg')) format = 'ogg';
+        else if (mimeType.includes('mp3') || mimeType.includes('mpeg')) format = 'mp3';
+        else if (mimeType.includes('m4a') || mimeType.includes('mp4')) format = 'm4a';
+        console.log('🎤 Detected format:', format, 'from mimeType:', mimeType);
+        await transcribeAudio(audioBlob, format);
+        return;
+      } catch (err) {
+        console.error('❌ Native recording error:', err);
+        showToast(`❌ Failed to process recorded audio: ${err.message}`, 'error');
         setLoadingStep(null);
         return;
       }
-      
-      try {
-        // Stop auto-listen mode if running
-        isListeningRef.current = false;
-        
-        // Stop the recorder - DON'T clear refs yet, let onstop handle it
-        console.log('🛑 Stopping recorder...');
-        recorder.requestData(); // Get final chunk
-        recorder.stop();
-        
-        console.log('🛑 Android recording stopped');
-        
-      } catch (err) {
-        console.error('❌ Error stopping recording:', err);
-        // Clean up on error
-        if (mediaStreamRef.current) {
-          mediaStreamRef.current.getTracks().forEach(track => track.stop());
-          mediaStreamRef.current = null;
-        }
-        mediaRecorderRef.current = null;
-        audioChunksRef.current = [];
-        setIsRecording(false);
-        setLoadingStep(null);
-      }
-      return;
     }
     
     // Stop Web Speech API if it's running (desktop/non-Android)
@@ -1386,8 +1061,8 @@ function InterviewSession() {
       console.error('🎤 Transcription failed:', error);
       setLoadingStep(null);
       setLoading(false);
-      const errorMessage = (error.message || 'Unknown error').substring(0, 100);
-      showToast(`Error: ${errorMessage}`, 'error');
+      const errorMessage = error.message || 'Unknown error';
+      showToast(`Transcription failed: ${errorMessage}`, 'error');
     }
   };
 
@@ -1508,26 +1183,28 @@ function InterviewSession() {
                     : 'Click Start Recording to capture the interviewer\'s question, then get the perfect answer.'}
                 </p>
 
-                {/* Big mic button — always visible for manual recording */}
-                <button
-                  className={`record-btn ${isRecording ? 'recording' : ''}`}
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={loading}
-                  title="Click to record interviewer question"
-                >
-                  {isRecording ? <MicOff size={48} /> : <Mic size={48} />}
-                </button>
+                {/* Big mic button — hidden in auto-listen mode (no manual start/stop needed) */}
+                {!autoListen && (
+                  <button
+                    className={`record-btn ${isRecording ? 'recording' : ''}`}
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={loading}
+                    title="Click to record interviewer question"
+                  >
+                    {isRecording ? <MicOff size={48} /> : <Mic size={48} />}
+                  </button>
+                )}
 
-                {/* Auto-listen pulsing mic indicator - only when autoListen is ON */}
-                {autoListen && isAutoListening && (
+                {/* Auto-listen pulsing mic indicator */}
+                {autoListen && (
                   <div className="auto-listen-mic-indicator">
                     <div className={`auto-listen-pulse ${isAutoListening ? 'active' : ''} ${loading ? 'processing' : ''}`}>
                       {loading ? <Loader size={40} className="spinner" /> : <Mic size={48} />}
                     </div>
                     {loading
-                      ? <span className="auto-listen-status processing">🤖 Generating answer…</span>
+                      ? <span className="auto-listen-status processing">🤖 Generating answer… still listening</span>
                       : isAutoListening
-                        ? <span className="auto-listen-status">🔴 Listening… auto-transcribing</span>
+                        ? <span className="auto-listen-status">🔴 Listening — will auto-answer after pause</span>
                         : <span className="auto-listen-status">⏳ Starting microphone…</span>}
                   </div>
                 )}
@@ -1608,7 +1285,7 @@ function InterviewSession() {
                       checked={autoListen}
                       onChange={(e) => setAutoListen(e.target.checked)}
                     />
-                    <span>Auto-listen (speech-to-text)</span>
+                    <span>Auto-listen (hands-free mode)</span>
                   </label>
                 </div>
               </div>
