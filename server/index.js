@@ -98,7 +98,6 @@ app.use(
 
 // CORS configuration - explicitly list all allowed origins
 const allowedOrigins = [
-  process.env.CLIENT_URL || 'https://iaalearn-1.fly.dev',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:5174',
@@ -127,17 +126,15 @@ const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, curl, server-to-server)
     if (!origin) {
-      console.log('[CORS] Request with no Origin header allowed');
       return callback(null, true);
     }
 
     if (allowedOrigins.includes(origin)) {
-      console.log(`[CORS] Allowed origin: ${origin}`);
       return callback(null, true);
     }
 
     console.warn(`[CORS] Rejected origin: ${origin}`);
-    return callback(new Error('Not allowed by CORS'));
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -146,6 +143,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Handle OPTIONS preflight for all routes
+app.options('*', cors(corsOptions));
 
 // Force HTTPS in production
 if (process.env.NODE_ENV === 'production') {
