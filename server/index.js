@@ -19,7 +19,6 @@ if (!process.env.JWT_SECRET) {
 }
 
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
