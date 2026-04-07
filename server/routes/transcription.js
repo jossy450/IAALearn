@@ -103,7 +103,6 @@ router.post('/transcribe', authenticate, upload.single('audio'), async (req, res
     const status = error.statusCode || 500;
     const providers = freeNeuralTranscriptionService.getAvailableProviders().map(p => p.name);
     const isDev = process.env.NODE_ENV !== 'production';
-
     // Send detailed error to client (include debug info in development)
     res.status(status).json({
       error: 'Transcription failed',

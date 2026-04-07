@@ -64,6 +64,9 @@ app.use(
           'https://iaalearn-1.fly.dev',
           'wss://iaalearn-cloud.fly.dev',
           'wss://iaalearn-1.fly.dev',
+          // Production domain
+          'https://mightskytech.com',
+          'https://www.mightskytech.com',
           // Stripe API endpoints
           'https://api.stripe.com',
           'https://r.stripe.com',
@@ -111,10 +114,12 @@ const allowedOrigins = [
   'https://iaalearn-cloud.fly.dev',
   'https://iaalearn-1.fly.dev',
   'https://www.interviewassistant.app',
+  'https://interviewassistant.app',
+  'https://mightskytech.com',
+  'https://www.mightskytech.com',
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',
-  'https://interviewassistant.app',
 ];
 
 const corsOptions = {
