@@ -144,17 +144,18 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Handle OPTIONS preflight for all routes
+// Handle OPTIONS preflight for all routes - set CORS headers and end response
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || !origin) {
+  const isAllowedOrigin = allowedOrigins.includes(origin);
+  if (isAllowedOrigin || !origin) {
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Max-Age', '86400');
   }
-  res.status(204).end();
+  res.status(204).send();
 });
 
 // Force HTTPS in production
