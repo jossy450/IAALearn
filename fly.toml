@@ -2,6 +2,7 @@ app = 'iaalearn-1'
 primary_region = 'lhr'
 
 [build]
+  dockerfile = "Dockerfile"
 
 [http_service]
   internal_port = 3001
