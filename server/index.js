@@ -35,53 +35,10 @@ const { errorHandler } = require('./middleware/errorHandler');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Security middleware
+// Security middleware - disable CSP for API routes
 app.use(
   helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          // Stripe.js must be loaded from Stripe's CDN
-          'https://js.stripe.com',
-        ],
-        styleSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          'https://fonts.googleapis.com',
-        ],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        fontSrc: [
-          "'self'",
-          'https://fonts.gstatic.com',
-          'https://fonts.googleapis.com',
-        ],
-        connectSrc: [
-          "'self'",
-          'https://iaalearn-cloud.fly.dev',
-          'https://iaalearn-1.fly.dev',
-          'wss://iaalearn-cloud.fly.dev',
-          'wss://iaalearn-1.fly.dev',
-          // Production domain
-          'https://mightskytech.com',
-          'https://www.mightskytech.com',
-          // Stripe API endpoints
-          'https://api.stripe.com',
-          'https://r.stripe.com',
-          // Hugging Face inference API (transcription)
-          'https://api-inference.huggingface.co',
-        ],
-        // Allow Stripe to embed its iframe for 3D Secure / payment elements
-        frameSrc: [
-          'https://js.stripe.com',
-          'https://hooks.stripe.com',
-        ],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
-      },
-    } : false,
+    contentSecurityPolicy: false,
     hsts: {
       maxAge: 31536000,
       includeSubDomains: true,
@@ -91,7 +48,6 @@ app.use(
     noSniff: true,
     xssFilter: true,
     dnsPrefetchControl: { allow: false },
-    // Allow Stripe iframes (3DS, payment elements) — use CSP frameSrc instead of X-Frame-Options deny
     frameguard: false,
   })
 );
