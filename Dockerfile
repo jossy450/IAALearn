@@ -1,8 +1,8 @@
 # Build stage for client
 FROM node:18-alpine AS client-builder
 
-# Force rebuild by adding unique ARG
-ARG FORCE_REBUILD=$(date +%s)
+# Force rebuild - change this timestamp on each deploy
+ENV BUILD_TIMESTAMP=20260408
 
 # Accept Vite build args so we can inject client-side envs at build time
 ARG VITE_SUPABASE_URL
