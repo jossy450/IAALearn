@@ -120,28 +120,38 @@ const allowedOrigins = [
 ];
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Max-Age', '86400');
+  try {
+    const origin = req.headers.origin;
+    if (!origin || allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+  } catch (err) {
+    console.error('[CORS] Middleware error:', err.message);
   }
   next();
 });
 
 // Handle OPTIONS preflight - send response immediately
 app.options('*', (req, res) => {
-  const origin = req.headers.origin;
-  if (!origin || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Max-Age', '86400');
+  try {
+    const origin = req.headers.origin;
+    const isAllowed = !origin || allowedOrigins.includes(origin);
+    if (isAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+    res.status(204).send('');
+  } catch (err) {
+    console.error('[CORS] OPTIONS error:', err.message);
+    res.status(204).send('');
   }
-  res.status(204).end();
 });
 
 // Force HTTPS in production
