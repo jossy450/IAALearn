@@ -1,8 +1,9 @@
 # Build stage for client
 FROM node:18-alpine AS client-builder
 
-# Force rebuild - Updated 2026-04-08 08:30 UTC
-ENV BUILD_TIMESTAMP=20260408_0830
+# Force rebuild - 2026-04-08 09:30 UTC - CSP disabled, CORS fixed
+ENV BUILD_TIMESTAMP=20260408_0930_$(date +%s)
+ARG BUILD_DATE
 
 # Accept Vite build args so we can inject client-side envs at build time
 ARG VITE_SUPABASE_URL
