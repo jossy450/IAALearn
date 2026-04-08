@@ -273,8 +273,13 @@ if (!clientDistPath) {
   });
 }
 
-// Error handling
-app.use(errorHandler);
+// Error handling - but skip CORS preflight errors
+app.use((err, req, res, next) => {
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(204).end();
+  }
+  errorHandler(err, req, res, next);
+});
 
 // Initialize database and start server
 const startServer = async () => {
